@@ -70,6 +70,12 @@ npm run dev
 npm test
 ```
 
+端到端测试：开一个真浏览器，把注册、下单、管理员确认、续费提醒、忘记密码这条主流程自动点一遍（会自动起假 Marzban 和开发服务器，只能连本地）。第一次要先装浏览器：`npx playwright install chromium`。
+
+```bash
+npm run e2e
+```
+
 想在真实的 Workers 运行环境里测打包结果，运行 `npm run preview`，然后打开 http://localhost:8787。
 
 ## 部署
