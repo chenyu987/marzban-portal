@@ -11,9 +11,11 @@ type Props = {
   action: (state: FormState, form: FormData) => Promise<FormState>;
   passwordAutoComplete: "current-password" | "new-password";
   footer: { text: string; href: string; link: string };
+  // 注册页才有推荐码输入框；值是推荐链接里带过来的 ?ref=
+  referral?: { defaultValue: string };
 };
 
-export default function AuthForm({ title, submitLabel, action, passwordAutoComplete, footer }: Props) {
+export default function AuthForm({ title, submitLabel, action, passwordAutoComplete, footer, referral }: Props) {
   const [state, formAction, pending] = useActionState(action, undefined);
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
@@ -45,6 +47,21 @@ export default function AuthForm({ title, submitLabel, action, passwordAutoCompl
               className="input w-full"
             />
           </label>
+          {referral && (
+            <label className="floating-label">
+              <span>推荐码（选填）</span>
+              <input
+                name="ref"
+                type="text"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                placeholder="推荐码（选填）"
+                defaultValue={state?.ref ?? referral.defaultValue}
+                className="input w-full uppercase"
+              />
+            </label>
+          )}
           {state?.error && <div role="alert" className="alert alert-error alert-soft">{state.error}</div>}
           <button className="btn btn-primary" disabled={pending}>
             {pending && <span className="loading loading-spinner loading-sm" />}

@@ -14,6 +14,8 @@ export type SiteConfig = {
   };
   // 教程页「注意」里关于设备/IP 限制的说明。没有限制就填 null
   deviceLimitNote: string | null;
+  // 金额前面的币种符号，比如 ¥、$
+  currency: string;
 };
 
 export const site: SiteConfig = {
@@ -25,4 +27,5 @@ export const site: SiteConfig = {
     hiddifyWindows: "https://github.com/hiddify/hiddify-app/releases/latest",
   },
   deviceLimitNote: null,
+  currency: "¥",
 };

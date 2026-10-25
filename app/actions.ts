@@ -7,27 +7,40 @@ import { db, nowSec } from "@/lib/env";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { createSession, destroySession, requireCustomer } from "@/lib/session";
 import { lookupSubscription, revokeSubscription } from "@/lib/marzban";
-import { newReferralCode, parseSubToken } from "@/lib/format";
+import { newReferralCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
 
 // email：出错时带回去当输入框的默认值。React 19 提交后会重置表单，不带回去邮箱就被清空了
-export type FormState = { error?: string; ok?: string; email?: string } | undefined;
+export type FormState = { error?: string; ok?: string; email?: string; ref?: string } | undefined;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function register(_: FormState, form: FormData): Promise<FormState> {
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
-  if (!EMAIL_RE.test(email)) return { error: "邮箱格式不对", email };
-  if (password.length < 8) return { error: "密码至少 8 位", email };
+  const refInput = String(form.get("ref") ?? "").trim();
+  const back = { email, ref: refInput };
+  if (!EMAIL_RE.test(email)) return { error: "邮箱格式不对", ...back };
+  if (password.length < 8) return { error: "密码至少 8 位", ...back };
+
+  // 推荐码可以不填；填了就必须是真的，免得客人以为填上了其实没记到
+  const code = normalizeReferralCode(refInput);
+  let referrer: number | null = null;
+  if (code === null) return { error: "推荐码格式不对，是 8 位字母和数字", ...back };
+  if (code) {
+    const r = await db().prepare("SELECT id FROM customers WHERE referral_code = ?").bind(code).first<{ id: number }>();
+    if (!r) return { error: "没有这个推荐码，请找朋友再确认一下，或者留空", ...back };
+    referrer = r.id;
+  }
 
   const exists = await db().prepare("SELECT 1 FROM customers WHERE email = ?").bind(email).first();
-  if (exists) return { error: "这个邮箱已经注册过了，直接登录吧", email };
+  if (exists) return { error: "这个邮箱已经注册过了，直接登录吧", ...back };
 
   const row = await db()
     .prepare(
-      "INSERT INTO customers (email, password_hash, referral_code, created_at) VALUES (?, ?, ?, ?) RETURNING id",
+      `INSERT INTO customers (email, password_hash, referral_code, referred_by, created_at)
+       VALUES (?, ?, ?, ?, ?) RETURNING id`,
     )
-    .bind(email, await hashPassword(password), newReferralCode(), nowSec())
+    .bind(email, await hashPassword(password), newReferralCode(), referrer, nowSec())
     .first<{ id: number }>();
   await createSession(row!.id);
   redirect("/dashboard");

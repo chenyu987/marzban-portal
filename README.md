@@ -15,6 +15,8 @@ A self-service customer portal for [Marzban](https://github.com/Gozargah/Marzban
 - 粘贴已有的订阅链接，绑定到账号。后端只取链接里的 token，不会去请求客人给的域名
 - 订阅卡片：状态、到期时间、剩余时间、流量进度和重置周期
 - 一键导入 Shadowrocket、Clash Verge、Hiddify；二维码在浏览器本地生成；复制链接；重置订阅链接
+- 推荐码：每个账号注册时自动生成，可以复制推荐码或推荐链接（`/register?ref=<推荐码>`，打开就自动填好）发给朋友；注册时选填，填错会提示；推荐人在订阅页看到被推荐的人（邮箱打码）和注册日期
+- 推荐奖励：被推荐人每付一笔款，推荐人拿这笔金额的 10%，记进余额；订阅页显示余额和奖励明细。奖励由数据库触发器在订单变成已付款时自动发。线下收款可以用 `npm run payment:record -- <邮箱> <金额（元）> [--note 备注] [--remote]` 记账
 - 安装教程：iPhone、Mac、Windows、安卓分页，按访问设备自动切到对应的那页
 
 ## 目录
@@ -26,6 +28,8 @@ A self-service customer portal for [Marzban](https://github.com/Gozargah/Marzban
 | `app/` | 页面和表单提交（Server Actions） |
 | `lib/marzban.ts` | Marzban API 客户端，只在服务端运行 |
 | `lib/session.ts`、`lib/password.ts` | 登录会话、密码哈希 |
+| `lib/balance.ts` | 余额和推荐奖励明细的查询 |
+| `scripts/record-payment.mjs` | 管理员在命令行记一笔付款 |
 | `migrations/` | D1 数据库结构 |
 | `dev/mock-marzban.mjs` | 本地开发用的假 Marzban，接口格式照 Marzban v0.8.4 |
 

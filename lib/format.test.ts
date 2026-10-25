@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatExpire, parseSubToken, timeLeft } from "./format";
+import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, newReferralCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft } from "./format";
 import { hashPassword, verifyPassword } from "./password";
 
 describe("parseSubToken", () => {
@@ -51,5 +51,66 @@ describe("密码哈希", () => {
     expect(h.startsWith("pbkdf2$100000$")).toBe(true);
     expect(await verifyPassword("correct horse", h)).toBe(true);
     expect(await verifyPassword("wrong", h)).toBe(false);
+  });
+});
+
+describe("推荐码", () => {
+  it("新生成的推荐码能通过校验", () => {
+    for (let i = 0; i < 20; i++) {
+      const c = newReferralCode();
+      expect(normalizeReferralCode(c)).toBe(c);
+    }
+  });
+  it("忽略大小写、空格、横线", () => {
+    expect(normalizeReferralCode(" abcd-efgh ")).toBe("ABCDEFGH");
+  });
+  it("整条推荐链接也能认出来", () => {
+    expect(normalizeReferralCode("https://x.com/register?ref=abcdefgh")).toBe("ABCDEFGH");
+  });
+  it("没填返回空字符串，格式不对返回 null", () => {
+    expect(normalizeReferralCode("  ")).toBe("");
+    expect(normalizeReferralCode("ABC")).toBeNull();
+    expect(normalizeReferralCode("ABCDEFG0")).toBeNull();
+  });
+  it("链接里 ref 的编码坏了也不报错，当成格式不对", () => {
+    expect(normalizeReferralCode("https://x.com/register?ref=%E0%A4%A")).toBeNull();
+    expect(normalizeReferralCode("?ref=%")).toBeNull();
+  });
+});
+
+describe("maskEmail", () => {
+  it("只露出前两位和域名", () => {
+    expect(maskEmail("alice@gmail.com")).toBe("al***@gmail.com");
+    expect(maskEmail("ab@qq.com")).toBe("a***@qq.com");
+  });
+});
+
+describe("formatDate", () => {
+  it("按北京时间显示日期", () => {
+    // 2026-10-24 16:30 UTC 是北京时间 10-25 00:30
+    expect(formatDate(Date.UTC(2026, 9, 24, 16, 30) / 1000)).toBe("2026/10/25");
+  });
+});
+
+describe("formatMoney", () => {
+  it("分显示成两位小数", () => {
+    expect(formatMoney(0)).toBe("0.00");
+    expect(formatMoney(5)).toBe("0.05");
+    expect(formatMoney(1990)).toBe("19.90");
+    expect(formatMoney(-150)).toBe("-1.50");
+  });
+});
+
+describe("parseYuan", () => {
+  it("元换成分", () => {
+    expect(parseYuan("30")).toBe(3000);
+    expect(parseYuan(" 30.5 ")).toBe(3050);
+    expect(parseYuan("0.01")).toBe(1);
+  });
+  it("不是正数或超过两位小数返回 null", () => {
+    expect(parseYuan("0")).toBeNull();
+    expect(parseYuan("-1")).toBeNull();
+    expect(parseYuan("1.234")).toBeNull();
+    expect(parseYuan("abc")).toBeNull();
   });
 });

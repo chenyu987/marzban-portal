@@ -55,9 +55,62 @@ export const STATUS_LABEL: Record<string, { text: string; badge: string }> = {
   on_hold: { text: "未激活", badge: "badge-warning" },
 };
 
+// 去掉容易看错的 0/O、1/I/L
+const REFERRAL_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+const REFERRAL_LEN = 8;
+
 export function newReferralCode(): string {
-  // 去掉容易看错的 0/O、1/I/L
-  const alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
-  const bytes = crypto.getRandomValues(new Uint8Array(8));
-  return [...bytes].map((b) => alphabet[b % alphabet.length]).join("");
+  const bytes = crypto.getRandomValues(new Uint8Array(REFERRAL_LEN));
+  return [...bytes].map((b) => REFERRAL_ALPHABET[b % REFERRAL_ALPHABET.length]).join("");
+}
+
+// 整理客人填的推荐码：忽略大小写、空格和横线，把整条推荐链接粘进来也行（取 ?ref=）。
+// 空的返回 ""（没填），格式不对返回 null
+export function normalizeReferralCode(input: string): string | null {
+  let s = input.trim();
+  const ref = /[?&]ref=([^&#]*)/.exec(s);
+  if (ref) {
+    // 编码坏掉的链接（比如 %E0%A4%A）decodeURIComponent 会抛错，当成格式不对
+    try {
+      s = decodeURIComponent(ref[1]);
+    } catch {
+      return null;
+    }
+  }
+  s = s.replace(/[\s-]/g, "").toUpperCase();
+  if (!s) return "";
+  const re = new RegExp(`^[${REFERRAL_ALPHABET}]{${REFERRAL_LEN}}$`);
+  return re.test(s) ? s : null;
+}
+
+// 推荐记录里只露出邮箱的一部分：ab***@gmail.com
+export function maskEmail(email: string): string {
+  const at = email.lastIndexOf("@");
+  if (at < 0) return "***";
+  const name = email.slice(0, at);
+  return `${name.slice(0, name.length > 2 ? 2 : 1)}***${email.slice(at)}`;
+}
+
+export function formatDate(sec: number): string {
+  return new Date(sec * 1000).toLocaleDateString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
+// 金额在库里都是「分」。显示成 12.30 这样，币种符号由调用方加（在 site.config.ts 里配）
+export function formatMoney(fen: number): string {
+  const sign = fen < 0 ? "-" : "";
+  const abs = Math.abs(fen);
+  return `${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+}
+
+// 把「元」写的金额（30、30.5、30.50）换成分。不是正数或者超过两位小数返回 null
+export function parseYuan(input: string): number | null {
+  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(input.trim());
+  if (!m) return null;
+  const fen = Number(m[1]) * 100 + Number((m[2] ?? "").padEnd(2, "0"));
+  return fen > 0 && Number.isSafeInteger(fen) ? fen : null;
 }

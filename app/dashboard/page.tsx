@@ -2,11 +2,14 @@ import Link from "next/link";
 import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
 import { getUser, type MarzbanUser } from "@/lib/marzban";
-import { formatBytes, formatExpire, RESET_LABEL, STATUS_LABEL, timeLeft } from "@/lib/format";
+import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, RESET_LABEL, STATUS_LABEL, timeLeft } from "@/lib/format";
+import { BALANCE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
+import { site } from "@/site.config";
 import { BRAND } from "@/lib/clients";
 import { logout } from "../actions";
 import BindForm from "./BindForm";
 import SubscriptionLink from "./SubscriptionLink";
+import ReferralCard from "./ReferralCard";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +19,14 @@ export default async function DashboardPage() {
     .prepare("SELECT marzban_username FROM subscriptions WHERE customer_id = ? ORDER BY id")
     .bind(customer.id)
     .all<{ marzban_username: string }>();
+  // 被推荐的人只给推荐人看打码后的邮箱
+  const { results: referred } = await db()
+    .prepare("SELECT email, created_at FROM customers WHERE referred_by = ? ORDER BY id DESC")
+    .bind(customer.id)
+    .all<{ email: string; created_at: number }>();
+  const balance = await db().prepare(BALANCE_SQL).bind(customer.id).first<{ balance: number }>();
+  const { results: rewards } = await db().prepare(REFERRAL_REWARDS_SQL).bind(customer.id).all<RewardRow>();
+  const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
 
   // 一个订阅查失败不影响其他订阅显示
   const subs = await Promise.all(
@@ -55,6 +66,20 @@ export default async function DashboardPage() {
           user ? <SubscriptionCard key={username} user={user} /> : <UnavailableCard key={username} username={username} />,
         )}
         <BindForm />
+      </div>
+
+      <div className="mt-8">
+        <ReferralCard
+          code={customer.referral_code}
+          referrals={referred.map((r) => ({ email: maskEmail(r.email), createdAt: formatDate(r.created_at) }))}
+          balance={money(balance?.balance ?? 0)}
+          rewards={rewards.map((r) => ({
+            email: maskEmail(r.email),
+            date: formatDate(r.created_at),
+            paid: money(r.paid),
+            reward: money(r.reward),
+          }))}
+        />
       </div>
     </div>
   );
