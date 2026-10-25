@@ -1,4 +1,5 @@
-// 主流程：注册 → 下单 → 我已付款 → 管理员确认开通 → 快到期提醒 → 一键续费 → 忘记密码 → 管理员发重置链接 → 设新密码登录。
+// 主流程：注册 → 下单 → 我已付款 → 管理员确认开通 → 快到期提醒 → 一键续费 → 忘记密码 → 管理员发重置链接 → 设新密码登录；
+// 另一条：用余额买套餐、用兑换码续期。
 // 每次用新邮箱注册，不依赖之前的数据；管理员那一步直接调命令行脚本（本地库 + 假 Marzban）
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
@@ -21,6 +22,18 @@ async function setMockExpire(username: string, expire: number) {
   expect(res.ok).toBe(true);
 }
 
+// 在本地库里直接执行一条 SQL（给测试账号加余额之类）
+const sql = (command: string) =>
+  execFileSync("npx", ["wrangler", "d1", "execute", "DB", "--local", "--command", command], { stdio: "ignore" });
+
+async function register(page: Page, email: string, password: string) {
+  await page.goto("/register");
+  await page.getByPlaceholder("邮箱").fill(email);
+  await page.getByPlaceholder("密码（至少 8 位）").fill(password);
+  await page.getByRole("button", { name: "注册" }).click();
+  await expect(page).toHaveURL(/\/dashboard/);
+}
+
 async function logout(page: Page) {
   await page.goto("/dashboard");
   await page.getByRole("button", { name: "退出" }).click();
@@ -33,12 +46,7 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   const newPassword = "E2eTest-5678";
   page.on("dialog", (d) => d.accept());
 
-  // 注册
-  await page.goto("/register");
-  await page.getByPlaceholder("邮箱").fill(email);
-  await page.getByPlaceholder("密码（至少 8 位）").fill(password);
-  await page.getByRole("button", { name: "注册" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await register(page, email, password);
 
   // 下单：页面上有订单号、金额和收款码
   await page.goto("/plans");
@@ -96,4 +104,42 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await page.getByPlaceholder("密码", { exact: true }).fill(newPassword);
   await page.getByRole("button", { name: "登录" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
+});
+
+test("用余额买套餐，再用兑换码续期", async ({ page }) => {
+  const email = `e2e-balance-${Date.now()}@example.test`;
+  page.on("dialog", (d) => d.accept());
+  await register(page, email, "E2eTest-1234");
+
+  // 管理员调整：给这个账号加 ¥30 余额
+  sql(
+    `INSERT INTO balance_entries (customer_id, amount, kind, created_at)
+     SELECT id, 3000, 'adjust', unixepoch() FROM customers WHERE email = '${email}'`,
+  );
+
+  // 选余额付：¥45 的买不起（按钮灰掉），¥25 的直接开通
+  await page.goto("/plans");
+  await page.getByRole("button", { name: "余额（剩 ¥30）" }).click();
+  await expect(page.locator('button[value="p3-month"]')).toBeDisabled();
+  await page.locator('button[value="p1-month"]').click();
+  await expect(page.getByText("用余额开通成功")).toBeVisible();
+
+  // 订阅页有了新订阅，余额剩 ¥5
+  await page.goto("/dashboard");
+  const title = page.locator(".card-title").filter({ hasText: /^c\d+_\d+$/ }).first();
+  await expect(title).toBeVisible();
+  const username = await title.innerText();
+  await expect(page.getByText("¥5.00")).toBeVisible();
+
+  // 余额不够了，再选余额付时 ¥25 的也买不起
+  await page.goto("/plans");
+  await page.getByRole("button", { name: "余额（剩 ¥5）" }).click();
+  await expect(page.locator('button[value="p1-month"]')).toBeDisabled();
+
+  // 管理员生成兑换码，客人输入后给这个订阅续期
+  const code = run(["codes:create", "--", "p1-month"]).match(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}/)![0];
+  await page.getByPlaceholder("XXXX-XXXX-XXXX-XXXX").fill(code);
+  await expect(page.locator('form:has(input[name="code"]) select[name="target"]')).toHaveValue(username);
+  await page.getByRole("button", { name: "兑换" }).click();
+  await expect(page.getByText("续期成功")).toBeVisible();
 });

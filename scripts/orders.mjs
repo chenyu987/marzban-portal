@@ -7,6 +7,7 @@
 // 开通出错、单停在「开通中」时：
 //   npm run orders -- confirm <订单号> --done <用户名>      去面板看过，Marzban 已经改好了：只绑定订阅、记成已付款
 //   npm run orders -- confirm <订单号> --again             去面板看过，Marzban 确实没改：重新开通
+// 客人用余额买套餐时网页直接开通，不经过这里；只有开通出错、停在「开通中」的余额单会出现在 list 里，同样用 --done / --again 处理。
 // 不加 --remote 写本地开发库、连假 Marzban；加了写线上库、连线上 Marzban。
 import { parseArgs } from "node:util";
 import { formatBytes, formatDate, formatExpire, formatMoney, parseYuan } from "../lib/format.ts";
@@ -35,7 +36,10 @@ const d1 = (sql) => d1At(remote, sql);
 const where = remote ? "【线上库】" : "【本地库】";
 const STATUS = { pending: "等付款", processing: "开通中", paid: "已付款", cancelled: "已取消" };
 // 等付款的单再分两种：客人点过「我已付款」的，显示点的时间（对账就按这个时间找）
-const statusText = (o) => (o.status === "pending" && o.claimed_at ? `客人 ${formatExpire(o.claimed_at)} 说已付` : STATUS[o.status] ?? o.status);
+const statusText = (o) =>
+  o.status === "pending" && o.claimed_at
+    ? `客人 ${formatExpire(o.claimed_at)} 说已付`
+    : `${STATUS[o.status] ?? o.status}${o.method === "balance" ? "（余额付款）" : ""}`;
 const planName = (id) => findPlan(site.plans, id)?.name ?? `${id}（已下架）`;
 const targetText = (o) => (o.marzban_username ? `续期 ${o.marzban_username}` : "新开订阅");
 
@@ -44,9 +48,9 @@ if (cmd === "list") {
   const amount = idArg === undefined ? null : parseYuan(idArg);
   if (idArg !== undefined && amount === null) fail(`金额格式不对：${idArg}\n${USAGE}`);
   const rows = d1(`
-    SELECT o.id, c.email, o.amount, o.plan_id, o.marzban_username, o.status, o.claimed_at, o.created_at
+    SELECT o.id, c.email, o.amount, o.method, o.plan_id, o.marzban_username, o.status, o.claimed_at, o.created_at
     FROM orders o JOIN customers c ON c.id = o.customer_id
-    WHERE o.method = 'transfer' AND ${amount === null ? "o.status IN ('pending', 'processing')" : `o.amount = ${amount}`}
+    WHERE o.method IN ('transfer', 'balance') AND ${amount === null ? "o.status IN ('pending', 'processing')" : `o.amount = ${amount}`}
     ORDER BY o.claimed_at IS NULL, o.claimed_at, o.id`);
   if (rows.length === 0) {
     console.log(amount === null ? `${where}没有待处理的单` : `${where}没有金额是 ${site.currency}${formatMoney(amount)} 的单`);
@@ -87,7 +91,8 @@ if (cmd === "cancel") {
 }
 
 // ---- confirm ----
-if (o.method !== "transfer") fail("这不是客人在套餐页下的单");
+// 余额单正常情况下网页已经开通好了，只有停在「开通中」的才需要这里处理
+if (o.method !== "transfer" && !(o.method === "balance" && o.status === "processing")) fail("这不是要在这里处理的单");
 if (o.status === "paid") fail("这张单已经确认过了");
 if (o.status === "cancelled") {
   fail(`这张单已经取消了。客人如果确实付了这笔钱，用 npm run payment:record -- ${o.email} --plan ${o.plan_id}${remote ? " --remote" : ""} 开通并记账`);
@@ -170,7 +175,7 @@ if (action.kind === "new") {
   console.log(`  续期后：到期 ${formatExpire(b.expire)}，流量清零，上限 ${b.data_limit ? formatBytes(b.data_limit) : "不限"}，备注 ${b.note}`);
 }
 console.log(rewardText);
-if (!o.claimed_at) console.log("⚠️ 客人还没点「我已付款」。确认账单里确实有这笔钱再继续");
+if (o.method === "transfer" && !o.claimed_at) console.log("⚠️ 客人还没点「我已付款」。确认账单里确实有这笔钱再继续");
 if (!(await confirmYes(`确认已经收到 ${site.currency}${formatMoney(o.amount)}${o.claimed_at ? `（客人 ${formatExpire(o.claimed_at)} 说已付）` : ""}，开通并记账？`))) {
   console.log("已取消，单没有动");
   process.exit(0);

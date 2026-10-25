@@ -11,6 +11,7 @@ import { formatExpire, newReferralCode, normalizeRedeemCode, normalizeReferralCo
 import { findPlan, nextUsername } from "@/lib/plans";
 import { provisionNew, provisionRenew, type ProvisionOps, type ProvisionResult } from "@/lib/provision";
 import { site } from "@/site.config";
+import type { Plan } from "@/site.config.example";
 import { canSendMail, sendMail } from "@/lib/mail";
 import { hashResetToken, newResetToken, RESET_MAX_PER_HOUR, RESET_TTL_SELF, resetLink } from "@/lib/reset";
 
@@ -136,6 +137,28 @@ export async function resetSubscriptionLink(form: FormData) {
 // 网页这边的 Marzban 操作，交给 lib/provision.ts 判断出错时 Marzban 改没改
 const marzbanOps: ProvisionOps = { findUser, createUser, modifyUser, resetUsage };
 
+// 按 target（"new" 或客人名下的用户名）在 Marzban 上新开或续期。兑换码和余额购买共用。
+// 返回 { error }：写 Marzban 之前就发现不行；抛异常：写之前出了意外。这两种 Marzban 都没动过，调用方可以放心退款/放回兑换码。
+// 其他情况返回 lib/provision.ts 的结果（done / retry / stuck）
+async function provisionTarget(
+  customerId: number,
+  subs: string[],
+  target: string,
+  plan: Plan,
+  now: number,
+): Promise<{ error: string } | ProvisionResult> {
+  if (target === "new") {
+    let username = nextUsername(customerId, subs);
+    // Marzban 上万一已经有同名用户（比如管理员手动建过），序号往后挪
+    while (await findUser(username)) username = nextUsername(customerId, [...subs, username]);
+    return provisionNew(marzbanOps, username, plan, now);
+  }
+  const current = await findUser(target);
+  if (!current) return { error: "暂时查不到这个订阅，请稍后再试或联系管理员" };
+  if (!current.expire) return { error: "这个订阅永不到期，不用续期。可以选「新开一个订阅」" };
+  return provisionRenew(marzbanOps, current, plan, now);
+}
+
 // 用兑换码买套餐：target 是 "new"（新开一个订阅）或者客人名下某个订阅的用户名（续期）。
 // 顺序：先占住兑换码 → 改 Marzban → 记账。
 // 只有确认 Marzban 什么都没改时才放回兑换码；Marzban 可能已经改了就保留兑换码，交给管理员核对，
@@ -172,26 +195,15 @@ export async function redeem(_: FormState, form: FormData): Promise<FormState> {
   const release = () =>
     db().prepare("UPDATE redeem_codes SET used_by = NULL, used_at = NULL WHERE code = ?").bind(code).run();
 
-  // 写 Marzban 之前的准备：这里出错 Marzban 还没动过，放回兑换码就行
+  // 写 Marzban 之前出错，Marzban 还没动过，放回兑换码就行
   let result: ProvisionResult;
   try {
-    if (target === "new") {
-      let username = nextUsername(customer.id, subs);
-      // Marzban 上万一已经有同名用户（比如管理员手动建过），序号往后挪
-      while (await findUser(username)) username = nextUsername(customer.id, [...subs, username]);
-      result = await provisionNew(marzbanOps, username, plan, now);
-    } else {
-      const current = await findUser(target);
-      if (!current) {
-        await release();
-        return { error: "暂时查不到这个订阅，请稍后再试或联系管理员" };
-      }
-      if (!current.expire) {
-        await release();
-        return { error: "这个订阅永不到期，不用续期。可以选「新开一个订阅」" };
-      }
-      result = await provisionRenew(marzbanOps, current, plan, now);
+    const r = await provisionTarget(customer.id, subs, target, plan, now);
+    if ("error" in r) {
+      await release();
+      return { error: r.error };
     }
+    result = r;
   } catch (e) {
     console.error("redeem: 写 Marzban 之前出错", e);
     await release();
@@ -377,4 +389,102 @@ export async function resetPassword(_: FormState, form: FormData): Promise<FormS
   ]);
   await createSession(r.customer_id);
   redirect("/dashboard");
+}
+
+// 用余额买套餐：余额够就马上开通，不用管理员确认。target 和兑换码一样："new" 或客人名下某个订阅的用户名。
+// 顺序：先建一张「开通中」的单 → 扣余额（余额不够就扣不了）→ 改 Marzban → 记成已付款（触发推荐奖励）。
+// Marzban 确认没改就退回余额；可能改了就不退，单停在「开通中」，管理员用 npm run orders -- confirm 核对
+export async function buyWithBalance(_: FormState, form: FormData): Promise<FormState> {
+  const customer = await requireCustomer();
+  const plan = findPlan(site.plans, String(form.get("plan") ?? ""));
+  if (!plan) return { error: "这个套餐已经下架了，请刷新页面再选" };
+  const target = String(form.get("target") ?? "new");
+  const { results } = await db()
+    .prepare("SELECT marzban_username FROM subscriptions WHERE customer_id = ? ORDER BY id")
+    .bind(customer.id)
+    .all<{ marzban_username: string }>();
+  const subs = results.map((r) => r.marzban_username);
+  if (target !== "new" && !subs.includes(target)) return { error: "请选择要续期的订阅" };
+
+  const now = nowSec();
+  const order = await db()
+    .prepare(
+      `INSERT INTO orders (customer_id, amount, method, status, plan_id, marzban_username, created_at)
+       VALUES (?, ?, 'balance', 'processing', ?, ?, ?) RETURNING id`,
+    )
+    .bind(customer.id, plan.price, plan.id, target === "new" ? null : target, now)
+    .first<{ id: number }>();
+  const orderId = order!.id;
+  // 扣款是一条带条件的 INSERT：余额不够就插不进去。两个请求同时买，也不会把余额扣成负数
+  const charge = await db()
+    .prepare(
+      `INSERT INTO balance_entries (customer_id, amount, kind, order_id, created_at)
+       SELECT ?1, -?2, 'purchase', ?3, ?4
+       WHERE (SELECT COALESCE(SUM(amount), 0) FROM balance_entries WHERE customer_id = ?1) >= ?2`,
+    )
+    .bind(customer.id, plan.price, orderId, now)
+    .run();
+  if (charge.meta.changes !== 1) {
+    await db().prepare("DELETE FROM orders WHERE id = ?").bind(orderId).run();
+    return { error: "余额不够买这个套餐" };
+  }
+  // Marzban 没动过时用：删掉这笔扣款，单记成已取消
+  const refund = () =>
+    db().batch([
+      db().prepare("DELETE FROM balance_entries WHERE order_id = ? AND kind = 'purchase'").bind(orderId),
+      db().prepare("UPDATE orders SET status = 'cancelled', note = '开通失败，余额已退回' WHERE id = ?").bind(orderId),
+    ]);
+  const failed = { error: "开通失败，余额已经退回，请稍后再试。一直失败的话请联系管理员" };
+
+  let result: ProvisionResult;
+  try {
+    const r = await provisionTarget(customer.id, subs, target, plan, now);
+    if ("error" in r) {
+      await refund();
+      return { error: `${r.error}（余额没有扣）` };
+    }
+    result = r;
+  } catch (e) {
+    console.error(`buyWithBalance: 写 Marzban 之前出错 order=${orderId}`, e);
+    await refund();
+    return failed;
+  }
+  if (result.kind === "retry") {
+    console.error(`buyWithBalance: order=${orderId} ${result.reason}`);
+    await refund();
+    return failed;
+  }
+  if (result.kind === "stuck") {
+    console.error(`buyWithBalance: 需要人工核对 order=${orderId} customer=${customer.id} plan=${plan.id} ${result.reason}`);
+    return {
+      error: `开通的时候出了点问题，余额已经扣了，不会丢。请不要重复购买，把这句话截图发给管理员处理（订单 ${orderId}，${result.username}）`,
+    };
+  }
+  if (result.warning) console.error(`buyWithBalance: order=${orderId} user=${result.username} ${result.warning}`);
+  const username = result.username;
+
+  try {
+    await db().batch([
+      ...(target === "new"
+        ? [
+            db()
+              .prepare("INSERT INTO subscriptions (customer_id, marzban_username, created_at) VALUES (?, ?, ?)")
+              .bind(customer.id, username, now),
+          ]
+        : []),
+      db()
+        .prepare("UPDATE orders SET status = 'paid', paid_at = ?, marzban_username = ? WHERE id = ?")
+        .bind(now, username, orderId),
+    ]);
+  } catch (e) {
+    console.error(`buyWithBalance: 写库失败 order=${orderId} user=${username}`, e);
+    return { error: `已经开通（${username}），但保存记录时出错了，请把这句话截图发给管理员处理（订单 ${orderId}）` };
+  }
+  revalidatePath("/dashboard");
+  revalidatePath("/plans");
+  return {
+    ok:
+      `用余额${target === "new" ? "开通" : "续期"}成功：${plan.name}，${username} 到期时间 ${formatExpire(result.expire)}。回到「我的订阅」就能导入使用` +
+      (result.warning ? "。已用流量还没清零，管理员会帮你处理" : ""),
+  };
 }

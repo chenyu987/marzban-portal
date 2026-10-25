@@ -29,7 +29,7 @@ export default function ReferralCard({ code, referrals, balance, rewards }: Prop
         <div>
           <div className="text-sm text-base-content/60">我的余额</div>
           <div className="text-2xl font-bold">{balance}</div>
-          <div className="text-sm text-base-content/60">余额可以用来买套餐，也可以提现，需要的话请联系管理员。</div>
+          <div className="text-sm text-base-content/60">余额可以在「购买/续费」里直接买套餐；要提现请联系管理员。</div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

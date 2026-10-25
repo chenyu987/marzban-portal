@@ -1,39 +1,75 @@
 "use client";
 
-import { useActionState } from "react";
-import { createOrder } from "../actions";
+import { useActionState, useState } from "react";
+import { buyWithBalance, createOrder } from "../actions";
 
 export type PlanGroup = {
   name: string;
   description: string;
-  plans: { id: string; label: string; name: string; price: string }[];
+  // fen：价格（分），选余额付时用来判断够不够
+  plans: { id: string; label: string; name: string; price: string; fen: number }[];
 };
 
-// 套餐价目表。能下单时每个价格都是一个按钮，点了先确认再建单；不能下单时只是价目表
+// 套餐价目表。能买时每个价格都是一个按钮，点了先确认：选转账就建一张待付款的单，选余额就直接扣余额开通。
+// 都不能（没配收款码、也没有余额）时只是价目表
 export default function OrderForm({
   groups,
   subscriptions,
-  canOrder,
+  canTransfer,
+  balance,
+  balanceText,
   defaultTarget,
 }: {
   groups: PlanGroup[];
   subscriptions: string[];
-  canOrder: boolean;
+  canTransfer: boolean;
+  balance: number;
+  balanceText: string;
   defaultTarget?: string;
 }) {
-  const [state, action, pending] = useActionState(createOrder, undefined);
+  const [orderState, orderAction, orderPending] = useActionState(createOrder, undefined);
+  const [balanceState, balanceAction, balancePending] = useActionState(buyWithBalance, undefined);
+  const canBalance = balance > 0;
+  const canOrder = canTransfer || canBalance;
+  const [method, setMethod] = useState<"transfer" | "balance">(canTransfer ? "transfer" : "balance");
+  const useBalance = method === "balance";
+  const state = useBalance ? balanceState : orderState;
+  const pending = orderPending || balancePending;
 
   return (
     <form
-      action={action}
+      action={useBalance ? balanceAction : orderAction}
       onSubmit={(e) => {
         const btn = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
         const target = new FormData(e.currentTarget).get("target");
         const what = !target || target === "new" ? "新开一个订阅" : `给 ${target} 续期`;
-        if (!btn || !confirm(`下单：${btn.dataset.name}，${btn.dataset.price}，${what}。确定吗？`)) e.preventDefault();
+        const how = useBalance ? "用余额付，马上开通" : "下单后转账";
+        if (!btn || !confirm(`${btn.dataset.name}，${btn.dataset.price}，${what}，${how}。确定吗？`)) e.preventDefault();
       }}
       className="flex flex-col gap-4"
     >
+      {canTransfer && canBalance && (
+        <div className="flex flex-col gap-1">
+          <span className="text-sm text-base-content/70">怎么付</span>
+          <div className="join">
+            <button
+              type="button"
+              onClick={() => setMethod("transfer")}
+              className={`btn join-item ${!useBalance ? "btn-primary" : ""}`}
+            >
+              支付宝转账
+            </button>
+            <button
+              type="button"
+              onClick={() => setMethod("balance")}
+              className={`btn join-item ${useBalance ? "btn-primary" : ""}`}
+            >
+              余额（剩 {balanceText}）
+            </button>
+          </div>
+        </div>
+      )}
+      {!canTransfer && canBalance && <p className="text-sm text-base-content/70">用余额付（剩 {balanceText}），点价格马上开通。</p>}
       {canOrder && subscriptions.length > 0 && (
         <label className="flex flex-col gap-1">
           <span className="text-sm text-base-content/70">买给哪个订阅</span>
@@ -64,7 +100,7 @@ export default function OrderForm({
                     value={p.id}
                     data-name={p.name}
                     data-price={p.price}
-                    disabled={pending}
+                    disabled={pending || (useBalance && p.fen > balance)}
                     className="btn h-auto flex-col gap-0 py-3"
                   >
                     <span className="text-sm font-normal text-base-content/60">{p.label}</span>

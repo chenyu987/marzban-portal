@@ -18,6 +18,7 @@ A self-service customer portal for [Marzban](https://github.com/Gozargah/Marzban
 - 推荐码：每个账号注册时自动生成，可以复制推荐码或推荐链接（`/register?ref=<推荐码>`，打开就自动填好）发给朋友；注册时选填，填错会提示；推荐人在订阅页看到被推荐的人（邮箱打码）和注册日期
 - 推荐奖励：被推荐人每付一笔款，推荐人拿这笔金额的 10%，记进余额；订阅页显示余额和奖励明细。奖励由数据库触发器在订单变成已付款时自动发。线下收款可以用 `npm run payment:record -- <邮箱> <金额（元）> [--note 备注] [--remote]` 记账；加 `--plan <套餐>` 会先在 Marzban 新建用户（`c<客人id>_<序号>`，自动绑到客人名下）或用 `--renew <用户名>` 续期，再记账。套餐在 `site.config.ts` 的 `plans` 里配，命令行连线上 Marzban 用的管理员账号放在 `.remote.vars`（模板 `.remote.vars.example`）
 - 套餐页（`/plans`）：按 `site.config.ts` 的 `plans` 显示价格；客人输入兑换码后自动在 Marzban 新开订阅或给已有订阅续期，同时记一笔订单（按套餐价，触发推荐奖励）。兑换码用 `npm run codes:create -- <套餐> [数量] [--note 备注] [--remote]` 生成
+- 用余额买套餐：套餐页选「余额」付，余额够的套餐直接在 Marzban 开通或续期，不用管理员（扣余额、开通、记账一步完成；Marzban 出错时确认没改就退回余额）。用余额付也算一笔付款，会给推荐人发奖励
 - 套餐页下单：在 `site.config.ts` 的 `payments` 里填上收款码，套餐页的每个价格就变成下单按钮。客人下单后看到金额、订单号和收款码，转账时备注订单号，付完点「我已付款」（记下时间，方便对账）；管理员在账单里核对到这笔钱后运行 `npm run orders -- confirm <订单号> [--remote]`，自动在 Marzban 开通或续期并记账（触发推荐奖励）。`npm run orders -- list [金额]` 看待处理的单（客人说已付的排前面），`cancel` 取消。客人可以取消自己还没点「我已付款」的单，同时最多挂 3 张
 - 到期提醒：订阅剩 7 天以内或已经到期时，订阅页在这个订阅上显示提醒和「续费」按钮，点了到套餐页、已经选好给这个订阅续期（`/plans?renew=<用户名>`）；没到期的订阅有个「提前续费」链接
 - 忘记密码：登录页「忘记密码？」→ 输入邮箱，收到带重置链接的邮件（1 小时内有效，只能用一次），设好新密码后所有设备的登录都会退出。发信用 Resend，配了 `RESEND_API_KEY` 和 `MAIL_FROM` 才会发，没配时页面让客人联系管理员；管理员可以用 `npm run password:reset-link -- <邮箱> [--remote]` 生成 24 小时有效的链接发给客人。链接里的网址用 `site.config.ts` 的 `siteUrl`
