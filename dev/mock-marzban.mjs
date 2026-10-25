@@ -26,14 +26,22 @@ function newSubToken(username) {
   return token;
 }
 
-function addUser({ username, expire = null, data_limit = null, used_traffic = 0, status = "active", note = "" }) {
+function addUser({
+  username,
+  expire = null,
+  data_limit = null,
+  data_limit_reset_strategy = "no_reset",
+  used_traffic = 0,
+  status = "active",
+  note = "",
+}) {
   const token = newSubToken(username);
   users.set(username, {
     username,
     status,
     expire,
     data_limit,
-    data_limit_reset_strategy: "no_reset",
+    data_limit_reset_strategy,
     used_traffic,
     lifetime_used_traffic: used_traffic,
     note,
@@ -120,6 +128,43 @@ const server = http.createServer(async (req, res) => {
     if ((m = /^\/api\/user\/([^/]+)$/.exec(path)) && req.method === "GET") {
       const u = users.get(decodeURIComponent(m[1]));
       if (!u) return log(404), send(res, 404, { detail: "User not found" });
+      log(200);
+      return send(res, 200, toResponse(u));
+    }
+
+    // 新建用户（记账脚本 --plan 用）。没给 inbounds 时 Marzban 会把该协议的入站全加上
+    if (path === "/api/user" && req.method === "POST") {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      if (!/^[a-z0-9_]{3,32}$/.test(body.username ?? "")) return log(422), send(res, 422, { detail: "Invalid username" });
+      if (users.has(body.username)) return log(409), send(res, 409, { detail: "User already exists" });
+      addUser({
+        username: body.username,
+        expire: body.expire || null,
+        data_limit: body.data_limit || null,
+        data_limit_reset_strategy: body.data_limit_reset_strategy ?? "no_reset",
+        status: body.status ?? "active",
+        note: body.note ?? "",
+      });
+      log(200);
+      return send(res, 200, toResponse(users.get(body.username)));
+    }
+
+    if ((m = /^\/api\/user\/([^/]+)$/.exec(path)) && req.method === "PUT") {
+      const u = users.get(decodeURIComponent(m[1]));
+      if (!u) return log(404), send(res, 404, { detail: "User not found" });
+      const body = JSON.parse((await readBody(req)) || "{}");
+      for (const k of ["expire", "data_limit", "note", "status", "data_limit_reset_strategy"]) {
+        if (k in body) u[k] = (k === "expire" || k === "data_limit") && body[k] === 0 ? null : body[k];
+      }
+      log(200);
+      return send(res, 200, toResponse(u));
+    }
+
+    if ((m = /^\/api\/user\/([^/]+)\/reset$/.exec(path)) && req.method === "POST") {
+      const u = users.get(decodeURIComponent(m[1]));
+      if (!u) return log(404), send(res, 404, { detail: "User not found" });
+      u.used_traffic = 0;
+      if (u.status === "limited") u.status = "active";
       log(200);
       return send(res, 200, toResponse(u));
     }

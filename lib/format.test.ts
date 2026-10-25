@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, newReferralCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft } from "./format";
+import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, formatRedeemCode, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft } from "./format";
 import { hashPassword, verifyPassword } from "./password";
 
 describe("parseSubToken", () => {
@@ -112,5 +112,23 @@ describe("parseYuan", () => {
     expect(parseYuan("-1")).toBeNull();
     expect(parseYuan("1.234")).toBeNull();
     expect(parseYuan("abc")).toBeNull();
+  });
+});
+
+describe("兑换码", () => {
+  it("生成 16 位，能被自己的格式认出来", () => {
+    const code = newRedeemCode();
+    expect(code).toHaveLength(16);
+    expect(normalizeRedeemCode(code)).toBe(code);
+    expect(newRedeemCode()).not.toBe(code);
+  });
+  it("忽略大小写、空格和横线", () => {
+    expect(normalizeRedeemCode(" abcd-efgh-jkmn-pqrs ")).toBe("ABCDEFGHJKMNPQRS");
+    expect(formatRedeemCode("ABCDEFGHJKMNPQRS")).toBe("ABCD-EFGH-JKMN-PQRS");
+  });
+  it("长度不对或有容易看错的字符返回 null", () => {
+    expect(normalizeRedeemCode("ABCD")).toBeNull();
+    expect(normalizeRedeemCode("ABCDEFGHJKMNPQR0")).toBeNull();
+    expect(normalizeRedeemCode("")).toBeNull();
   });
 });

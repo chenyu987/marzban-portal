@@ -3,6 +3,7 @@ node_modules/
 .open-next/
 .wrangler/
 .dev.vars
+.remote.vars
 next-env.d.ts
 *.tsbuildinfo
 .DS_Store

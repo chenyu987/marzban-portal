@@ -36,15 +36,16 @@ async function login(): Promise<string> {
   return cachedToken;
 }
 
-async function api<T>(method: string, path: string, retried = false): Promise<T> {
+async function api<T>(method: string, path: string, body?: unknown, retried = false): Promise<T> {
   const token = cachedToken ?? (await login());
   const res = await fetch(`${env().MARZBAN_URL}/api${path}`, {
     method,
-    headers: { authorization: `Bearer ${token}` },
+    headers: { authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (res.status === 401 && !retried) {
     cachedToken = null;
-    return api(method, path, true);
+    return api(method, path, body, true);
   }
   if (!res.ok) throw new MarzbanError(res.status, `Marzban ${method} ${path} 返回 ${res.status}`);
   return normalize((await res.json()) as T);
@@ -60,6 +61,26 @@ function normalize<T>(data: T): T {
 }
 
 export const getUser = (username: string) => api<MarzbanUser>("GET", `/user/${encodeURIComponent(username)}`);
+
+// 查不到返回 null，用来挑一个没被占用的用户名
+export async function findUser(username: string): Promise<MarzbanUser | null> {
+  try {
+    return await getUser(username);
+  } catch (e) {
+    if (e instanceof MarzbanError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+// 请求体由 lib/plans.ts 的 newUserBody、renewUserBody 生成
+export const createUser = (body: { username: string }) => api<MarzbanUser>("POST", "/user", body);
+
+export const modifyUser = (username: string, body: object) =>
+  api<MarzbanUser>("PUT", `/user/${encodeURIComponent(username)}`, body);
+
+// 已用流量清零
+export const resetUsage = (username: string) =>
+  api<MarzbanUser>("POST", `/user/${encodeURIComponent(username)}/reset`);
 
 export const revokeSubscription = (username: string) =>
   api<MarzbanUser>("POST", `/user/${encodeURIComponent(username)}/revoke_sub`);

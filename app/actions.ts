@@ -6,8 +6,10 @@ import { revalidatePath } from "next/cache";
 import { db, nowSec } from "@/lib/env";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { createSession, destroySession, requireCustomer } from "@/lib/session";
-import { lookupSubscription, revokeSubscription } from "@/lib/marzban";
-import { newReferralCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
+import { createUser, findUser, lookupSubscription, modifyUser, resetUsage, revokeSubscription } from "@/lib/marzban";
+import { formatExpire, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
+import { findPlan, newUserBody, nextUsername, renewUserBody } from "@/lib/plans";
+import { site } from "@/site.config";
 
 // email：出错时带回去当输入框的默认值。React 19 提交后会重置表单，不带回去邮箱就被清空了
 export type FormState = { error?: string; ok?: string; email?: string; ref?: string } | undefined;
@@ -126,4 +128,96 @@ export async function resetSubscriptionLink(form: FormData) {
   if (!mine) return;
   await revokeSubscription(username);
   revalidatePath("/dashboard");
+}
+
+// 用兑换码买套餐：target 是 "new"（新开一个订阅）或者客人名下某个订阅的用户名（续期）。
+// 顺序：先占住兑换码 → 改 Marzban → 记账。Marzban 失败就把兑换码放回去，客人可以再试
+export async function redeem(_: FormState, form: FormData): Promise<FormState> {
+  const customer = await requireCustomer();
+  const code = normalizeRedeemCode(String(form.get("code") ?? ""));
+  const target = String(form.get("target") ?? "new");
+  if (!code) return { error: "兑换码格式不对，是 16 位字母和数字" };
+
+  const row = await db()
+    .prepare("SELECT plan_id, used_by FROM redeem_codes WHERE code = ?")
+    .bind(code)
+    .first<{ plan_id: string; used_by: number | null }>();
+  if (!row) return { error: "没有这个兑换码，请检查有没有输错" };
+  if (row.used_by !== null) return { error: "这个兑换码已经用过了" };
+  const plan = findPlan(site.plans, row.plan_id);
+  if (!plan) return { error: "这个兑换码对应的套餐已经下架了，请联系管理员" };
+
+  const { results } = await db()
+    .prepare("SELECT marzban_username FROM subscriptions WHERE customer_id = ? ORDER BY id")
+    .bind(customer.id)
+    .all<{ marzban_username: string }>();
+  const subs = results.map((r) => r.marzban_username);
+  if (target !== "new" && !subs.includes(target)) return { error: "请选择要续期的订阅" };
+
+  // 两个请求同时用同一个兑换码时，只有一个能占到
+  const now = nowSec();
+  const claim = await db()
+    .prepare("UPDATE redeem_codes SET used_by = ?, used_at = ? WHERE code = ? AND used_by IS NULL")
+    .bind(customer.id, now, code)
+    .run();
+  if (claim.meta.changes !== 1) return { error: "这个兑换码已经用过了" };
+  const release = () =>
+    db().prepare("UPDATE redeem_codes SET used_by = NULL, used_at = NULL WHERE code = ?").bind(code).run();
+
+  let username: string;
+  let expire: number | null;
+  try {
+    if (target === "new") {
+      username = nextUsername(customer.id, subs);
+      // Marzban 上万一已经有同名用户（比如管理员手动建过），序号往后挪
+      while (await findUser(username)) username = nextUsername(customer.id, [...subs, username]);
+      expire = (await createUser(newUserBody(username, plan, now))).expire;
+    } else {
+      username = target;
+      const current = await findUser(username);
+      if (!current) {
+        await release();
+        return { error: "暂时查不到这个订阅，请稍后再试或联系管理员" };
+      }
+      if (!current.expire) {
+        await release();
+        return { error: "这个订阅永不到期，不用续期。可以选「新开一个订阅」" };
+      }
+      expire = (await modifyUser(username, renewUserBody(current, plan, now))).expire;
+      await resetUsage(username);
+    }
+  } catch (e) {
+    console.error("redeem: Marzban 出错", e);
+    await release();
+    return { error: "开通失败，兑换码没有被用掉，请稍后再试。一直失败的话请联系管理员" };
+  }
+
+  // 记账会触发推荐奖励（按套餐价）。last_insert_rowid() 在同一个 batch 里指向刚插入的订单
+  try {
+    await db().batch([
+      ...(target === "new"
+        ? [
+            db()
+              .prepare("INSERT INTO subscriptions (customer_id, marzban_username, created_at) VALUES (?, ?, ?)")
+              .bind(customer.id, username, now),
+          ]
+        : []),
+      db()
+        .prepare(
+          `INSERT INTO orders (customer_id, amount, method, status, plan_id, marzban_username, paid_at, created_at)
+         VALUES (?, ?, 'redeem_code', 'paid', ?, ?, ?, ?)`,
+        )
+        .bind(customer.id, plan.price, plan.id, username, now, now),
+      db().prepare("UPDATE redeem_codes SET order_id = last_insert_rowid() WHERE code = ?").bind(code),
+    ]);
+  } catch (e) {
+    // Marzban 已经开好了，兑换码也占住了，只差记账：让管理员按日志补
+    console.error(`redeem: 写库失败 customer=${customer.id} user=${username} plan=${plan.id}`, e);
+    return { error: `已经开通（${username}），但保存记录时出错了，请把这句话截图发给管理员处理` };
+  }
+  revalidatePath("/dashboard");
+  revalidatePath("/plans");
+  return {
+    ok: `${target === "new" ? "开通" : "续期"}成功：${plan.name}，${username} 到期时间 ${formatExpire(expire)}。回到「我的订阅」就能导入使用`,
+  };
 }

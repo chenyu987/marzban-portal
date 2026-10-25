@@ -44,6 +44,9 @@ export default async function DashboardPage() {
       <header className="navbar px-0">
         <div className="flex-1 text-xl font-bold">{BRAND}</div>
         <span className="mr-3 hidden text-sm text-base-content/70 sm:inline">{customer.email}</span>
+        <Link href="/plans" className="btn btn-ghost btn-sm">
+          购买/续费
+        </Link>
         <Link href="/tutorial" className="btn btn-ghost btn-sm">
           安装教程
         </Link>
@@ -58,7 +61,13 @@ export default async function DashboardPage() {
         {subs.length === 0 && (
           <div className="card bg-base-100 shadow-sm">
             <div className="card-body">
-              <p>你还没有订阅。如果管理员之前发过订阅链接给你，在下面粘贴就能绑定到这个账号。</p>
+              <p>
+                你还没有订阅。
+                <Link href="/plans" className="link link-primary">
+                  用兑换码开通一个
+                </Link>
+                ，或者如果管理员之前发过订阅链接给你，在下面粘贴就能绑定到这个账号。
+              </p>
             </div>
           </div>
         )}

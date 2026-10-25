@@ -1,0 +1,4 @@
+# 复制成 .remote.vars（不进 git）。只给命令行脚本用（npm run payment:record -- ... --remote），连线上 Marzban
+MARZBAN_URL=https://panel.example.com
+MARZBAN_USERNAME=admin
+MARZBAN_PASSWORD=change-me

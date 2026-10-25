@@ -114,3 +114,26 @@ export function parseYuan(input: string): number | null {
   const fen = Number(m[1]) * 100 + Number((m[2] ?? "").padEnd(2, "0"));
   return fen > 0 && Number.isSafeInteger(fen) ? fen : null;
 }
+
+// 兑换码：16 位，字母表和推荐码一样，约 79 位随机，猜中的可能可以忽略。显示成 4 位一组
+const REDEEM_LEN = 16;
+
+export function newRedeemCode(): string {
+  // 拒绝采样，每个字符等概率
+  const limit = 256 - (256 % REFERRAL_ALPHABET.length);
+  let out = "";
+  while (out.length < REDEEM_LEN) {
+    for (const b of crypto.getRandomValues(new Uint8Array(REDEEM_LEN))) {
+      if (b < limit && out.length < REDEEM_LEN) out += REFERRAL_ALPHABET[b % REFERRAL_ALPHABET.length];
+    }
+  }
+  return out;
+}
+
+export const formatRedeemCode = (code: string) => code.match(/.{1,4}/g)!.join("-");
+
+// 整理客人填的兑换码：忽略大小写、空格和横线。格式不对返回 null
+export function normalizeRedeemCode(input: string): string | null {
+  const s = input.replace(/[\s-]/g, "").toUpperCase();
+  return s.length === REDEEM_LEN && [...s].every((ch) => REFERRAL_ALPHABET.includes(ch)) ? s : null;
+}
