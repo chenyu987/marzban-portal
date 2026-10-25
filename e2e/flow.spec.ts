@@ -1,6 +1,6 @@
 // 主流程：注册 → 下单 → 我已付款 → 管理员确认开通 → 快到期提醒 → 一键续费 → 忘记密码 → 管理员发重置链接 → 设新密码登录；
 // 另一条：余额付全款、余额抵扣一部分（取消后退回）、用兑换码续期；
-// 还有管理后台：登录、网页上确认 / 取消订单、客人管理（加减余额、重置链接、绑定订阅）、操作日志。
+// 还有管理后台：登录、网页上确认 / 取消订单、客人管理（加减余额、重置链接、绑定订阅）、兑换码、操作日志。
 // 每次用新邮箱注册，不依赖之前的数据；管理员那一步直接调命令行脚本（本地库 + 假 Marzban）
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
@@ -168,7 +168,7 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   await expect(page.getByText("续期成功")).toBeVisible();
 });
 
-test("管理后台：登录、确认和取消订单、客人管理", async ({ page, browser }) => {
+test("管理后台：登录、确认和取消订单、客人管理、兑换码、日志", async ({ page, browser }) => {
   const stamp = Date.now();
   const customer = `e2e-admin-c-${stamp}@example.test`;
   const adminEmail = `e2e-admin-${stamp}@example.test`;
@@ -253,6 +253,29 @@ test("管理后台：登录、确认和取消订单、客人管理", async ({ pa
   await admin.reload();
   await expect(admin.getByText(oldUser, { exact: true })).toBeVisible();
 
+  // 兑换码：生成 2 个，作废一个，客人用另一个
+  await admin.goto("/admin/codes");
+  await admin.locator('select[name="plan"]').selectOption("p1-month");
+  await admin.locator('input[name="count"]').fill("2");
+  await admin.getByPlaceholder("备注，比如「微信转账 张三」").fill("e2e 测试");
+  await admin.getByRole("button", { name: "生成" }).click();
+  const codes = (await admin.locator("textarea").inputValue()).split("\n");
+  expect(codes).toHaveLength(2);
+  await admin.locator("tr", { hasText: codes[0] }).getByRole("button", { name: "作废" }).click();
+  await expect(admin.locator("tr", { hasText: codes[0] })).toContainText("已作废");
+
+  await page.goto("/plans");
+  await page.getByPlaceholder("XXXX-XXXX-XXXX-XXXX").fill(codes[1]);
+  await page.getByRole("button", { name: "兑换" }).click();
+  await expect(page.getByText("续期成功")).toBeVisible();
+  await admin.reload();
+  await expect(admin.locator("tr", { hasText: codes[1] })).toContainText(customer);
+  await expect(admin.locator("tr", { hasText: codes[0] })).toHaveCount(0);
+
+  // 日志页能按操作筛
+  await admin.goto("/admin/logs?action=codes.create");
+  await expect(admin.locator("tbody tr", { hasText: adminEmail })).toContainText("2 个：e2e 测试");
+
   // 操作日志：每一步都记了（扣钱失败的那次没有改数据，不记）
   const logs = query(`SELECT action, target FROM admin_logs WHERE admin_email = '${adminEmail}' ORDER BY id`);
   expect(logs.map((l) => l.action)).toEqual([
@@ -263,6 +286,8 @@ test("管理后台：登录、确认和取消订单、客人管理", async ({ pa
     "balance.adjust",
     "password.reset_link",
     "subscription.bind",
+    "codes.create",
+    "code.void",
   ]);
 
   // 退出后回到登录页

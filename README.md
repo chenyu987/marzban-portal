@@ -22,7 +22,7 @@ A self-service customer portal for [Marzban](https://github.com/Gozargah/Marzban
 - 套餐页下单：在 `site.config.ts` 的 `payments` 里填上收款码，套餐页的每个价格就变成下单按钮。客人下单后看到金额、订单号和收款码，转账时备注订单号，付完点「我已付款」（记下时间，方便对账）；管理员在账单里核对到这笔钱后运行 `npm run orders -- confirm <订单号> [--remote]`，自动在 Marzban 开通或续期并记账（触发推荐奖励）。`npm run orders -- list [金额]` 看待处理的单（客人说已付的排前面），`cancel` 取消。客人可以取消自己还没点「我已付款」的单，同时最多挂 3 张
 - 到期提醒：订阅剩 7 天以内或已经到期时，订阅页在这个订阅上显示提醒和「续费」按钮，点了到套餐页、已经选好给这个订阅续期（`/plans?renew=<用户名>`）；没到期的订阅有个「提前续费」链接
 - 忘记密码：登录页「忘记密码？」→ 输入邮箱，收到带重置链接的邮件（1 小时内有效，只能用一次），设好新密码后所有设备的登录都会退出。发信用 Resend，配了 `RESEND_API_KEY` 和 `MAIL_FROM` 才会发，没配时页面让客人联系管理员；管理员可以用 `npm run password:reset-link -- <邮箱> [--remote]` 生成 24 小时有效的链接发给客人。链接里的网址用 `site.config.ts` 的 `siteUrl`
-- 管理后台（`/admin`）：前面挡一层 Cloudflare Access，后端每个请求都校验 Access 的 JWT（`lib/access.ts`），邮箱要在 `site.config.ts` 的 `admin.emails` 里；没配 Access 时后台整个返回 404。管理员账号和客人分开，只能用 `npm run admin:create -- <邮箱> [--remote]` 建，邮箱要和 Access 登录的一样。现在能做的：在网页上确认 / 取消客人的转账订单（逻辑和 `npm run orders` 一样）；客人列表和详情（订阅、订单、余额明细、推荐关系），加减余额（必须写原因）、生成重置密码链接、把 Marzban 上已有的用户绑给客人。所有操作记在 `admin_logs`。本地开发在 `.dev.vars` 设 `ADMIN_DEV_NO_ACCESS=1` 跳过 Access（只认 localhost）
+- 管理后台（`/admin`）：前面挡一层 Cloudflare Access，后端每个请求都校验 Access 的 JWT（`lib/access.ts`），邮箱要在 `site.config.ts` 的 `admin.emails` 里；没配 Access 时后台整个返回 404。管理员账号和客人分开，只能用 `npm run admin:create -- <邮箱> [--remote]` 建，邮箱要和 Access 登录的一样。现在能做的：在网页上确认 / 取消客人的转账订单（逻辑和 `npm run orders` 一样）；客人列表和详情（订阅、订单、余额明细、推荐关系），加减余额（必须写原因）、生成重置密码链接、把 Marzban 上已有的用户绑给客人；生成兑换码（看谁用了、作废没用过的）；看操作日志（按人、按操作筛）。所有操作记在 `admin_logs`。本地开发在 `.dev.vars` 设 `ADMIN_DEV_NO_ACCESS=1` 跳过 Access（只认 localhost）
 - 安装教程：iPhone、Mac、Windows、安卓分页，按访问设备自动切到对应的那页
 
 ## 目录

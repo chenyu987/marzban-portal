@@ -10,6 +10,8 @@ import { createAdminSession, currentAdmin, destroyAdminSession, logAdmin, requir
 import { cancelPendingOrder, confirmTransferOrder, type AdminResult } from "@/lib/admin-orders";
 import type { FormState } from "../actions";
 import { findUser } from "@/lib/marzban";
+import { findPlan } from "@/lib/plans";
+import { formatRedeemCode, newRedeemCode } from "@/lib/format";
 import { hashResetToken, newResetToken, RESET_TTL_ADMIN, resetLink } from "@/lib/reset";
 import { site } from "@/site.config";
 
@@ -147,4 +149,35 @@ export async function adminBindSubscription(_: FormState, form: FormData): Promi
   await logAdmin(admin, "subscription.bind", c.email, username);
   revalidatePath(`/admin/customers/${customerId}`);
   return { ok: `已把 ${username} 绑到 ${c.email} 名下` };
+}
+
+// 生成兑换码：选套餐、数量（1～100）、备注。生成的码只在这次返回里显示全，方便一次复制；日志只记数量
+export async function adminCreateCodes(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const plan = findPlan(site.plans, String(form.get("plan") ?? ""));
+  const count = Number(form.get("count"));
+  const note = String(form.get("note") ?? "").trim();
+  if (!plan) return { error: "请选套餐" };
+  if (!Number.isInteger(count) || count < 1 || count > 100) return { error: "数量是 1 到 100" };
+  const codes = Array.from({ length: count }, newRedeemCode);
+  const now = nowSec();
+  await db().batch(
+    codes.map((c) =>
+      db().prepare("INSERT INTO redeem_codes (code, plan_id, note, created_at) VALUES (?, ?, ?, ?)").bind(c, plan.id, note || null, now),
+    ),
+  );
+  await logAdmin(admin, "codes.create", plan.name, `${count} 个${note ? `：${note}` : ""}`);
+  revalidatePath("/admin/codes");
+  return { ok: codes.map(formatRedeemCode).join("\n") };
+}
+
+// 作废还没用过的兑换码（比如发错了人）。用过的不能作废
+export async function adminVoidCode(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const code = String(form.get("code") ?? "");
+  const r = await db().prepare("DELETE FROM redeem_codes WHERE code = ? AND used_by IS NULL").bind(code).run();
+  if (r.meta.changes !== 1) return { error: "这个兑换码已经被用了，或者已经作废了" };
+  await logAdmin(admin, "code.void", formatRedeemCode(code));
+  // 不刷新页面：刷新的话这一行马上消失，看不到「已作废」。下次打开页面就没有它了
+  return { ok: "已作废" };
 }

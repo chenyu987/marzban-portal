@@ -14,6 +14,12 @@ export default function AdminHeader({ email }: { email: string }) {
         <Link href="/admin/customers" className="btn btn-ghost btn-sm">
           客人
         </Link>
+        <Link href="/admin/codes" className="btn btn-ghost btn-sm">
+          兑换码
+        </Link>
+        <Link href="/admin/logs" className="btn btn-ghost btn-sm">
+          日志
+        </Link>
       </div>
       <span className="mr-2 hidden text-sm text-base-content/60 sm:inline">{email}</span>
       <form action={adminLogout}>
