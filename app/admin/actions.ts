@@ -3,11 +3,15 @@
 // 管理后台的 Server Actions。每个都先过 requireAdmin()（登录除外：它先过 Access），并记操作日志
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { db, nowSec } from "@/lib/env";
 import { verifyPassword } from "@/lib/password";
 import { createAdminSession, currentAdmin, destroyAdminSession, logAdmin, requireAccess, requireAdmin } from "@/lib/admin";
 import { cancelPendingOrder, confirmTransferOrder, type AdminResult } from "@/lib/admin-orders";
 import type { FormState } from "../actions";
+import { findUser } from "@/lib/marzban";
+import { hashResetToken, newResetToken, RESET_TTL_ADMIN, resetLink } from "@/lib/reset";
+import { site } from "@/site.config";
 
 // 和客人登录一样限制试密码；记在 login_failures 里，邮箱前面加 admin: 区分
 const FAIL_WINDOW = 15 * 60;
@@ -70,4 +74,77 @@ export async function adminCancelOrder(_: FormState, form: FormData): Promise<Fo
   const r = await cancelPendingOrder(id);
   await logAdmin(admin, "order.cancel", `订单 ${id}`, "ok" in r ? undefined : `失败：${r.error}`);
   return toState(r);
+}
+
+// 给客人加或扣余额（补偿、冲掉记错的）。金额可以是负数，必须写原因；扣的话余额不能扣成负数
+export async function adminAdjustBalance(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const customerId = Number(form.get("customerId"));
+  const raw = String(form.get("amount") ?? "").trim();
+  const note = String(form.get("note") ?? "").trim();
+  const m = /^(-?)(\d+(?:\.\d{1,2})?)$/.exec(raw);
+  if (!Number.isInteger(customerId) || !m) return { error: "金额格式不对，比如 10 或 -5.5" };
+  const fen = Math.round(Number(m[2]) * 100) * (m[1] ? -1 : 1);
+  if (fen === 0) return { error: "金额不能是 0" };
+  if (!note) return { error: "要写原因" };
+  const c = await db().prepare("SELECT email FROM customers WHERE id = ?").bind(customerId).first<{ email: string }>();
+  if (!c) return { error: "没有这个客人" };
+
+  const r = await db()
+    .prepare(
+      `INSERT INTO balance_entries (customer_id, amount, kind, note, created_at)
+       SELECT ?1, ?2, 'adjust', ?3, ?4
+       WHERE (SELECT COALESCE(SUM(amount), 0) FROM balance_entries WHERE customer_id = ?1) + ?2 >= 0`,
+    )
+    .bind(customerId, fen, note, nowSec())
+    .run();
+  if (r.meta.changes !== 1) return { error: "余额不够扣" };
+  await logAdmin(admin, "balance.adjust", c.email, `${fen > 0 ? "+" : ""}${(fen / 100).toFixed(2)} 元：${note}`);
+  revalidatePath(`/admin/customers/${customerId}`);
+  return { ok: `已${fen > 0 ? "加" : "扣"} ${(Math.abs(fen) / 100).toFixed(2)} 元` };
+}
+
+// 生成重置密码链接（24 小时、一次性），管理员发给客人。链接只显示这一次，日志里不记链接
+export async function adminResetLink(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const customerId = Number(form.get("customerId"));
+  const c = await db().prepare("SELECT id, email FROM customers WHERE id = ?").bind(customerId).first<{ id: number; email: string }>();
+  if (!c) return { error: "没有这个客人" };
+  const token = newResetToken();
+  const now = nowSec();
+  await db()
+    .prepare("INSERT INTO password_resets (token_hash, customer_id, expires_at, created_at) VALUES (?, ?, ?, ?)")
+    .bind(await hashResetToken(token), c.id, now + RESET_TTL_ADMIN, now)
+    .run();
+  await logAdmin(admin, "password.reset_link", c.email);
+  return { ok: resetLink(site.siteUrl, token) };
+}
+
+// 把 Marzban 上已有的用户绑到这个客人名下（老客人注册后，不用让他自己粘贴订阅链接）
+export async function adminBindSubscription(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const customerId = Number(form.get("customerId"));
+  const username = String(form.get("username") ?? "").trim();
+  if (!username) return { error: "要填 Marzban 用户名" };
+  const c = await db().prepare("SELECT email FROM customers WHERE id = ?").bind(customerId).first<{ email: string }>();
+  if (!c) return { error: "没有这个客人" };
+  const owner = await db()
+    .prepare("SELECT c.email FROM subscriptions s JOIN customers c ON c.id = s.customer_id WHERE s.marzban_username = ?")
+    .bind(username)
+    .first<{ email: string }>();
+  if (owner) return { error: `${username} 已经绑在 ${owner.email} 名下了` };
+  let user;
+  try {
+    user = await findUser(username);
+  } catch (e) {
+    return { error: `查 Marzban 出错：${e instanceof Error ? e.message : e}` };
+  }
+  if (!user) return { error: `Marzban 上没有用户 ${username}` };
+  await db()
+    .prepare("INSERT INTO subscriptions (customer_id, marzban_username, created_at) VALUES (?, ?, ?)")
+    .bind(customerId, username, nowSec())
+    .run();
+  await logAdmin(admin, "subscription.bind", c.email, username);
+  revalidatePath(`/admin/customers/${customerId}`);
+  return { ok: `已把 ${username} 绑到 ${c.email} 名下` };
 }

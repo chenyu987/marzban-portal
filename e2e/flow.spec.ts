@@ -1,6 +1,6 @@
 // 主流程：注册 → 下单 → 我已付款 → 管理员确认开通 → 快到期提醒 → 一键续费 → 忘记密码 → 管理员发重置链接 → 设新密码登录；
 // 另一条：余额付全款、余额抵扣一部分（取消后退回）、用兑换码续期；
-// 还有管理后台：登录、网页上确认 / 取消订单、操作日志。
+// 还有管理后台：登录、网页上确认 / 取消订单、客人管理（加减余额、重置链接、绑定订阅）、操作日志。
 // 每次用新邮箱注册，不依赖之前的数据；管理员那一步直接调命令行脚本（本地库 + 假 Marzban）
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
@@ -8,20 +8,22 @@ import { expect, test, type Page } from "@playwright/test";
 const run = (args: string[], input = "") =>
   execFileSync("npm", ["run", "-s", ...args], { input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
 
-async function setMockExpire(username: string, expire: number) {
+// 直接调假 Marzban 的接口（改到期时间、建用户）
+async function mockMarzban(method: string, path: string, body: object) {
   const tokenRes = await fetch("http://localhost:8010/api/admin/token", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: "username=admin&password=admin",
   });
   const { access_token } = (await tokenRes.json()) as { access_token: string };
-  const res = await fetch(`http://localhost:8010/api/user/${username}`, {
-    method: "PUT",
+  const res = await fetch(`http://localhost:8010/api${path}`, {
+    method,
     headers: { authorization: `Bearer ${access_token}`, "content-type": "application/json" },
-    body: JSON.stringify({ expire }),
+    body: JSON.stringify(body),
   });
   expect(res.ok).toBe(true);
 }
+const setMockExpire = (username: string, expire: number) => mockMarzban("PUT", `/user/${username}`, { expire });
 
 // 在本地库里直接执行一条 SQL（给测试账号加余额之类）
 const sql = (command: string) =>
@@ -166,7 +168,7 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   await expect(page.getByText("续期成功")).toBeVisible();
 });
 
-test("管理后台：登录、网页上确认和取消订单", async ({ page, browser }) => {
+test("管理后台：登录、确认和取消订单、客人管理", async ({ page, browser }) => {
   const stamp = Date.now();
   const customer = `e2e-admin-c-${stamp}@example.test`;
   const adminEmail = `e2e-admin-${stamp}@example.test`;
@@ -221,9 +223,47 @@ test("管理后台：登录、网页上确认和取消订单", async ({ page, br
   await page.goto("/plans");
   await expect(page.locator(".card.border")).toHaveCount(0);
 
-  // 操作日志：登录失败、登录、确认、取消都记了
+  // 客人管理：搜到客人、进详情
+  await admin.goto(`/admin/customers?q=${encodeURIComponent(customer)}`);
+  await admin.getByRole("link", { name: customer }).click();
+  await expect(admin.getByRole("heading", { name: customer })).toBeVisible();
+
+  // 加 ¥10 余额（要写原因）；扣 ¥100 扣不了
+  await admin.getByPlaceholder("金额，扣钱写负数，如 -5").fill("10");
+  await admin.getByPlaceholder("原因（必填）").fill("测试补偿");
+  await admin.getByRole("button", { name: "确定" }).click();
+  await expect(admin.getByText("已加 10.00 元")).toBeVisible();
+  await admin.getByPlaceholder("金额，扣钱写负数，如 -5").fill("-100");
+  await admin.getByPlaceholder("原因（必填）").fill("测试扣太多");
+  await admin.getByRole("button", { name: "确定" }).click();
+  await expect(admin.getByText("余额不够扣")).toBeVisible();
+  await admin.reload();
+  await expect(admin.getByText("管理员调整：测试补偿")).toBeVisible();
+
+  // 生成重置密码链接
+  await admin.getByRole("button", { name: "生成链接" }).click();
+  await expect(admin.locator("code", { hasText: "/reset?token=" })).toBeVisible();
+
+  // 绑定 Marzban 上已有的用户
+  const oldUser = `old${stamp % 100000000}`;
+  await mockMarzban("POST", "/user", { username: oldUser, expire: Math.floor(Date.now() / 1000) + 30 * 86400 });
+  await admin.getByPlaceholder("Marzban 用户名").fill(oldUser);
+  await admin.getByRole("button", { name: "绑定" }).click();
+  await expect(admin.getByText(`已把 ${oldUser} 绑到 ${customer} 名下`)).toBeVisible();
+  await admin.reload();
+  await expect(admin.getByText(oldUser, { exact: true })).toBeVisible();
+
+  // 操作日志：每一步都记了（扣钱失败的那次没有改数据，不记）
   const logs = query(`SELECT action, target FROM admin_logs WHERE admin_email = '${adminEmail}' ORDER BY id`);
-  expect(logs.map((l) => l.action)).toEqual(["login.fail", "login", "order.confirm", "order.cancel"]);
+  expect(logs.map((l) => l.action)).toEqual([
+    "login.fail",
+    "login",
+    "order.confirm",
+    "order.cancel",
+    "balance.adjust",
+    "password.reset_link",
+    "subscription.bind",
+  ]);
 
   // 退出后回到登录页
   await admin.goto("/admin");
