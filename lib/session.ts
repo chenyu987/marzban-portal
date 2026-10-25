@@ -1,0 +1,54 @@
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { db, nowSec } from "./env";
+
+const COOKIE = "sid";
+const TTL = 30 * 86400;
+
+export type Customer = { id: number; email: string; referral_code: string };
+
+async function sha256(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function createSession(customerId: number) {
+  const token = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const now = nowSec();
+  await db()
+    .prepare("INSERT INTO sessions (id, customer_id, expires_at, created_at) VALUES (?, ?, ?, ?)")
+    .bind(await sha256(token), customerId, now + TTL, now)
+    .run();
+  (await cookies()).set(COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: TTL,
+  });
+}
+
+export async function currentCustomer(): Promise<Customer | null> {
+  const token = (await cookies()).get(COOKIE)?.value;
+  if (!token) return null;
+  return db()
+    .prepare(
+      `SELECT c.id, c.email, c.referral_code FROM sessions s JOIN customers c ON c.id = s.customer_id
+       WHERE s.id = ? AND s.expires_at > ?`,
+    )
+    .bind(await sha256(token), nowSec())
+    .first<Customer>();
+}
+
+export async function requireCustomer(): Promise<Customer> {
+  const c = await currentCustomer();
+  if (!c) redirect("/login");
+  return c;
+}
+
+export async function destroySession() {
+  const jar = await cookies();
+  const token = jar.get(COOKIE)?.value;
+  if (token) await db().prepare("DELETE FROM sessions WHERE id = ?").bind(await sha256(token)).run();
+  jar.delete(COOKIE);
+}

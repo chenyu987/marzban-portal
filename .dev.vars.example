@@ -1,0 +1,4 @@
+# 复制成 .dev.vars（不进 git）。本地开发连 dev/mock-marzban.mjs 起的假 Marzban
+MARZBAN_URL=http://localhost:8010
+MARZBAN_USERNAME=admin
+MARZBAN_PASSWORD=admin
