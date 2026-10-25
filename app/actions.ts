@@ -6,13 +6,13 @@ import { revalidatePath } from "next/cache";
 import { db, nowSec } from "@/lib/env";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { createSession, destroySession, requireCustomer } from "@/lib/session";
-import { createUser, findUser, lookupSubscription, modifyUser, resetUsage, revokeSubscription } from "@/lib/marzban";
+import { lookupSubscription, revokeSubscription } from "@/lib/marzban";
 import { formatExpire, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
-import { findPlan, nextUsername } from "@/lib/plans";
-import { provisionNew, provisionRenew, type ProvisionOps, type ProvisionResult } from "@/lib/provision";
+import { findPlan } from "@/lib/plans";
+import { type ProvisionResult } from "@/lib/provision";
+import { provisionTarget } from "@/lib/orders";
 import { site } from "@/site.config";
 import { BALANCE_SQL } from "@/lib/balance";
-import type { Plan } from "@/site.config.example";
 import { canSendMail, sendMail } from "@/lib/mail";
 import { hashResetToken, newResetToken, RESET_MAX_PER_HOUR, RESET_TTL_SELF, resetLink } from "@/lib/reset";
 
@@ -133,31 +133,6 @@ export async function resetSubscriptionLink(form: FormData) {
   if (!mine) return;
   await revokeSubscription(username);
   revalidatePath("/dashboard");
-}
-
-// 网页这边的 Marzban 操作，交给 lib/provision.ts 判断出错时 Marzban 改没改
-const marzbanOps: ProvisionOps = { findUser, createUser, modifyUser, resetUsage };
-
-// 按 target（"new" 或客人名下的用户名）在 Marzban 上新开或续期。兑换码和余额购买共用。
-// 返回 { error }：写 Marzban 之前就发现不行；抛异常：写之前出了意外。这两种 Marzban 都没动过，调用方可以放心退款/放回兑换码。
-// 其他情况返回 lib/provision.ts 的结果（done / retry / stuck）
-async function provisionTarget(
-  customerId: number,
-  subs: string[],
-  target: string,
-  plan: Plan,
-  now: number,
-): Promise<{ error: string } | ProvisionResult> {
-  if (target === "new") {
-    let username = nextUsername(customerId, subs);
-    // Marzban 上万一已经有同名用户（比如管理员手动建过），序号往后挪
-    while (await findUser(username)) username = nextUsername(customerId, [...subs, username]);
-    return provisionNew(marzbanOps, username, plan, now);
-  }
-  const current = await findUser(target);
-  if (!current) return { error: "暂时查不到这个订阅，请稍后再试或联系管理员" };
-  if (!current.expire) return { error: "这个订阅永不到期，不用续期。可以选「新开一个订阅」" };
-  return provisionRenew(marzbanOps, current, plan, now);
 }
 
 // 用兑换码买套餐：target 是 "new"（新开一个订阅）或者客人名下某个订阅的用户名（续期）。

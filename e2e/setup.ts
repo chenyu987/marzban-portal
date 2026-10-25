@@ -11,5 +11,8 @@ export default function setup() {
   if (!/^MAIL_DEV_LOG\s*=\s*1\s*$/m.test(vars)) {
     throw new Error(".dev.vars 里要有 MAIL_DEV_LOG=1（见 .dev.vars.example），忘记密码的测试才能跑");
   }
+  if (!/^ADMIN_DEV_NO_ACCESS\s*=\s*1\s*$/m.test(vars)) {
+    throw new Error(".dev.vars 里要有 ADMIN_DEV_NO_ACCESS=1（见 .dev.vars.example），管理后台的测试才能跑");
+  }
   execFileSync("npx", ["wrangler", "d1", "migrations", "apply", "DB", "--local"], { stdio: "ignore" });
 }

@@ -39,6 +39,10 @@ export type SiteConfig = {
   // qr 填收款码里的内容（用手机扫一下自己的收款码就能看到，比如支付宝是 https://qr.alipay.com/...），页面在浏览器里生成二维码。
   // 空数组表示不开放下单，套餐页只能用兑换码
   payments: { name: string; qr: string }[];
+  // 管理后台（/admin）。前面要挡一层 Cloudflare Access：accessTeamDomain 是团队域名（xxx.cloudflareaccess.com），
+  // accessAud 是 Access 里后台那个应用的 AUD。两个都填了后台才开放，没填时 /admin 一律 404。
+  // emails：能进后台的邮箱，Access 也要放行同样的邮箱；管理员账号（npm run admin:create）的邮箱要和 Access 登录的一样
+  admin: { accessTeamDomain: string | null; accessAud: string | null; emails: string[] };
 };
 
 export const site: SiteConfig = {
@@ -58,4 +62,5 @@ export const site: SiteConfig = {
   ],
   purchaseNote: "付款后管理员会把兑换码发给你，在下面输入就能自动开通或续期。",
   payments: [],
+  admin: { accessTeamDomain: null, accessAud: null, emails: [] },
 };

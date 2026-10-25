@@ -1,5 +1,6 @@
 // 主流程：注册 → 下单 → 我已付款 → 管理员确认开通 → 快到期提醒 → 一键续费 → 忘记密码 → 管理员发重置链接 → 设新密码登录；
-// 另一条：余额付全款、余额抵扣一部分（取消后退回）、用兑换码续期。
+// 另一条：余额付全款、余额抵扣一部分（取消后退回）、用兑换码续期；
+// 还有管理后台：登录、网页上确认 / 取消订单、操作日志。
 // 每次用新邮箱注册，不依赖之前的数据；管理员那一步直接调命令行脚本（本地库 + 假 Marzban）
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
@@ -25,6 +26,14 @@ async function setMockExpire(username: string, expire: number) {
 // 在本地库里直接执行一条 SQL（给测试账号加余额之类）
 const sql = (command: string) =>
   execFileSync("npx", ["wrangler", "d1", "execute", "DB", "--local", "--command", command], { stdio: "ignore" });
+// 执行一条查询，返回结果行
+const query = (command: string) =>
+  JSON.parse(
+    execFileSync("npx", ["wrangler", "d1", "execute", "DB", "--local", "--json", "--command", command], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }),
+  )[0].results as Record<string, unknown>[];
 
 async function register(page: Page, email: string, password: string) {
   await page.goto("/register");
@@ -155,4 +164,70 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   await expect(page.locator('form:has(input[name="code"]) select[name="target"]')).toHaveValue(username);
   await page.getByRole("button", { name: "兑换" }).click();
   await expect(page.getByText("续期成功")).toBeVisible();
+});
+
+test("管理后台：登录、网页上确认和取消订单", async ({ page, browser }) => {
+  const stamp = Date.now();
+  const customer = `e2e-admin-c-${stamp}@example.test`;
+  const adminEmail = `e2e-admin-${stamp}@example.test`;
+  const adminPassword = "E2eAdmin-123456";
+  page.on("dialog", (d) => d.accept());
+
+  // 管理员只能用命令建
+  run(["admin:create", "--", adminEmail], `${adminPassword}\n${adminPassword}\n`);
+
+  // 客人下两张单，第一张点「我已付款」
+  await register(page, customer, "E2eTest-1234");
+  await page.goto("/plans");
+  await page.locator('button[value="p1-month"]').click();
+  const first = (await page.locator(".card.border .card-title").first().innerText()).match(/\d+/)![0];
+  await page.locator(".card.border").first().getByRole("button", { name: "我已付款" }).click();
+  await expect(page.locator(".card.border").first()).toContainText("等管理员核对");
+  await page.locator('button[value="p1-quarter"]').click();
+  await expect(page.locator(".card.border")).toHaveCount(2);
+  const second = (await page.locator(".card.border .card-title").first().innerText()).match(/\d+/)![0];
+
+  // 客人的登录进不了后台：会被带到后台自己的登录页
+  await page.goto("/admin");
+  await expect(page).toHaveURL(/\/admin\/login/);
+
+  // 管理员在另一个浏览器里登录（密码错先失败一次）
+  const ctx = await browser.newContext();
+  const admin = await ctx.newPage();
+  admin.on("dialog", (d) => d.accept());
+  await admin.goto("/admin/login");
+  await admin.getByPlaceholder("管理员邮箱").fill(adminEmail);
+  await admin.getByPlaceholder("密码").fill("wrong-password-123");
+  await admin.getByRole("button", { name: "登录" }).click();
+  await expect(admin.getByText("邮箱或密码不对")).toBeVisible();
+  await admin.getByPlaceholder("密码").fill(adminPassword);
+  await admin.getByRole("button", { name: "登录" }).click();
+  await expect(admin).toHaveURL(/\/admin$/);
+
+  // 第一张：客人说已付，确认收款并开通
+  const firstCard = admin.locator(".card", { hasText: `订单 ${first}` });
+  await expect(firstCard).toContainText("说已付");
+  await firstCard.getByRole("button", { name: "确认收款并开通" }).click();
+  await expect(admin.getByText(`订单 ${first} 已确认`)).toBeVisible();
+
+  // 第二张：取消
+  const secondCard = admin.locator(".card", { hasText: `订单 ${second}` });
+  await secondCard.getByRole("button", { name: "取消" }).click();
+  await expect(admin.getByText(`订单 ${second} 已取消`)).toBeVisible();
+
+  // 客人那边：订阅开通了，第二张单不见了
+  await page.goto("/dashboard");
+  await expect(page.locator(".card-title").filter({ hasText: /^c\d+_\d+$/ }).first()).toBeVisible();
+  await page.goto("/plans");
+  await expect(page.locator(".card.border")).toHaveCount(0);
+
+  // 操作日志：登录失败、登录、确认、取消都记了
+  const logs = query(`SELECT action, target FROM admin_logs WHERE admin_email = '${adminEmail}' ORDER BY id`);
+  expect(logs.map((l) => l.action)).toEqual(["login.fail", "login", "order.confirm", "order.cancel"]);
+
+  // 退出后回到登录页
+  await admin.goto("/admin");
+  await admin.getByRole("button", { name: "退出" }).click();
+  await expect(admin).toHaveURL(/\/admin\/login/);
+  await ctx.close();
 });
