@@ -28,6 +28,14 @@ export function formatExpire(expire: number | null): string {
 
 // 剩余时间往下取整，写到小时：「还剩 4 天 7 小时」。和 Marzban 面板的「4 days」对得上，
 // 也不会让客人以为比实际多一天。urgent：不到 3 天，页面上标红
+// 剩几天以内算「快到期」：订阅页显示续费提醒
+export const RENEW_SOON_DAYS = 7;
+
+// 快到期或者已经到期了。永不到期的不用续
+export function needsRenewal(expire: number | null, nowSec = Date.now() / 1000): boolean {
+  return !!expire && expire - nowSec < RENEW_SOON_DAYS * 86400;
+}
+
 export function timeLeft(expire: number | null, nowSec = Date.now() / 1000): { text: string; urgent: boolean } | null {
   if (!expire) return null;
   const sec = expire - nowSec;

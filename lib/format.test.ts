@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, formatRedeemCode, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft } from "./format";
+import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, formatRedeemCode, needsRenewal, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft } from "./format";
 import { hashPassword, verifyPassword } from "./password";
 
 describe("parseSubToken", () => {
@@ -42,6 +42,13 @@ describe("到期时间", () => {
     expect(timeLeft(30 * 60, 0)).toEqual({ text: "不到 1 小时", urgent: true });
     expect(timeLeft(-1, 0)).toEqual({ text: "已到期", urgent: true });
     expect(timeLeft(null)).toBeNull();
+  });
+  it("剩 7 天以内或已到期才提醒续费，永不到期的不提醒", () => {
+    expect(needsRenewal(8 * 86400, 0)).toBe(false);
+    expect(needsRenewal(7 * 86400, 0)).toBe(false);
+    expect(needsRenewal(7 * 86400 - 1, 0)).toBe(true);
+    expect(needsRenewal(-86400, 0)).toBe(true);
+    expect(needsRenewal(null, 0)).toBe(false);
   });
 });
 

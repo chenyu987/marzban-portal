@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
 import { getUser, type MarzbanUser } from "@/lib/marzban";
-import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, RESET_LABEL, STATUS_LABEL, timeLeft } from "@/lib/format";
+import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, needsRenewal, RESET_LABEL, STATUS_LABEL, timeLeft } from "@/lib/format";
 import { BALANCE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
 import { site } from "@/site.config";
 import { BRAND } from "@/lib/clients";
@@ -129,6 +129,21 @@ function SubscriptionCard({ user }: { user: MarzbanUser }) {
             {reset && <div className="text-sm text-base-content/60">{reset}</div>}
           </div>
         </div>
+
+        {needsRenewal(user.expire) ? (
+          <div role="alert" className="alert alert-warning alert-soft flex-wrap justify-between">
+            <span>{left?.text === "已到期" ? "这个订阅已经到期了，续费后马上恢复。" : `这个订阅${left?.text ?? "快"}到期，记得续费。`}</span>
+            <Link href={`/plans?renew=${encodeURIComponent(user.username)}`} className="btn btn-warning btn-sm">
+              续费
+            </Link>
+          </div>
+        ) : (
+          user.expire && (
+            <Link href={`/plans?renew=${encodeURIComponent(user.username)}`} className="link link-hover text-sm text-base-content/60">
+              提前续费
+            </Link>
+          )
+        )}
 
         <SubscriptionLink username={user.username} url={user.subscription_url} />
       </div>

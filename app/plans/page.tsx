@@ -14,8 +14,10 @@ export const dynamic = "force-dynamic";
 
 const price = (fen: number) => `${site.currency}${formatMoney(fen).replace(/\.00$/, "")}`;
 
-export default async function PlansPage() {
+// ?renew=<用户名>：从订阅页的「续费」按钮过来，默认选好给这个订阅续期
+export default async function PlansPage({ searchParams }: { searchParams: Promise<{ renew?: string | string[] }> }) {
   const customer = await requireCustomer();
+  const { renew } = await searchParams;
   const [{ results: subs }, { results: open }] = await Promise.all([
     db()
       .prepare("SELECT marzban_username FROM subscriptions WHERE customer_id = ? ORDER BY id")
@@ -38,6 +40,7 @@ export default async function PlansPage() {
       }>(),
   ]);
   const subscriptions = subs.map((r) => r.marzban_username);
+  const renewTarget = typeof renew === "string" && subscriptions.includes(renew) ? renew : undefined;
   const canOrder = site.payments.length > 0;
 
   // 按 group 分组，保持配置里的顺序
@@ -96,13 +99,14 @@ export default async function PlansPage() {
       ) : (
         <>
           {canOrder && <p className="mb-3 text-sm text-base-content/70">点价格下单，按提示转账，付完点「我已付款」，管理员核对收款后自动开通。</p>}
-          <OrderForm groups={groups} subscriptions={subscriptions} canOrder={canOrder} />
+          {renewTarget && <p className="mb-3 font-medium">给 {renewTarget} 续期：选一个套餐，续上的天数从原来的到期时间往后加。</p>}
+          <OrderForm groups={groups} subscriptions={subscriptions} canOrder={canOrder} defaultTarget={renewTarget} />
         </>
       )}
       {site.deviceLimitNote && <p className="mt-4 text-sm text-base-content/60">{site.deviceLimitNote}</p>}
 
       <div className="mt-8">
-        <RedeemForm note={site.purchaseNote} subscriptions={subscriptions} />
+        <RedeemForm note={site.purchaseNote} subscriptions={subscriptions} defaultTarget={renewTarget} />
       </div>
     </div>
   );

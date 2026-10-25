@@ -3,7 +3,15 @@
 import { useActionState } from "react";
 import { redeem } from "../actions";
 
-export default function RedeemForm({ note, subscriptions }: { note: string; subscriptions: string[] }) {
+export default function RedeemForm({
+  note,
+  subscriptions,
+  defaultTarget,
+}: {
+  note: string;
+  subscriptions: string[];
+  defaultTarget?: string;
+}) {
   const [state, action, pending] = useActionState(redeem, undefined);
   return (
     <form action={action} className="card bg-base-100 shadow-sm">
@@ -18,7 +26,7 @@ export default function RedeemForm({ note, subscriptions }: { note: string; subs
           className="input w-full font-mono uppercase"
         />
         {subscriptions.length > 0 && (
-          <select name="target" className="select w-full" defaultValue={subscriptions[0]}>
+          <select name="target" className="select w-full" defaultValue={defaultTarget ?? subscriptions[0]}>
             {subscriptions.map((u) => (
               <option key={u} value={u}>
                 给 {u} 续期

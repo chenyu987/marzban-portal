@@ -14,10 +14,12 @@ export default function OrderForm({
   groups,
   subscriptions,
   canOrder,
+  defaultTarget,
 }: {
   groups: PlanGroup[];
   subscriptions: string[];
   canOrder: boolean;
+  defaultTarget?: string;
 }) {
   const [state, action, pending] = useActionState(createOrder, undefined);
 
@@ -35,7 +37,7 @@ export default function OrderForm({
       {canOrder && subscriptions.length > 0 && (
         <label className="flex flex-col gap-1">
           <span className="text-sm text-base-content/70">买给哪个订阅</span>
-          <select name="target" className="select w-full" defaultValue={subscriptions[0]}>
+          <select name="target" className="select w-full" defaultValue={defaultTarget ?? subscriptions[0]}>
             {subscriptions.map((u) => (
               <option key={u} value={u}>
                 给 {u} 续期
