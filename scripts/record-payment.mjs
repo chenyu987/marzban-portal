@@ -10,6 +10,7 @@ import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { formatBytes, formatExpire, formatMoney, parseYuan } from "../lib/format.ts";
 import { findPlan, newUserBody, nextUsername, renewUserBody } from "../lib/plans.ts";
+import { provisionNew, provisionRenew } from "../lib/provision.ts";
 import { site } from "../site.config.ts";
 
 const USAGE = `用法:
@@ -175,14 +176,32 @@ if (!yes) {
 }
 
 // ---- 先改 Marzban，成功了再记账 ----
-if (action?.kind === "new") {
-  const u = await api("POST", "/user", newUserBody(action.username, plan, now));
-  console.log(`Marzban 已新建 ${u.username}：${describe(u)}`);
-} else if (action?.kind === "renew") {
-  const path = `/user/${encodeURIComponent(action.username)}`;
-  await api("PUT", path, renewUserBody(action.current, plan, now));
-  const u = await api("POST", `${path}/reset`);
-  console.log(`Marzban 已续期 ${u.username}：${describe(u)}`);
+// 出错时由 lib/provision.ts 判断 Marzban 到底改没改，和网页兑换码用同一套逻辑
+const ops = {
+  findUser: getUser,
+  createUser: (body) => api("POST", "/user", body),
+  modifyUser: (username, body) => api("PUT", `/user/${encodeURIComponent(username)}`, body),
+  resetUsage: (username) => api("POST", `/user/${encodeURIComponent(username)}/reset`),
+};
+if (action) {
+  const result =
+    action.kind === "new"
+      ? await provisionNew(ops, action.username, plan, now)
+      : await provisionRenew(ops, action.current, plan, now);
+  if (result.kind === "retry") {
+    fail(`❌ Marzban 没有改动，也没有记账，可以直接重跑：${result.reason}`);
+  }
+  if (result.kind === "stuck") {
+    fail(
+      `❌ ${result.reason}\n` +
+        `Marzban 可能已经改了，也可能没改。先去面板看 ${result.username} 现在的状态，确认之后：\n` +
+        `  已经改好了 → 只补记账，不要带 --plan：npm run payment:record -- ${c.email} ${formatMoney(amount)}${remote ? " --remote" : ""}\n` +
+        `  确实没改   → 原命令重跑`,
+    );
+  }
+  const u = await getUser(result.username).catch(() => null);
+  console.log(`Marzban 已${action.kind === "new" ? "新建" : "续期"} ${result.username}${u ? `：${describe(u)}` : ""}`);
+  if (result.warning) console.error(`⚠️ ${result.warning}。到面板上手动把 ${result.username} 的流量清零`);
 }
 
 try {

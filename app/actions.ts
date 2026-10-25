@@ -8,7 +8,8 @@ import { hashPassword, verifyPassword } from "@/lib/password";
 import { createSession, destroySession, requireCustomer } from "@/lib/session";
 import { createUser, findUser, lookupSubscription, modifyUser, resetUsage, revokeSubscription } from "@/lib/marzban";
 import { formatExpire, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
-import { findPlan, newUserBody, nextUsername, renewUserBody } from "@/lib/plans";
+import { findPlan, nextUsername } from "@/lib/plans";
+import { provisionNew, provisionRenew, type ProvisionOps, type ProvisionResult } from "@/lib/provision";
 import { site } from "@/site.config";
 
 // email：出错时带回去当输入框的默认值。React 19 提交后会重置表单，不带回去邮箱就被清空了
@@ -130,8 +131,13 @@ export async function resetSubscriptionLink(form: FormData) {
   revalidatePath("/dashboard");
 }
 
+// 网页这边的 Marzban 操作，交给 lib/provision.ts 判断出错时 Marzban 改没改
+const marzbanOps: ProvisionOps = { findUser, createUser, modifyUser, resetUsage };
+
 // 用兑换码买套餐：target 是 "new"（新开一个订阅）或者客人名下某个订阅的用户名（续期）。
-// 顺序：先占住兑换码 → 改 Marzban → 记账。Marzban 失败就把兑换码放回去，客人可以再试
+// 顺序：先占住兑换码 → 改 Marzban → 记账。
+// 只有确认 Marzban 什么都没改时才放回兑换码；Marzban 可能已经改了就保留兑换码，交给管理员核对，
+// 免得客人重试时多开一个用户或者多续一次期
 export async function redeem(_: FormState, form: FormData): Promise<FormState> {
   const customer = await requireCustomer();
   const code = normalizeRedeemCode(String(form.get("code") ?? ""));
@@ -164,17 +170,16 @@ export async function redeem(_: FormState, form: FormData): Promise<FormState> {
   const release = () =>
     db().prepare("UPDATE redeem_codes SET used_by = NULL, used_at = NULL WHERE code = ?").bind(code).run();
 
-  let username: string;
-  let expire: number | null;
+  // 写 Marzban 之前的准备：这里出错 Marzban 还没动过，放回兑换码就行
+  let result: ProvisionResult;
   try {
     if (target === "new") {
-      username = nextUsername(customer.id, subs);
+      let username = nextUsername(customer.id, subs);
       // Marzban 上万一已经有同名用户（比如管理员手动建过），序号往后挪
       while (await findUser(username)) username = nextUsername(customer.id, [...subs, username]);
-      expire = (await createUser(newUserBody(username, plan, now))).expire;
+      result = await provisionNew(marzbanOps, username, plan, now);
     } else {
-      username = target;
-      const current = await findUser(username);
+      const current = await findUser(target);
       if (!current) {
         await release();
         return { error: "暂时查不到这个订阅，请稍后再试或联系管理员" };
@@ -183,14 +188,31 @@ export async function redeem(_: FormState, form: FormData): Promise<FormState> {
         await release();
         return { error: "这个订阅永不到期，不用续期。可以选「新开一个订阅」" };
       }
-      expire = (await modifyUser(username, renewUserBody(current, plan, now))).expire;
-      await resetUsage(username);
+      result = await provisionRenew(marzbanOps, current, plan, now);
     }
   } catch (e) {
-    console.error("redeem: Marzban 出错", e);
+    console.error("redeem: 写 Marzban 之前出错", e);
     await release();
     return { error: "开通失败，兑换码没有被用掉，请稍后再试。一直失败的话请联系管理员" };
   }
+
+  if (result.kind === "retry") {
+    console.error(`redeem: ${result.reason}`);
+    await release();
+    return { error: "开通失败，兑换码没有被用掉，请稍后再试。一直失败的话请联系管理员" };
+  }
+  if (result.kind === "stuck") {
+    // 兑换码保持占用（used_by 有值、order_id 为空），管理员按日志去 Marzban 核对
+    console.error(`redeem: 需要人工核对 customer=${customer.id} code=${code} plan=${plan.id} ${result.reason}`);
+    return {
+      error: `开通的时候出了点问题，兑换码已经帮你保留，不会作废。请不要重复兑换，把这句话截图发给管理员处理（${result.username}）`,
+    };
+  }
+  if (result.warning) {
+    console.error(`redeem: customer=${customer.id} user=${result.username} ${result.warning}`);
+  }
+  const username = result.username;
+  const expire = result.expire;
 
   // 记账会触发推荐奖励（按套餐价）。last_insert_rowid() 在同一个 batch 里指向刚插入的订单
   try {
@@ -218,6 +240,8 @@ export async function redeem(_: FormState, form: FormData): Promise<FormState> {
   revalidatePath("/dashboard");
   revalidatePath("/plans");
   return {
-    ok: `${target === "new" ? "开通" : "续期"}成功：${plan.name}，${username} 到期时间 ${formatExpire(expire)}。回到「我的订阅」就能导入使用`,
+    ok:
+      `${target === "new" ? "开通" : "续期"}成功：${plan.name}，${username} 到期时间 ${formatExpire(expire)}。回到「我的订阅」就能导入使用` +
+      (result.warning ? "。已用流量还没清零，管理员会帮你处理" : ""),
   };
 }
