@@ -18,6 +18,7 @@ A self-service customer portal for [Marzban](https://github.com/Gozargah/Marzban
 - 推荐码：每个账号注册时自动生成，可以复制推荐码或推荐链接（`/register?ref=<推荐码>`，打开就自动填好）发给朋友；注册时选填，填错会提示；推荐人在订阅页看到被推荐的人（邮箱打码）和注册日期
 - 推荐奖励：被推荐人每付一笔款，推荐人拿这笔金额的 10%，记进余额；订阅页显示余额和奖励明细。奖励由数据库触发器在订单变成已付款时自动发。线下收款可以用 `npm run payment:record -- <邮箱> <金额（元）> [--note 备注] [--remote]` 记账；加 `--plan <套餐>` 会先在 Marzban 新建用户（`c<客人id>_<序号>`，自动绑到客人名下）或用 `--renew <用户名>` 续期，再记账。套餐在 `site.config.ts` 的 `plans` 里配，命令行连线上 Marzban 用的管理员账号放在 `.remote.vars`（模板 `.remote.vars.example`）
 - 套餐页（`/plans`）：按 `site.config.ts` 的 `plans` 显示价格；客人输入兑换码后自动在 Marzban 新开订阅或给已有订阅续期，同时记一笔订单（按套餐价，触发推荐奖励）。兑换码用 `npm run codes:create -- <套餐> [数量] [--note 备注] [--remote]` 生成
+- 套餐页下单：在 `site.config.ts` 的 `payments` 里填上收款码，套餐页的每个价格就变成下单按钮。客人下单后看到金额、订单号和收款码，转账时备注订单号，付完点「我已付款」（记下时间，方便对账）；管理员在账单里核对到这笔钱后运行 `npm run orders -- confirm <订单号> [--remote]`，自动在 Marzban 开通或续期并记账（触发推荐奖励）。`npm run orders -- list [金额]` 看待处理的单（客人说已付的排前面），`cancel` 取消。客人可以取消自己还没点「我已付款」的单，同时最多挂 3 张
 - 安装教程：iPhone、Mac、Windows、安卓分页，按访问设备自动切到对应的那页
 
 ## 目录
@@ -33,6 +34,8 @@ A self-service customer portal for [Marzban](https://github.com/Gozargah/Marzban
 | `scripts/record-payment.mjs` | 管理员在命令行记一笔付款，可以顺便在 Marzban 开通或续期 |
 | `app/plans/` | 套餐页和兑换码表单 |
 | `scripts/create-codes.mjs` | 管理员生成兑换码 |
+| `scripts/orders.mjs` | 管理员查看、确认、取消客人在套餐页下的单 |
+| `scripts/admin.mjs` | 命令行脚本共用的读写 D1、连 Marzban |
 | `lib/plans.ts` | 套餐怎么换算成 Marzban 用户的到期、流量和 `ip=N` 备注 |
 | `migrations/` | D1 数据库结构 |
 | `dev/mock-marzban.mjs` | 本地开发用的假 Marzban，接口格式照 Marzban v0.8.4 |

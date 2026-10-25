@@ -33,6 +33,10 @@ export type SiteConfig = {
   plans: Plan[];
   // 套餐页上告诉客人怎么买兑换码，比如「付款后联系客服微信 xxx 领取兑换码」
   purchaseNote: string;
+  // 客人在套餐页下单后看到的收款方式。客人转账时备注订单号，管理员看到钱到了用 npm run orders -- confirm 确认。
+  // qr 填收款码里的内容（用手机扫一下自己的收款码就能看到，比如支付宝是 https://qr.alipay.com/...），页面在浏览器里生成二维码。
+  // 空数组表示不开放下单，套餐页只能用兑换码
+  payments: { name: string; qr: string }[];
 };
 
 export const site: SiteConfig = {
@@ -50,4 +54,5 @@ export const site: SiteConfig = {
     { id: "quarter", name: "季付", price: 5400, days: 90, dataGB: 100, ip: 3 },
   ],
   purchaseNote: "付款后管理员会把兑换码发给你，在下面输入就能自动开通或续期。",
+  payments: [],
 };

@@ -245,3 +245,67 @@ export async function redeem(_: FormState, form: FormData): Promise<FormState> {
       (result.warning ? "。已用流量还没清零，管理员会帮你处理" : ""),
   };
 }
+
+// 同一个客人最多同时挂几张没处理完的单，免得有人乱点堆一堆单
+const MAX_OPEN_ORDERS = 3;
+
+// 在套餐页下单：建一张待付款的单（金额按现在的套餐价锁定）。客人转账时备注订单号，管理员确认收款后才开通。
+// target 和兑换码一样："new" 或者客人名下某个订阅的用户名（续期）
+export async function createOrder(_: FormState, form: FormData): Promise<FormState> {
+  const customer = await requireCustomer();
+  if (site.payments.length === 0) return { error: "现在还不能在线下单，请用兑换码" };
+  const plan = findPlan(site.plans, String(form.get("plan") ?? ""));
+  if (!plan) return { error: "这个套餐已经下架了，请刷新页面再选" };
+  const target = String(form.get("target") ?? "new");
+  if (target !== "new") {
+    const mine = await db()
+      .prepare("SELECT 1 FROM subscriptions WHERE customer_id = ? AND marzban_username = ?")
+      .bind(customer.id, target)
+      .first();
+    if (!mine) return { error: "请选择要续期的订阅" };
+  }
+
+  const open = await db()
+    .prepare("SELECT COUNT(*) AS n FROM orders WHERE customer_id = ? AND status IN ('pending', 'processing')")
+    .bind(customer.id)
+    .first<{ n: number }>();
+  if ((open?.n ?? 0) >= MAX_OPEN_ORDERS) return { error: "你还有没付款的单，先付款或者取消不要的单再下新的" };
+
+  await db()
+    .prepare(
+      `INSERT INTO orders (customer_id, amount, method, status, plan_id, marzban_username, created_at)
+       VALUES (?, ?, 'transfer', 'pending', ?, ?, ?)`,
+    )
+    .bind(customer.id, plan.price, plan.id, target === "new" ? null : target, nowSec())
+    .run();
+  revalidatePath("/plans");
+  return { ok: "下单成功，请按上面的说明付款" };
+}
+
+// 客人取消自己还没付款的单。点过「我已付款」的、管理员已经在开通的（processing）都不能取消，免得付了钱又把单取消掉
+export async function cancelOrder(form: FormData) {
+  const customer = await requireCustomer();
+  const id = Number(form.get("id"));
+  if (!Number.isInteger(id)) return;
+  await db()
+    .prepare(
+      "UPDATE orders SET status = 'cancelled' WHERE id = ? AND customer_id = ? AND status = 'pending' AND claimed_at IS NULL",
+    )
+    .bind(id, customer.id)
+    .run();
+  revalidatePath("/plans");
+}
+
+// 客人付完款点「我已付款」：记下时间，管理员按时间和金额去账单里核对。点过一次就不再改时间
+export async function claimPaid(form: FormData) {
+  const customer = await requireCustomer();
+  const id = Number(form.get("id"));
+  if (!Number.isInteger(id)) return;
+  await db()
+    .prepare(
+      "UPDATE orders SET claimed_at = ? WHERE id = ? AND customer_id = ? AND status = 'pending' AND claimed_at IS NULL",
+    )
+    .bind(nowSec(), id, customer.id)
+    .run();
+  revalidatePath("/plans");
+}

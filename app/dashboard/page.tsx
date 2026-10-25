@@ -64,7 +64,7 @@ export default async function DashboardPage() {
               <p>
                 你还没有订阅。
                 <Link href="/plans" className="link link-primary">
-                  用兑换码开通一个
+                  去买一个套餐
                 </Link>
                 ，或者如果管理员之前发过订阅链接给你，在下面粘贴就能绑定到这个账号。
               </p>
