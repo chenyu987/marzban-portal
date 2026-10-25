@@ -16,6 +16,7 @@ export default function OrderForm({
   groups,
   subscriptions,
   canTransfer,
+  transferLabel,
   balance,
   balanceText,
   defaultTarget,
@@ -23,6 +24,8 @@ export default function OrderForm({
   groups: PlanGroup[];
   subscriptions: string[];
   canTransfer: boolean;
+  // 「怎么付」里转账那个按钮的字，比如「支付宝 / 微信转账」
+  transferLabel: string;
   balance: number;
   balanceText: string;
   defaultTarget?: string;
@@ -57,7 +60,7 @@ export default function OrderForm({
               onClick={() => setMethod("transfer")}
               className={`btn join-item ${!useBalance ? "btn-primary" : ""}`}
             >
-              支付宝转账
+              {transferLabel}
             </button>
             <button
               type="button"

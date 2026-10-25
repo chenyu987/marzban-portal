@@ -108,6 +108,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
             groups={groups}
             subscriptions={subscriptions}
             canTransfer={canTransfer}
+            transferLabel={`${site.payments.map((p) => p.name).join(" / ")}转账`}
             balance={balance}
             balanceText={price(balance)}
             defaultTarget={renewTarget}

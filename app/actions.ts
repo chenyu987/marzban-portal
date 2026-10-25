@@ -7,7 +7,7 @@ import { db, nowSec } from "@/lib/env";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { createSession, destroySession, requireCustomer } from "@/lib/session";
 import { createUser, findUser, lookupSubscription, modifyUser, resetUsage, revokeSubscription } from "@/lib/marzban";
-import { formatExpire, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
+import { formatExpire, formatMoney, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan } from "@/lib/format";
 import { findPlan, nextUsername } from "@/lib/plans";
 import { provisionNew, provisionRenew, type ProvisionOps, type ProvisionResult } from "@/lib/provision";
 import { site } from "@/site.config";
@@ -487,4 +487,62 @@ export async function buyWithBalance(_: FormState, form: FormData): Promise<Form
       `用余额${target === "new" ? "开通" : "续期"}成功：${plan.name}，${username} 到期时间 ${formatExpire(result.expire)}。回到「我的订阅」就能导入使用` +
       (result.warning ? "。已用流量还没清零，管理员会帮你处理" : ""),
   };
+}
+
+// 申请提现：填金额、支付宝账号和实名。申请时就扣余额（扣不了就是余额不够），管理员用 npm run withdrawals 打款后标成已打款。
+// 同一时间只能有一笔在处理（数据库有唯一索引）
+export async function requestWithdrawal(_: FormState, form: FormData): Promise<FormState> {
+  const customer = await requireCustomer();
+  const amount = parseYuan(String(form.get("amount") ?? ""));
+  const account = String(form.get("account") ?? "").trim();
+  const name = String(form.get("name") ?? "").trim();
+  if (amount === null) return { error: "金额格式不对，比如 12.5" };
+  if (!account || account.length > 64) return { error: "请填支付宝账号（手机号或邮箱）" };
+  if (!name || name.length > 20) return { error: "请填支付宝实名，管理员转账时要核对" };
+
+  const now = nowSec();
+  let id: number;
+  try {
+    const w = await db()
+      .prepare(
+        `INSERT INTO withdrawals (customer_id, amount, alipay_account, alipay_name, created_at)
+         VALUES (?, ?, ?, ?, ?) RETURNING id`,
+      )
+      .bind(customer.id, amount, account, name, now)
+      .first<{ id: number }>();
+    id = w!.id;
+  } catch (e) {
+    if (String(e).includes("UNIQUE")) return { error: "你还有一笔提现在处理，处理完再申请" };
+    throw e;
+  }
+  // 和余额买套餐一样，用带条件的 INSERT 扣款，余额不够就扣不了
+  const charge = await db()
+    .prepare(
+      `INSERT INTO balance_entries (customer_id, amount, kind, withdrawal_id, created_at)
+       SELECT ?1, -?2, 'withdrawal', ?3, ?4
+       WHERE (SELECT COALESCE(SUM(amount), 0) FROM balance_entries WHERE customer_id = ?1) >= ?2`,
+    )
+    .bind(customer.id, amount, id, now)
+    .run();
+  if (charge.meta.changes !== 1) {
+    await db().prepare("DELETE FROM withdrawals WHERE id = ?").bind(id).run();
+    return { error: "余额不够" };
+  }
+  revalidatePath("/dashboard");
+  return { ok: `已申请提现 ${site.currency}${formatMoney(amount)}，管理员转账后这里会显示「已打款」` };
+}
+
+// 客人取消还没打款的提现，余额退回
+export async function cancelWithdrawal(form: FormData) {
+  const customer = await requireCustomer();
+  const id = Number(form.get("id"));
+  if (!Number.isInteger(id)) return;
+  const r = await db()
+    .prepare("UPDATE withdrawals SET status = 'cancelled', processed_at = ? WHERE id = ? AND customer_id = ? AND status = 'pending'")
+    .bind(nowSec(), id, customer.id)
+    .run();
+  if (r.meta.changes === 1) {
+    await db().prepare("DELETE FROM balance_entries WHERE withdrawal_id = ? AND kind = 'withdrawal'").bind(id).run();
+  }
+  revalidatePath("/dashboard");
 }
