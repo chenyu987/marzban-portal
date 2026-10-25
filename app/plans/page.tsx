@@ -26,13 +26,14 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
       .all<{ marzban_username: string }>(),
     db()
       .prepare(
-        `SELECT id, amount, plan_id, marzban_username, status, claimed_at, created_at FROM orders
+        `SELECT id, amount, balance_used, plan_id, marzban_username, status, claimed_at, created_at FROM orders
          WHERE customer_id = ? AND status IN ('pending', 'processing') ORDER BY id DESC`,
       )
       .bind(customer.id)
       .all<{
         id: number;
         amount: number;
+        balance_used: number;
         plan_id: string;
         marzban_username: string | null;
         status: string;
@@ -87,7 +88,8 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
               order={{
                 id: o.id,
                 planName: findPlan(site.plans, o.plan_id)?.name ?? o.plan_id,
-                amount: price(o.amount),
+                amount: price(o.amount - o.balance_used),
+                deducted: o.balance_used > 0 ? price(o.balance_used) : null,
                 target: o.marzban_username ? `给 ${o.marzban_username} 续期` : "新开订阅",
                 createdAt: formatDate(o.created_at),
                 processing: o.status === "processing",
@@ -102,15 +104,14 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
         <p className="text-base-content/70">套餐还在准备中。</p>
       ) : (
         <>
-          {canTransfer && <p className="mb-3 text-sm text-base-content/70">点价格下单，按提示转账，付完点「我已付款」，管理员核对收款后自动开通。有余额的话也可以选用余额付，马上开通。</p>}
+          {canTransfer && <p className="mb-3 text-sm text-base-content/70">点价格下单，按提示转账，付完点「我已付款」，管理员核对收款后自动开通。有余额时可以直接抵扣，够付全款就马上开通。</p>}
           {renewTarget && <p className="mb-3 font-medium">给 {renewTarget} 续期：选一个套餐，续上的天数从原来的到期时间往后加。</p>}
           <OrderForm
             groups={groups}
             subscriptions={subscriptions}
             canTransfer={canTransfer}
-            transferLabel={`${site.payments.map((p) => p.name).join(" / ")}转账`}
             balance={balance}
-            balanceText={price(balance)}
+            currency={site.currency}
             defaultTarget={renewTarget}
           />
         </>

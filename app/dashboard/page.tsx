@@ -10,7 +10,6 @@ import { logout } from "../actions";
 import BindForm from "./BindForm";
 import SubscriptionLink from "./SubscriptionLink";
 import ReferralCard from "./ReferralCard";
-import Withdrawals from "./Withdrawals";
 
 export const dynamic = "force-dynamic";
 
@@ -27,10 +26,6 @@ export default async function DashboardPage() {
     .all<{ email: string; created_at: number }>();
   const balance = await db().prepare(BALANCE_SQL).bind(customer.id).first<{ balance: number }>();
   const { results: rewards } = await db().prepare(REFERRAL_REWARDS_SQL).bind(customer.id).all<RewardRow>();
-  const { results: withdrawals } = await db()
-    .prepare("SELECT id, amount, alipay_account, status, note, created_at FROM withdrawals WHERE customer_id = ? ORDER BY id DESC LIMIT 10")
-    .bind(customer.id)
-    .all<{ id: number; amount: number; alipay_account: string; status: string; note: string | null; created_at: number }>();
   const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
 
   // 一个订阅查失败不影响其他订阅显示
@@ -92,21 +87,6 @@ export default async function DashboardPage() {
             date: formatDate(r.created_at),
             paid: money(r.paid),
             reward: money(r.reward),
-          }))}
-        />
-      </div>
-
-      <div className="mt-4">
-        <Withdrawals
-          balance={balance?.balance ?? 0}
-          balanceYuan={formatMoney(balance?.balance ?? 0)}
-          rows={withdrawals.map((w) => ({
-            id: w.id,
-            amount: money(w.amount),
-            account: w.alipay_account,
-            status: w.status,
-            date: formatDate(w.created_at),
-            note: w.note,
           }))}
         />
       </div>

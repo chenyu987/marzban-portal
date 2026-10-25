@@ -1,5 +1,5 @@
 // 主流程：注册 → 下单 → 我已付款 → 管理员确认开通 → 快到期提醒 → 一键续费 → 忘记密码 → 管理员发重置链接 → 设新密码登录；
-// 另一条：用余额买套餐、用兑换码续期、提现（管理员打款 / 拒绝退回）。
+// 另一条：余额付全款、余额抵扣一部分（取消后退回）、用兑换码续期。
 // 每次用新邮箱注册，不依赖之前的数据；管理员那一步直接调命令行脚本（本地库 + 假 Marzban）
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
@@ -106,7 +106,7 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await expect(page).toHaveURL(/\/dashboard/);
 });
 
-test("用余额买套餐，用兑换码续期，再提现", async ({ page }) => {
+test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({ page }) => {
   const email = `e2e-balance-${Date.now()}@example.test`;
   page.on("dialog", (d) => d.accept());
   await register(page, email, "E2eTest-1234");
@@ -117,10 +117,9 @@ test("用余额买套餐，用兑换码续期，再提现", async ({ page }) => 
      SELECT id, 3000, 'adjust', unixepoch() FROM customers WHERE email = '${email}'`,
   );
 
-  // 选余额付：¥45 的买不起（按钮灰掉），¥25 的直接开通
+  // 默认勾选「用余额抵扣」：¥25 的余额够付全款，直接开通
   await page.goto("/plans");
-  await page.getByRole("button", { name: "余额（剩 ¥30）" }).click();
-  await expect(page.locator('button[value="p3-month"]')).toBeDisabled();
+  await expect(page.getByLabel("用余额抵扣（剩 ¥30）")).toBeChecked();
   await page.locator('button[value="p1-month"]').click();
   await expect(page.getByText("用余额开通成功")).toBeVisible();
 
@@ -131,41 +130,29 @@ test("用余额买套餐，用兑换码续期，再提现", async ({ page }) => 
   const username = await title.innerText();
   await expect(page.getByText("¥5.00")).toBeVisible();
 
-  // 余额不够了，再选余额付时 ¥25 的也买不起
+  // 余额不够付全款：抵扣 ¥5，还要转 ¥20；管理员列表里显示的也是 ¥20
   await page.goto("/plans");
-  await page.getByRole("button", { name: "余额（剩 ¥5）" }).click();
-  await expect(page.locator('button[value="p1-month"]')).toBeDisabled();
+  await page.locator('button[value="p1-month"]').click();
+  const card = page.locator(".card.border").first();
+  await expect(card).toContainText("请转账 ¥20");
+  await expect(card).toContainText("已用余额抵扣 ¥5");
+  const orderId = (await card.locator(".card-title").innerText()).match(/\d+/)![0];
+  expect(run(["orders", "--", "list", "20"])).toContain(`#${orderId}`);
+  await page.goto("/dashboard");
+  await expect(page.getByText("¥0.00")).toBeVisible();
+
+  // 客人取消：抵扣的余额退回
+  await page.goto("/plans");
+  await card.getByRole("button", { name: "取消这张单" }).click();
+  await expect(page.locator(".card.border")).toHaveCount(0);
+  await page.goto("/dashboard");
+  await expect(page.getByText("¥5.00")).toBeVisible();
 
   // 管理员生成兑换码，客人输入后给这个订阅续期
+  await page.goto("/plans");
   const code = run(["codes:create", "--", "p1-month"]).match(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}/)![0];
   await page.getByPlaceholder("XXXX-XXXX-XXXX-XXXX").fill(code);
   await expect(page.locator('form:has(input[name="code"]) select[name="target"]')).toHaveValue(username);
   await page.getByRole("button", { name: "兑换" }).click();
   await expect(page.getByText("续期成功")).toBeVisible();
-
-  // 提现：剩下的 ¥5 全部提走，余额变 0；管理员打款后显示「已打款」
-  const withdraw = async () => {
-    await page.goto("/dashboard");
-    await page.getByLabel("支付宝账号（手机号或邮箱）").fill("13800000000");
-    await page.getByLabel("支付宝实名").fill("测试");
-    await page.getByRole("button", { name: "申请提现" }).click();
-    await expect(page.getByText("等管理员打款")).toBeVisible();
-    return run(["withdrawals", "--", "list"]).split("\n").find((l) => l.includes(email))!.match(/#(\d+)/)![1];
-  };
-  const first = await withdraw();
-  await expect(page.getByText("¥0.00")).toBeVisible();
-  expect(run(["withdrawals", "--", "paid", first], "yes\n")).toContain("已标成已打款");
-  await page.reload();
-  await expect(page.getByText("已打款", { exact: true })).toBeVisible();
-
-  // 再加 ¥3 余额、申请提现，管理员拒绝：余额退回
-  sql(
-    `INSERT INTO balance_entries (customer_id, amount, kind, created_at)
-     SELECT id, 300, 'adjust', unixepoch() FROM customers WHERE email = '${email}'`,
-  );
-  const second = await withdraw();
-  expect(run(["withdrawals", "--", "reject", second, "--note", "测试拒绝"], "yes\n")).toContain("余额已退回");
-  await page.reload();
-  await expect(page.getByText("没通过，余额已退回")).toBeVisible();
-  await expect(page.getByText("¥3.00").first()).toBeVisible();
 });

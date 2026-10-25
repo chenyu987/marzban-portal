@@ -7,10 +7,11 @@ import { db, nowSec } from "@/lib/env";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { createSession, destroySession, requireCustomer } from "@/lib/session";
 import { createUser, findUser, lookupSubscription, modifyUser, resetUsage, revokeSubscription } from "@/lib/marzban";
-import { formatExpire, formatMoney, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan } from "@/lib/format";
+import { formatExpire, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
 import { findPlan, nextUsername } from "@/lib/plans";
 import { provisionNew, provisionRenew, type ProvisionOps, type ProvisionResult } from "@/lib/provision";
 import { site } from "@/site.config";
+import { BALANCE_SQL } from "@/lib/balance";
 import type { Plan } from "@/site.config.example";
 import { canSendMail, sendMail } from "@/lib/mail";
 import { hashResetToken, newResetToken, RESET_MAX_PER_HOUR, RESET_TTL_SELF, resetLink } from "@/lib/reset";
@@ -265,11 +266,15 @@ const MAX_OPEN_ORDERS = 3;
 
 // 在套餐页下单：建一张待付款的单（金额按现在的套餐价锁定）。客人转账时备注订单号，管理员确认收款后才开通。
 // target 和兑换码一样："new" 或者客人名下某个订阅的用户名（续期）
-export async function createOrder(_: FormState, form: FormData): Promise<FormState> {
+// useBalance=1：用余额抵扣。余额够付全款就直接扣余额开通（buyWithBalance），不够就抵扣一部分、剩下的转账
+export async function createOrder(prev: FormState, form: FormData): Promise<FormState> {
   const customer = await requireCustomer();
-  if (site.payments.length === 0) return { error: "现在还不能在线下单，请用兑换码" };
   const plan = findPlan(site.plans, String(form.get("plan") ?? ""));
   if (!plan) return { error: "这个套餐已经下架了，请刷新页面再选" };
+  const balanceRow = await db().prepare(BALANCE_SQL).bind(customer.id).first<{ balance: number }>();
+  const balance = form.get("useBalance") === "1" ? Math.max(0, balanceRow?.balance ?? 0) : 0;
+  if (balance >= plan.price) return buyWithBalance(prev, form);
+  if (site.payments.length === 0) return { error: balance > 0 ? "余额不够付这个套餐" : "现在还不能在线下单，请用兑换码" };
   const target = String(form.get("target") ?? "new");
   if (target !== "new") {
     const mine = await db()
@@ -285,29 +290,51 @@ export async function createOrder(_: FormState, form: FormData): Promise<FormSta
     .first<{ n: number }>();
   if ((open?.n ?? 0) >= MAX_OPEN_ORDERS) return { error: "你还有没付款的单，先付款或者取消不要的单再下新的" };
 
-  await db()
+  // 抵扣：先建单（记下用了多少余额），再用带条件的 INSERT 扣余额；余额刚好变了扣不了，就删掉这张单让客人重来
+  const now = nowSec();
+  const order = await db()
     .prepare(
-      `INSERT INTO orders (customer_id, amount, method, status, plan_id, marzban_username, created_at)
-       VALUES (?, ?, 'transfer', 'pending', ?, ?, ?)`,
+      `INSERT INTO orders (customer_id, amount, balance_used, method, status, plan_id, marzban_username, created_at)
+       VALUES (?, ?, ?, 'transfer', 'pending', ?, ?, ?) RETURNING id`,
     )
-    .bind(customer.id, plan.price, plan.id, target === "new" ? null : target, nowSec())
-    .run();
+    .bind(customer.id, plan.price, balance, plan.id, target === "new" ? null : target, now)
+    .first<{ id: number }>();
+  if (balance > 0) {
+    const charge = await db()
+      .prepare(
+        `INSERT INTO balance_entries (customer_id, amount, kind, order_id, created_at)
+         SELECT ?1, -?2, 'purchase', ?3, ?4
+         WHERE (SELECT COALESCE(SUM(amount), 0) FROM balance_entries WHERE customer_id = ?1) >= ?2`,
+      )
+      .bind(customer.id, balance, order!.id, now)
+      .run();
+    if (charge.meta.changes !== 1) {
+      await db().prepare("DELETE FROM orders WHERE id = ?").bind(order!.id).run();
+      return { error: "余额刚刚变了，请刷新页面再下单" };
+    }
+  }
   revalidatePath("/plans");
+  revalidatePath("/dashboard");
   return { ok: "下单成功，请按上面的说明付款" };
 }
 
-// 客人取消自己还没付款的单。点过「我已付款」的、管理员已经在开通的（processing）都不能取消，免得付了钱又把单取消掉
+// 客人取消自己还没付款的单，下单时抵扣的余额退回。点过「我已付款」的、管理员已经在开通的（processing）都不能取消，免得付了钱又把单取消掉
 export async function cancelOrder(form: FormData) {
   const customer = await requireCustomer();
   const id = Number(form.get("id"));
   if (!Number.isInteger(id)) return;
-  await db()
+  const r = await db()
     .prepare(
       "UPDATE orders SET status = 'cancelled' WHERE id = ? AND customer_id = ? AND status = 'pending' AND claimed_at IS NULL",
     )
     .bind(id, customer.id)
     .run();
+  // 下单时抵扣的余额退回
+  if (r.meta.changes === 1) {
+    await db().prepare("DELETE FROM balance_entries WHERE order_id = ? AND kind = 'purchase'").bind(id).run();
+  }
   revalidatePath("/plans");
+  revalidatePath("/dashboard");
 }
 
 // 客人付完款点「我已付款」：记下时间，管理员按时间和金额去账单里核对。点过一次就不再改时间
@@ -409,10 +436,10 @@ export async function buyWithBalance(_: FormState, form: FormData): Promise<Form
   const now = nowSec();
   const order = await db()
     .prepare(
-      `INSERT INTO orders (customer_id, amount, method, status, plan_id, marzban_username, created_at)
-       VALUES (?, ?, 'balance', 'processing', ?, ?, ?) RETURNING id`,
+      `INSERT INTO orders (customer_id, amount, balance_used, method, status, plan_id, marzban_username, created_at)
+       VALUES (?, ?, ?, 'balance', 'processing', ?, ?, ?) RETURNING id`,
     )
-    .bind(customer.id, plan.price, plan.id, target === "new" ? null : target, now)
+    .bind(customer.id, plan.price, plan.price, plan.id, target === "new" ? null : target, now)
     .first<{ id: number }>();
   const orderId = order!.id;
   // 扣款是一条带条件的 INSERT：余额不够就插不进去。两个请求同时买，也不会把余额扣成负数
@@ -489,60 +516,3 @@ export async function buyWithBalance(_: FormState, form: FormData): Promise<Form
   };
 }
 
-// 申请提现：填金额、支付宝账号和实名。申请时就扣余额（扣不了就是余额不够），管理员用 npm run withdrawals 打款后标成已打款。
-// 同一时间只能有一笔在处理（数据库有唯一索引）
-export async function requestWithdrawal(_: FormState, form: FormData): Promise<FormState> {
-  const customer = await requireCustomer();
-  const amount = parseYuan(String(form.get("amount") ?? ""));
-  const account = String(form.get("account") ?? "").trim();
-  const name = String(form.get("name") ?? "").trim();
-  if (amount === null) return { error: "金额格式不对，比如 12.5" };
-  if (!account || account.length > 64) return { error: "请填支付宝账号（手机号或邮箱）" };
-  if (!name || name.length > 20) return { error: "请填支付宝实名，管理员转账时要核对" };
-
-  const now = nowSec();
-  let id: number;
-  try {
-    const w = await db()
-      .prepare(
-        `INSERT INTO withdrawals (customer_id, amount, alipay_account, alipay_name, created_at)
-         VALUES (?, ?, ?, ?, ?) RETURNING id`,
-      )
-      .bind(customer.id, amount, account, name, now)
-      .first<{ id: number }>();
-    id = w!.id;
-  } catch (e) {
-    if (String(e).includes("UNIQUE")) return { error: "你还有一笔提现在处理，处理完再申请" };
-    throw e;
-  }
-  // 和余额买套餐一样，用带条件的 INSERT 扣款，余额不够就扣不了
-  const charge = await db()
-    .prepare(
-      `INSERT INTO balance_entries (customer_id, amount, kind, withdrawal_id, created_at)
-       SELECT ?1, -?2, 'withdrawal', ?3, ?4
-       WHERE (SELECT COALESCE(SUM(amount), 0) FROM balance_entries WHERE customer_id = ?1) >= ?2`,
-    )
-    .bind(customer.id, amount, id, now)
-    .run();
-  if (charge.meta.changes !== 1) {
-    await db().prepare("DELETE FROM withdrawals WHERE id = ?").bind(id).run();
-    return { error: "余额不够" };
-  }
-  revalidatePath("/dashboard");
-  return { ok: `已申请提现 ${site.currency}${formatMoney(amount)}，管理员转账后这里会显示「已打款」` };
-}
-
-// 客人取消还没打款的提现，余额退回
-export async function cancelWithdrawal(form: FormData) {
-  const customer = await requireCustomer();
-  const id = Number(form.get("id"));
-  if (!Number.isInteger(id)) return;
-  const r = await db()
-    .prepare("UPDATE withdrawals SET status = 'cancelled', processed_at = ? WHERE id = ? AND customer_id = ? AND status = 'pending'")
-    .bind(nowSec(), id, customer.id)
-    .run();
-  if (r.meta.changes === 1) {
-    await db().prepare("DELETE FROM balance_entries WHERE withdrawal_id = ? AND kind = 'withdrawal'").bind(id).run();
-  }
-  revalidatePath("/dashboard");
-}

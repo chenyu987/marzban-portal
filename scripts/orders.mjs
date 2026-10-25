@@ -1,7 +1,8 @@
 // 处理客人在套餐页下的单。客人下单后转账（转账备注里写订单号），付完在页面上点「我已付款」，系统记下时间。
 // 管理员按这个时间和金额去支付宝/微信账单里找这笔钱，找到了就确认：
 //   npm run orders -- list [--remote]                    看还没处理完的单。客人说已付的排在前面，带着他点「我已付款」的时间
-//   npm run orders -- list <金额> [--remote]               按到账金额找单（客人没写备注时缩小范围），比如 list 45
+//   npm run orders -- list <金额> [--remote]               按到账金额找单（客人没写备注时缩小范围），比如 list 45。
+//                                                         金额是客人实际要转的钱：用了余额抵扣的单是套餐价减掉抵扣
 //   npm run orders -- confirm <订单号> [--remote]          确认收到钱：在 Marzban 开通或续期，再把单记成已付款（触发推荐奖励）
 //   npm run orders -- cancel <订单号> [--note 原因] [--remote]  取消一张还没付款的单
 // 开通出错、单停在「开通中」时：
@@ -42,15 +43,18 @@ const statusText = (o) =>
     : `${STATUS[o.status] ?? o.status}${o.method === "balance" ? "（余额付款）" : ""}`;
 const planName = (id) => findPlan(site.plans, id)?.name ?? `${id}（已下架）`;
 const targetText = (o) => (o.marzban_username ? `续期 ${o.marzban_username}` : "新开订阅");
+// 客人还要转账的金额：套餐价减掉下单时用余额抵扣的部分
+const dueText = (o) =>
+  `${site.currency}${formatMoney(o.amount - o.balance_used)}${o.balance_used > 0 ? `（套餐价 ${formatMoney(o.amount)}，余额抵扣 ${formatMoney(o.balance_used)}）` : ""}`;
 
 if (cmd === "list") {
   // 带金额就按到账金额找，不管单是什么状态（客人可能付完钱又点了取消）
   const amount = idArg === undefined ? null : parseYuan(idArg);
   if (idArg !== undefined && amount === null) fail(`金额格式不对：${idArg}\n${USAGE}`);
   const rows = d1(`
-    SELECT o.id, c.email, o.amount, o.method, o.plan_id, o.marzban_username, o.status, o.claimed_at, o.created_at
+    SELECT o.id, c.email, o.amount, o.balance_used, o.method, o.plan_id, o.marzban_username, o.status, o.claimed_at, o.created_at
     FROM orders o JOIN customers c ON c.id = o.customer_id
-    WHERE o.method IN ('transfer', 'balance') AND ${amount === null ? "o.status IN ('pending', 'processing')" : `o.amount = ${amount}`}
+    WHERE o.method IN ('transfer', 'balance') AND ${amount === null ? "o.status IN ('pending', 'processing')" : `o.amount - o.balance_used = ${amount}`}
     ORDER BY o.claimed_at IS NULL, o.claimed_at, o.id`);
   if (rows.length === 0) {
     console.log(amount === null ? `${where}没有待处理的单` : `${where}没有金额是 ${site.currency}${formatMoney(amount)} 的单`);
@@ -58,7 +62,7 @@ if (cmd === "list") {
     console.log(amount === null ? `${where}待处理的单：` : `${where}金额是 ${site.currency}${formatMoney(amount)} 的单：`);
     for (const o of rows) {
       console.log(
-        `  #${o.id}  ${site.currency}${formatMoney(o.amount)}  ${statusText(o)}  ${o.email}  ${planName(o.plan_id)}  ${targetText(o)}  ${formatDate(o.created_at)} 下单`,
+        `  #${o.id}  ${dueText(o)}  ${statusText(o)}  ${o.email}  ${planName(o.plan_id)}  ${targetText(o)}  ${formatDate(o.created_at)} 下单`,
       );
     }
   }
@@ -75,7 +79,7 @@ const [o] = d1(`
   LEFT JOIN customers r ON r.id = c.referred_by
   WHERE o.id = ${id}`);
 if (!o) fail(`没有订单 #${id}`);
-console.log(`${where}订单 #${o.id}：${o.email}，${o.plan_id ? planName(o.plan_id) : "（没有套餐）"}，${site.currency}${formatMoney(o.amount)}，${targetText(o)}，${statusText(o)}`);
+console.log(`${where}订单 #${o.id}：${o.email}，${o.plan_id ? planName(o.plan_id) : "（没有套餐）"}，${dueText(o)}，${targetText(o)}，${statusText(o)}`);
 
 if (cmd === "cancel") {
   if (o.status === "processing") fail("这张单正在开通，不能直接取消。先按 confirm 的提示核对 Marzban");
@@ -86,7 +90,9 @@ if (cmd === "cancel") {
     UPDATE orders SET status = 'cancelled', note = ${values.note ? q(values.note) : "note"}
     WHERE id = ${id} AND status = 'pending' RETURNING id`);
   if (done.length === 0) fail("单的状态刚变了，重新看一下：npm run orders -- list");
-  console.log("已取消");
+  // 下单时抵扣的余额退回
+  d1(`DELETE FROM balance_entries WHERE order_id = ${id} AND kind = 'purchase'`);
+  console.log(o.balance_used > 0 ? `已取消，抵扣的 ${formatMoney(o.balance_used)} 元余额已退回` : "已取消");
   process.exit(0);
 }
 
@@ -176,7 +182,7 @@ if (action.kind === "new") {
 }
 console.log(rewardText);
 if (o.method === "transfer" && !o.claimed_at) console.log("⚠️ 客人还没点「我已付款」。确认账单里确实有这笔钱再继续");
-if (!(await confirmYes(`确认已经收到 ${site.currency}${formatMoney(o.amount)}${o.claimed_at ? `（客人 ${formatExpire(o.claimed_at)} 说已付）` : ""}，开通并记账？`))) {
+if (!(await confirmYes(`确认已经收到 ${site.currency}${formatMoney(o.amount - o.balance_used)}${o.claimed_at ? `（客人 ${formatExpire(o.claimed_at)} 说已付）` : ""}，开通并记账？`))) {
   console.log("已取消，单没有动");
   process.exit(0);
 }

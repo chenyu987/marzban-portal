@@ -7,7 +7,10 @@ import { cancelOrder, claimPaid } from "../actions";
 export type OpenOrder = {
   id: number;
   planName: string;
+  // 还要转账的金额（已经减掉余额抵扣）
   amount: string;
+  // 用余额抵扣了多少，没抵扣是 null
+  deducted: string | null;
   target: string;
   createdAt: string;
   processing: boolean;
@@ -41,7 +44,7 @@ export default function PendingOrder({ order, payments }: { order: OpenOrder; pa
           <span className={`badge ${badge.cls}`}>{badge.text}</span>
         </div>
         <p className="text-sm text-base-content/70">
-          {order.planName}，{order.amount}，{order.target}，{order.createdAt} 下单
+          {order.planName}，{order.target}，{order.createdAt} 下单{order.deducted && `，已用余额抵扣 ${order.deducted}`}
         </p>
 
         {order.processing ? (
@@ -53,7 +56,7 @@ export default function PendingOrder({ order, payments }: { order: OpenOrder; pa
             <div className="rounded-box bg-base-200 p-3 text-sm leading-relaxed">
               请转账 <b className="text-lg">{order.amount}</b>，转账备注写订单号 <b className="text-lg">{order.id}</b>。
               <br />
-              付完款回到这里点「我已付款」，管理员核对到就会帮你开通。
+              {order.deducted && <>已经用余额抵扣了 {order.deducted}，只要转剩下的。</>}付完款回到这里点「我已付款」，管理员核对到就会帮你开通。
             </div>
             <div className="flex flex-wrap justify-center gap-4">
               {payments.map((p, i) => (
@@ -75,7 +78,7 @@ export default function PendingOrder({ order, payments }: { order: OpenOrder; pa
             <form
               action={cancelOrder}
               onSubmit={(e) => {
-                if (!confirm("已经付过款的单不要取消。确定取消这张单吗？")) e.preventDefault();
+                if (!confirm(`已经付过款的单不要取消。确定取消这张单吗？${order.deducted ? "抵扣的余额会退回。" : ""}`)) e.preventDefault();
               }}
             >
               <input type="hidden" name="id" value={order.id} />

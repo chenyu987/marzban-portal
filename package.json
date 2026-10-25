@@ -14,7 +14,6 @@
     "codes:create": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/create-codes.mjs",
     "orders": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/orders.mjs",
     "password:reset-link": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/reset-link.mjs",
-    "withdrawals": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/withdrawals.mjs",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "test": "vitest run",
     "e2e": "playwright test"
