@@ -11,6 +11,8 @@ import { formatExpire, newReferralCode, normalizeRedeemCode, normalizeReferralCo
 import { findPlan, nextUsername } from "@/lib/plans";
 import { provisionNew, provisionRenew, type ProvisionOps, type ProvisionResult } from "@/lib/provision";
 import { site } from "@/site.config";
+import { canSendMail, sendMail } from "@/lib/mail";
+import { hashResetToken, newResetToken, RESET_MAX_PER_HOUR, RESET_TTL_SELF, resetLink } from "@/lib/reset";
 
 // email：出错时带回去当输入框的默认值。React 19 提交后会重置表单，不带回去邮箱就被清空了
 export type FormState = { error?: string; ok?: string; email?: string; ref?: string } | undefined;
@@ -308,4 +310,71 @@ export async function claimPaid(form: FormData) {
     .bind(nowSec(), id, customer.id)
     .run();
   revalidatePath("/plans");
+}
+
+// 忘记密码：给这个邮箱发一封带重置链接的邮件。不管邮箱有没有注册过都给同样的提示，不让人试探哪些邮箱注册过
+export async function requestReset(_: FormState, form: FormData): Promise<FormState> {
+  const email = String(form.get("email") ?? "").trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) return { error: "邮箱格式不对", email };
+  if (!canSendMail()) return { error: "现在还不能自动发邮件，请联系管理员帮你重置密码", email };
+  const done = { ok: `如果 ${email} 注册过，重置链接已经发过去了，1 小时内有效。没收到的话看看垃圾邮件。` };
+
+  const c = await db().prepare("SELECT id FROM customers WHERE email = ?").bind(email).first<{ id: number }>();
+  if (!c) return done;
+  const now = nowSec();
+  const recent = await db()
+    .prepare("SELECT COUNT(*) AS n FROM password_resets WHERE customer_id = ? AND created_at > ?")
+    .bind(c.id, now - 3600)
+    .first<{ n: number }>();
+  // 次数超了也给同样的提示，只是不再发
+  if ((recent?.n ?? 0) >= RESET_MAX_PER_HOUR) return done;
+
+  const token = newResetToken();
+  await db()
+    .prepare("INSERT INTO password_resets (token_hash, customer_id, expires_at, created_at) VALUES (?, ?, ?, ?)")
+    .bind(await hashResetToken(token), c.id, now + RESET_TTL_SELF, now)
+    .run();
+  const sent = await sendMail(
+    email,
+    `${site.brand} 重置密码`,
+    `你好，\n\n有人（希望是你）申请重置 ${site.brand} 账号 ${email} 的密码。打开下面的链接设置新密码，1 小时内有效，只能用一次：\n\n${resetLink(site.siteUrl, token)}\n\n如果不是你申请的，不用理会这封邮件，密码不会改变。`,
+  );
+  if (!sent) return { error: "邮件没发出去，请稍后再试，或者联系管理员帮你重置", email };
+  return done;
+}
+
+// 用重置链接设置新密码。成功后：链接作废、这个账号的其他重置链接也作废、所有设备上的登录都退出（防止是密码泄露了），
+// 然后直接在当前设备登录
+export async function resetPassword(_: FormState, form: FormData): Promise<FormState> {
+  const token = String(form.get("token") ?? "");
+  const password = String(form.get("password") ?? "");
+  if (password.length < 8) return { error: "密码至少 8 位" };
+  if (password !== String(form.get("confirm") ?? "")) return { error: "两次输入的密码不一样" };
+
+  const hash = await hashResetToken(token);
+  const now = nowSec();
+  const r = await db()
+    .prepare(
+      `SELECT r.customer_id, c.email FROM password_resets r JOIN customers c ON c.id = r.customer_id
+       WHERE r.token_hash = ? AND r.used_at IS NULL AND r.expires_at > ?`,
+    )
+    .bind(hash, now)
+    .first<{ customer_id: number; email: string }>();
+  if (!r) return { error: "这个链接已经失效了（用过了或者过期了），请重新申请" };
+
+  // 两个请求同时用同一个链接时，只有一个能占到
+  const claim = await db()
+    .prepare("UPDATE password_resets SET used_at = ? WHERE token_hash = ? AND used_at IS NULL")
+    .bind(now, hash)
+    .run();
+  if (claim.meta.changes !== 1) return { error: "这个链接已经失效了（用过了或者过期了），请重新申请" };
+
+  await db().batch([
+    db().prepare("UPDATE customers SET password_hash = ? WHERE id = ?").bind(await hashPassword(password), r.customer_id),
+    db().prepare("UPDATE password_resets SET used_at = ? WHERE customer_id = ? AND used_at IS NULL").bind(now, r.customer_id),
+    db().prepare("DELETE FROM sessions WHERE customer_id = ?").bind(r.customer_id),
+    db().prepare("DELETE FROM login_failures WHERE email = ?").bind(r.email),
+  ]);
+  await createSession(r.customer_id);
+  redirect("/dashboard");
 }

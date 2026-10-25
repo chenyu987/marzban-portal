@@ -17,6 +17,8 @@ export type Plan = {
 export type SiteConfig = {
   // 显示在页面左上角、浏览器标签页、客户端里订阅名字的品牌名
   brand: string;
+  // portal 的网址，重置密码的链接用它来拼（不用请求里的 Host，防止被伪造）。换域名时记得改
+  siteUrl: string;
   description: string;
   // 安装教程里的下载地址
   downloads: {
@@ -41,6 +43,7 @@ export type SiteConfig = {
 
 export const site: SiteConfig = {
   brand: "Marzban Portal",
+  siteUrl: "https://portal.example.com",
   description: "Marzban 用户自助中心",
   downloads: {
     clashVerge: "https://github.com/clash-verge-rev/clash-verge-rev/releases/latest",

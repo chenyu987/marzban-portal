@@ -2,3 +2,5 @@
 MARZBAN_URL=http://localhost:8010
 MARZBAN_USERNAME=admin
 MARZBAN_PASSWORD=admin
+# 本地不真发邮件：把重置密码之类的邮件内容打印到终端
+MAIL_DEV_LOG=1

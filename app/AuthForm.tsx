@@ -13,9 +13,11 @@ type Props = {
   footer: { text: string; href: string; link: string };
   // 注册页才有推荐码输入框；值是推荐链接里带过来的 ?ref=
   referral?: { defaultValue: string };
+  // 登录页在密码下面显示「忘记密码？」
+  forgotLink?: boolean;
 };
 
-export default function AuthForm({ title, submitLabel, action, passwordAutoComplete, footer, referral }: Props) {
+export default function AuthForm({ title, submitLabel, action, passwordAutoComplete, footer, referral, forgotLink }: Props) {
   const [state, formAction, pending] = useActionState(action, undefined);
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
@@ -47,6 +49,11 @@ export default function AuthForm({ title, submitLabel, action, passwordAutoCompl
               className="input w-full"
             />
           </label>
+          {forgotLink && (
+            <Link href="/forgot" className="link link-hover -mt-2 self-end text-sm text-base-content/60">
+              忘记密码？
+            </Link>
+          )}
           {referral && (
             <label className="floating-label">
               <span>推荐码（选填）</span>

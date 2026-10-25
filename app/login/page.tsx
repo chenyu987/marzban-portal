@@ -12,6 +12,7 @@ export default async function LoginPage() {
       action={login}
       passwordAutoComplete="current-password"
       footer={{ text: "还没有账号？", href: "/register", link: "注册" }}
+      forgotLink
     />
   );
 }

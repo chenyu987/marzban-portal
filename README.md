@@ -20,6 +20,7 @@ A self-service customer portal for [Marzban](https://github.com/Gozargah/Marzban
 - 套餐页（`/plans`）：按 `site.config.ts` 的 `plans` 显示价格；客人输入兑换码后自动在 Marzban 新开订阅或给已有订阅续期，同时记一笔订单（按套餐价，触发推荐奖励）。兑换码用 `npm run codes:create -- <套餐> [数量] [--note 备注] [--remote]` 生成
 - 套餐页下单：在 `site.config.ts` 的 `payments` 里填上收款码，套餐页的每个价格就变成下单按钮。客人下单后看到金额、订单号和收款码，转账时备注订单号，付完点「我已付款」（记下时间，方便对账）；管理员在账单里核对到这笔钱后运行 `npm run orders -- confirm <订单号> [--remote]`，自动在 Marzban 开通或续期并记账（触发推荐奖励）。`npm run orders -- list [金额]` 看待处理的单（客人说已付的排前面），`cancel` 取消。客人可以取消自己还没点「我已付款」的单，同时最多挂 3 张
 - 到期提醒：订阅剩 7 天以内或已经到期时，订阅页在这个订阅上显示提醒和「续费」按钮，点了到套餐页、已经选好给这个订阅续期（`/plans?renew=<用户名>`）；没到期的订阅有个「提前续费」链接
+- 忘记密码：登录页「忘记密码？」→ 输入邮箱，收到带重置链接的邮件（1 小时内有效，只能用一次），设好新密码后所有设备的登录都会退出。发信用 Resend，配了 `RESEND_API_KEY` 和 `MAIL_FROM` 才会发，没配时页面让客人联系管理员；管理员可以用 `npm run password:reset-link -- <邮箱> [--remote]` 生成 24 小时有效的链接发给客人。链接里的网址用 `site.config.ts` 的 `siteUrl`
 - 安装教程：iPhone、Mac、Windows、安卓分页，按访问设备自动切到对应的那页
 
 ## 目录
@@ -35,6 +36,8 @@ A self-service customer portal for [Marzban](https://github.com/Gozargah/Marzban
 | `scripts/record-payment.mjs` | 管理员在命令行记一笔付款，可以顺便在 Marzban 开通或续期 |
 | `app/plans/` | 套餐页和兑换码表单 |
 | `scripts/create-codes.mjs` | 管理员生成兑换码 |
+| `scripts/reset-link.mjs` | 管理员给客人生成重置密码的链接 |
+| `lib/mail.ts`、`lib/reset.ts` | 发邮件、重置密码链接 |
 | `scripts/orders.mjs` | 管理员查看、确认、取消客人在套餐页下的单 |
 | `scripts/admin.mjs` | 命令行脚本共用的读写 D1、连 Marzban |
 | `lib/plans.ts` | 套餐怎么换算成 Marzban 用户的到期、流量和 `ip=N` 备注 |
@@ -84,4 +87,4 @@ npm test
 ## 已知限制
 
 - 三个一键导入的链接格式还没在真机上逐一验证
-- 还没有忘记密码和邮箱验证
+- 还没有邮箱验证
