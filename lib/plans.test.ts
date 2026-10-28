@@ -42,10 +42,20 @@ describe("请求体", () => {
     expect(newUserBody("c7_1", plan, now)).toMatchObject({
       username: "c7_1",
       proxies: { vless: { flow: "xtls-rprx-vision" } },
+      inbounds: {},
       expire: now + 30 * 86400,
       data_limit: 100 * 1024 ** 3,
       note: "ip=3",
     });
+  });
+  it("只开 VLESS，入站明确写 {} 让 Marzban 勾上全部 VLESS 入站", () => {
+    const b = newUserBody("c7_1", plan, now);
+    expect(Object.keys(b.proxies)).toEqual(["vless"]);
+    expect(b).toHaveProperty("inbounds", {});
+  });
+  it("备注就是 ip=N，IP 监控按这个读", () => {
+    expect(newUserBody("c7_1", { ...plan, ip: 2 }, now).note).toBe("ip=2");
+    expect(newUserBody("c7_1", { ...plan, ip: 0 }, now).note).toBe("ip=0");
   });
   it("不限流量写 0", () => {
     expect(newUserBody("c7_1", { ...plan, dataGB: null }, now).data_limit).toBe(0);

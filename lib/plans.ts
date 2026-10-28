@@ -38,11 +38,16 @@ export function nextUsername(customerId: number, existing: string[]): string {
 const dataLimit = (plan: Plan) => (plan.dataGB === null ? 0 : plan.dataGB * GB); // Marzban 里 0 表示不限
 const resetStrategy = (plan: Plan) => (plan.dataGB !== null && plan.dataReset === "month" ? "month" : "no_reset");
 
-// POST /api/user 的请求体。不写 inbounds，Marzban 会把 VLESS 的入站全部加上
+// POST /api/user 的请求体。
+// 入站：inbounds 必须明确写成 {}，Marzban 才会把所有 VLESS 入站（每个节点一个）都勾上。
+// 整个不写的话，Marzban 0.8.4 的校验不会运行（pydantic 不校验默认值），结果是一个入站都不勾，客人连不上。
+// 不点名具体入站，以后加新的 VLESS 入站，这里不用改，已开的用户也会自动带上。
+// 只开 VLESS，不开 Shadowsocks 等其他协议
 export function newUserBody(username: string, plan: Plan, now: number) {
   return {
     username,
     proxies: { vless: { flow: "xtls-rprx-vision" } },
+    inbounds: {},
     expire: now + plan.days * DAY,
     data_limit: dataLimit(plan),
     data_limit_reset_strategy: resetStrategy(plan),

@@ -11,7 +11,12 @@ import type { Plan } from "../site.config.example";
 // 带 .ts 后缀：命令行脚本用 node 直接跑这个文件
 import { newUserBody, renewUserBody } from "./plans.ts";
 
-export type ProvisionUser = { username: string; expire: number | null; note?: string | null };
+export type ProvisionUser = {
+  username: string;
+  expire: number | null;
+  note?: string | null;
+  inbounds?: Record<string, string[]>;
+};
 
 export type ProvisionOps = {
   // 查不到返回 null；网络或别的错误直接抛出
@@ -35,6 +40,10 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export async function provisionNew(ops: ProvisionOps, username: string, plan: Plan, now: number): Promise<ProvisionResult> {
   try {
     const u = await ops.createUser(newUserBody(username, plan, now));
+    // 用户建出来了但一个入站都没勾，客人导入后看不到节点。不能当成功，也不能放回兑换码（用户已经建了）
+    if (u.inbounds && !u.inbounds.vless?.length) {
+      return { kind: "stuck", username, reason: `新建的 ${username} 没有勾上任何 VLESS 入站，客人连不上。去面板给它勾上全部入站` };
+    }
     return { kind: "done", username, expire: u.expire };
   } catch (e) {
     // 请求可能其实成功了：查一下这个用户在不在

@@ -12,7 +12,7 @@ function fakeMarzban(users: Record<string, ProvisionUser> = {}) {
   const ops = {
     findUser: vi.fn(async (u: string) => store.get(u) ?? null),
     createUser: vi.fn(async (b: { username: string; expire: number }) => {
-      const u = { username: b.username, expire: b.expire, note: null };
+      const u: ProvisionUser = { username: b.username, expire: b.expire, note: null };
       store.set(b.username, u);
       return u;
     }),
@@ -38,6 +38,18 @@ function appliedThenThrow(mock: { getMockImplementation(): AnyFn | undefined }) 
 }
 
 describe("provisionNew", () => {
+  it("建出来的用户没勾入站：不算成功，交给管理员", async () => {
+    const { ops } = fakeMarzban();
+    ops.createUser.mockImplementationOnce(async (b) => ({ username: b.username, expire: b.expire, inbounds: { vless: [] } }));
+    const r = await provisionNew(ops, "c1_1", plan, NOW);
+    expect(r).toMatchObject({ kind: "stuck", username: "c1_1" });
+  });
+  it("勾上了入站就算成功", async () => {
+    const { ops } = fakeMarzban();
+    ops.createUser.mockImplementationOnce(async (b) => ({ username: b.username, expire: b.expire, inbounds: { vless: ["A", "B", "C"] } }));
+    expect(await provisionNew(ops, "c1_1", plan, NOW)).toMatchObject({ kind: "done" });
+  });
+
   it("正常新建", async () => {
     const { ops } = fakeMarzban();
     const r = await provisionNew(ops, "c1_1", plan, NOW);

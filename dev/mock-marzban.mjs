@@ -15,6 +15,20 @@ const ADMIN = { username: "admin", password: "admin" };
 const GB = 1024 ** 3;
 const now = () => Math.floor(Date.now() / 1000);
 
+// 几个节点各一个 VLESS 入站，另外有一个不给客人用的 Shadowsocks 入站
+const INBOUNDS = { vless: ["VLESS TCP REALITY", "VLESS NODE2", "VLESS NODE3"], shadowsocks: ["Shadowsocks TCP"] };
+
+// 照 Marzban 0.8.4 新建用户时的入站：请求里没有 inbounds 字段时校验不运行，一个入站都不勾；
+// 有这个字段时，没点名入站的协议勾上该协议的全部入站
+function createInbounds(body) {
+  const out = {};
+  for (const p of Object.keys(body.proxies ?? {})) {
+    if (!("inbounds" in body)) out[p] = [];
+    else out[p] = body.inbounds?.[p]?.length ? body.inbounds[p] : (INBOUNDS[p] ?? []);
+  }
+  return out;
+}
+
 const adminTokens = new Set();
 const users = new Map(); // username -> user
 const subTokens = new Map(); // sub token -> username
@@ -34,6 +48,7 @@ function addUser({
   used_traffic = 0,
   status = "active",
   note = "",
+  inbounds = { vless: INBOUNDS.vless },
 }) {
   const token = newSubToken(username);
   users.set(username, {
@@ -46,7 +61,7 @@ function addUser({
     lifetime_used_traffic: used_traffic,
     note,
     proxies: { vless: { id: crypto.randomUUID(), flow: "xtls-rprx-vision" } },
-    inbounds: { vless: ["VLESS TCP REALITY"] },
+    inbounds,
     created_at: new Date().toISOString(),
     online_at: null,
     sub_updated_at: null,
@@ -144,6 +159,7 @@ const server = http.createServer(async (req, res) => {
         data_limit_reset_strategy: body.data_limit_reset_strategy ?? "no_reset",
         status: body.status ?? "active",
         note: body.note ?? "",
+        inbounds: createInbounds(body),
       });
       log(200);
       return send(res, 200, toResponse(users.get(body.username)));

@@ -8,8 +8,8 @@ import { expect, test, type Page } from "@playwright/test";
 const run = (args: string[], input = "") =>
   execFileSync("npm", ["run", "-s", ...args], { input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
 
-// 直接调假 Marzban 的接口（改到期时间、建用户）
-async function mockMarzban(method: string, path: string, body: object) {
+// 直接调假 Marzban 的接口（查用户、改到期时间、建用户）
+async function mockMarzban(method: string, path: string, body?: object) {
   const tokenRes = await fetch("http://localhost:8010/api/admin/token", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -19,9 +19,10 @@ async function mockMarzban(method: string, path: string, body: object) {
   const res = await fetch(`http://localhost:8010/api${path}`, {
     method,
     headers: { authorization: `Bearer ${access_token}`, "content-type": "application/json" },
-    body: JSON.stringify(body),
+    body: body ? JSON.stringify(body) : undefined,
   });
   expect(res.ok).toBe(true);
+  return (await res.json()) as { inbounds?: Record<string, string[]>; note?: string };
 }
 const setMockExpire = (username: string, expire: number) => mockMarzban("PUT", `/user/${username}`, { expire });
 
@@ -81,6 +82,11 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   const title = page.locator(".card-title").filter({ hasText: /^c\d+_\d+$/ }).first();
   await expect(title).toBeVisible();
   const username = await title.innerText();
+
+  // 开出来的用户：所有 VLESS 入站都勾上，没有 Shadowsocks；备注就是 ip=N（IP 监控按这个读）
+  const created = await mockMarzban("GET", `/user/${username}`);
+  expect(created.inbounds).toEqual({ vless: ["VLESS TCP REALITY", "VLESS NODE2", "VLESS NODE3"] });
+  expect(created.note).toMatch(/^ip=\d+$/);
 
   // 改成还剩 3 天：出现续费提醒，点续费到套餐页并选好这个订阅
   await setMockExpire(username, Math.floor(Date.now() / 1000) + 3 * 86400);
