@@ -74,7 +74,7 @@ export default async function DashboardPage() {
         {subs.map(({ username, user }) =>
           user ? <SubscriptionCard key={username} user={user} /> : <UnavailableCard key={username} username={username} />,
         )}
-        <BindForm />
+        {subs.length === 0 && <BindForm />}
       </div>
 
       <div className="mt-8">
@@ -90,6 +90,8 @@ export default async function DashboardPage() {
           }))}
         />
       </div>
+
+      {subs.length > 0 && <BindForm compact />}
     </div>
   );
 }

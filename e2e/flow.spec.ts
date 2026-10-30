@@ -59,6 +59,8 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   page.on("dialog", (d) => d.accept());
 
   await register(page, email, password);
+  // 还没订阅：绑定框整张卡片显示
+  await expect(page.getByRole("heading", { name: "绑定已有订阅" })).toBeVisible();
 
   // 下单：页面上有订单号、金额和收款码
   await page.goto("/plans");
@@ -82,6 +84,12 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   const title = page.locator(".card-title").filter({ hasText: /^c\d+_\d+$/ }).first();
   await expect(title).toBeVisible();
   const username = await title.innerText();
+
+  // 有订阅以后，「绑定已有订阅」收成页面最下面的小链接，点开才有输入框
+  await expect(page.getByRole("heading", { name: "绑定已有订阅" })).toHaveCount(0);
+  await expect(page.getByPlaceholder("https://.../sub/...")).toBeHidden();
+  await page.getByText("还有别的订阅链接？绑定到这个账号").click();
+  await expect(page.getByPlaceholder("https://.../sub/...")).toBeVisible();
 
   // 开出来的用户：所有 VLESS 入站都勾上，没有 Shadowsocks；备注就是 ip=N（IP 监控按这个读）
   const created = await mockMarzban("GET", `/user/${username}`);

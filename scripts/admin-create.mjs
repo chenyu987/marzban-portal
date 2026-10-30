@@ -25,7 +25,11 @@ function askPassword(prompt) {
   if (!rl) {
     rl = createInterface({ input: process.stdin, output: process.stdout, terminal: !!process.stdin.isTTY });
     if (process.stdin.isTTY) rl._writeToOutput = () => {};
-    rl.on("line", (line) => (waiting.length ? waiting.shift()(line) : queued.push(line)));
+    // 终端里跳过空行：查库那几秒里多按的回车会攒着，问密码时被当成空密码
+    rl.on("line", (line) => {
+      if (process.stdin.isTTY && !line) return;
+      waiting.length ? waiting.shift()(line) : queued.push(line);
+    });
   }
   process.stdout.write(prompt);
   return new Promise((resolve) => {
