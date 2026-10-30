@@ -1,7 +1,7 @@
 // 建管理后台的账号，或者给已有的管理员改密码（网页上不能注册管理员）：
 //   npm run admin:create -- <邮箱> [--remote]
 // 邮箱要和 Cloudflare Access 登录用的一样，并且写进 site.config.ts 的 admin.emails。
-// 密码在终端里输入，不显示、不进命令历史；至少 12 位。
+// 密码在终端里输入，不显示、不进命令历史；至少 8 位。
 // 不加 --remote 写本地开发库，加了写线上库
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
@@ -48,8 +48,8 @@ if (remote && !site.admin.emails.map((e) => e.toLowerCase()).includes(email)) {
   console.log(`⚠️ ${email} 还不在 site.config.ts 的 admin.emails 里，加进去并部署之后才能登录后台`);
 }
 
-const password = await askPassword("密码（至少 12 位）：");
-if (password.length < 12) fail("密码至少 12 位");
+const password = await askPassword("密码（至少 8 位）：");
+if (password.length < 8) fail("密码至少 8 位");
 if ((await askPassword("再输一次：")) !== password) fail("两次输入的不一样");
 rl.close();
 
