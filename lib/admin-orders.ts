@@ -5,7 +5,7 @@
 import "server-only";
 import { db, nowSec } from "./env";
 import { findPlan } from "./plans";
-import { formatExpire } from "./format";
+import { formatExpire, formatOrderNo } from "./format";
 import { provisionTarget } from "./orders";
 import { findUser, modifyUser } from "./marzban";
 import { site } from "../site.config";
@@ -32,8 +32,8 @@ export async function confirmTransferOrder(
     .prepare("SELECT id, customer_id, method, status, plan_id, marzban_username FROM orders WHERE id = ?")
     .bind(orderId)
     .first<OrderRow>();
-  if (!o || (by !== "admin" && o.customer_id !== by.customerId)) return { error: `没有订单 ${orderId}` };
-  if (o.method !== "transfer" || o.status !== "pending") return { error: `订单 ${orderId} 现在不是等付款的转账单，刷新看看` };
+  if (!o || (by !== "admin" && o.customer_id !== by.customerId)) return { error: "没有这张订单" };
+  if (o.method !== "transfer" || o.status !== "pending") return { error: `${await orderLabel(orderId)} 现在不是等付款的转账单，刷新看看` };
   const plan = o.plan_id ? findPlan(site.plans, o.plan_id) : undefined;
   if (!plan) return { error: `套餐 ${o.plan_id} 已经不在 site.config.ts 里了，取消这张单，用命令行 payment:record 处理` };
 
@@ -91,7 +91,7 @@ export async function confirmTransferOrder(
   ]);
   return {
     ok:
-      `订单 ${orderId} 已确认：${target === "new" ? "新开" : "续期"} ${result.username}，到期 ${formatExpire(result.expire)}` +
+      `${await orderLabel(orderId)} 已确认：${target === "new" ? "新开" : "续期"} ${result.username}，到期 ${formatExpire(result.expire)}` +
       (result.warning ? `。⚠️ ${result.warning}，去面板手动把流量清零` : ""),
   };
 }
@@ -99,9 +99,9 @@ export async function confirmTransferOrder(
 // 取消等付款的单，下单时抵扣的余额退回
 export async function cancelPendingOrder(orderId: number): Promise<AdminResult> {
   const r = await db().prepare("UPDATE orders SET status = 'cancelled' WHERE id = ? AND status = 'pending'").bind(orderId).run();
-  if (r.meta.changes !== 1) return { error: `订单 ${orderId} 已经不是「等付款」了，刷新看看` };
+  if (r.meta.changes !== 1) return { error: `${await orderLabel(orderId)} 已经不是「等付款」了，刷新看看` };
   await db().prepare("DELETE FROM balance_entries WHERE order_id = ? AND kind = 'purchase'").bind(orderId).run();
-  return { ok: `订单 ${orderId} 已取消` };
+  return { ok: `${await orderLabel(orderId)} 已取消` };
 }
 
 // 对账：在账单里找到了这笔钱
@@ -110,8 +110,8 @@ export async function verifyOrder(orderId: number): Promise<AdminResult> {
     .prepare("UPDATE orders SET verified_at = ? WHERE id = ? AND method = 'transfer' AND status = 'paid' AND verified_at IS NULL")
     .bind(nowSec(), orderId)
     .run();
-  if (r.meta.changes !== 1) return { error: `订单 ${orderId} 不是待对账的单了，刷新看看` };
-  return { ok: `订单 ${orderId} 已对账` };
+  if (r.meta.changes !== 1) return { error: `${await orderLabel(orderId)} 不是待对账的单了，刷新看看` };
+  return { ok: `${await orderLabel(orderId)} 已对账` };
 }
 
 // 对账：账单里没有这笔钱。新开的订阅在 Marzban 停用；续期的把这次加上的天数扣回去（不早于现在）。
@@ -124,7 +124,7 @@ export async function revokeOrder(orderId: number): Promise<AdminResult> {
     )
     .bind(orderId)
     .first<{ id: number; plan_id: string | null; marzban_username: string | null; new_sub: number | null }>();
-  if (!o || !o.marzban_username) return { error: `订单 ${orderId} 不是待对账的单了，刷新看看` };
+  if (!o || !o.marzban_username) return { error: `${await orderLabel(orderId)} 不是待对账的单了，刷新看看` };
   const plan = o.plan_id ? findPlan(site.plans, o.plan_id) : undefined;
   const username = o.marzban_username;
   let done: string;
@@ -148,5 +148,11 @@ export async function revokeOrder(orderId: number): Promise<AdminResult> {
     db().prepare("UPDATE orders SET status = 'revoked', note = '没收到钱，已收回' WHERE id = ?").bind(orderId),
     db().prepare("DELETE FROM balance_entries WHERE order_id = ? AND kind IN ('referral_reward', 'purchase')").bind(orderId),
   ]);
-  return { ok: `订单 ${orderId} 已收回：${done}` };
+  return { ok: `${await orderLabel(orderId)} 已收回：${done}` };
+}
+
+// 给人看的「订单 261103-48213」：提示、操作日志都用它，不露出内部自增 id
+export async function orderLabel(orderId: number): Promise<string> {
+  const o = await db().prepare("SELECT no FROM orders WHERE id = ?").bind(orderId).first<{ no: string | null }>();
+  return o?.no ? `订单 ${formatOrderNo(o.no)}` : `订单 ${orderId}`;
 }

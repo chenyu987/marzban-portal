@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { cancelOrder, claimPaid } from "../actions";
 
 export type OpenOrder = {
+  no: string; // 给客人看的订单号，转账备注填这个
   id: number;
   planName: string;
   // 还要转账的金额（已经减掉余额抵扣）
@@ -41,7 +42,7 @@ export default function PendingOrder({ order, payments }: { order: OpenOrder; pa
     <div className="card border border-warning/40 bg-base-100 shadow-sm">
       <div className="card-body gap-3">
         <div className="flex items-center justify-between">
-          <h2 className="card-title text-base">订单 {order.id}</h2>
+          <h2 className="card-title text-base">订单 {order.no}</h2>
           <span className={`badge ${badge.cls}`}>{badge.text}</span>
         </div>
         <p className="text-sm text-base-content/70">
@@ -58,7 +59,7 @@ export default function PendingOrder({ order, payments }: { order: OpenOrder; pa
         ) : (
           <>
             <div className="rounded-box bg-base-200 p-3 text-sm leading-relaxed">
-              请转账 <b className="text-lg">{order.amount}</b>，转账备注写订单号 <b className="text-lg">{order.id}</b>。
+              请转账 <b className="text-lg">{order.amount}</b>，转账备注写订单号 <b className="text-lg">{order.no}</b>。
               <br />
               {order.deducted && <>已经用余额抵扣了 {order.deducted}，只要转剩下的。</>}付完款回到这里点「我已付款」，马上就能用。
             </div>

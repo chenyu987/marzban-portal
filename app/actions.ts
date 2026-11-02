@@ -11,7 +11,7 @@ import { formatExpire, newReferralCode, normalizeRedeemCode, normalizeReferralCo
 import { findPlan } from "@/lib/plans";
 import { type ProvisionResult } from "@/lib/provision";
 import { provisionTarget } from "@/lib/orders";
-import { confirmTransferOrder } from "@/lib/admin-orders";
+import { confirmTransferOrder, orderLabel } from "@/lib/admin-orders";
 import { site } from "@/site.config";
 import { BALANCE_SQL } from "@/lib/balance";
 import { canSendMail, sendMail } from "@/lib/mail";
@@ -480,7 +480,7 @@ export async function buyWithBalance(_: FormState, form: FormData): Promise<Form
   if (result.kind === "stuck") {
     console.error(`buyWithBalance: 需要人工核对 order=${orderId} customer=${customer.id} plan=${plan.id} ${result.reason}`);
     return {
-      error: `开通的时候出了点问题，余额已经扣了，不会丢。请不要重复购买，把这句话截图发给管理员处理（订单 ${orderId}，${result.username}）`,
+      error: `开通的时候出了点问题，余额已经扣了，不会丢。请不要重复购买，把这句话截图发给管理员处理（${await orderLabel(orderId)}，${result.username}）`,
     };
   }
   if (result.warning) console.error(`buyWithBalance: order=${orderId} user=${result.username} ${result.warning}`);
@@ -501,7 +501,7 @@ export async function buyWithBalance(_: FormState, form: FormData): Promise<Form
     ]);
   } catch (e) {
     console.error(`buyWithBalance: 写库失败 order=${orderId} user=${username}`, e);
-    return { error: `已经开通（${username}），但保存记录时出错了，请把这句话截图发给管理员处理（订单 ${orderId}）` };
+    return { error: `已经开通（${username}），但保存记录时出错了，请把这句话截图发给管理员处理（${await orderLabel(orderId)}）` };
   }
   revalidatePath("/dashboard");
   revalidatePath("/plans");

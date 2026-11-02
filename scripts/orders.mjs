@@ -3,7 +3,7 @@
 //   npm run orders -- list [--remote]                    看还没处理完的单。客人说已付的排在前面，带着他点「我已付款」的时间
 //   npm run orders -- list <金额> [--remote]               按到账金额找单（客人没写备注时缩小范围），比如 list 45。
 //                                                         金额是客人实际要转的钱：用了余额抵扣的单是套餐价减掉抵扣
-//   npm run orders -- confirm <订单号> [--remote]          确认收到钱：在 Marzban 开通或续期，再把单记成已付款（触发推荐奖励）
+//   npm run orders -- confirm <订单号，比如 261103-48213> [--remote]          确认收到钱：在 Marzban 开通或续期，再把单记成已付款（触发推荐奖励）
 //   npm run orders -- cancel <订单号> [--note 原因] [--remote]  取消一张还没付款的单
 // 开通出错、单停在「开通中」时：
 //   npm run orders -- confirm <订单号> --done <用户名>      去面板看过，Marzban 已经改好了：只绑定订阅、记成已付款
@@ -11,7 +11,7 @@
 // 客人用余额买套餐时网页直接开通，不经过这里；只有开通出错、停在「开通中」的余额单会出现在 list 里，同样用 --done / --again 处理。
 // 不加 --remote 写本地开发库、连假 Marzban；加了写线上库、连线上 Marzban。
 import { parseArgs } from "node:util";
-import { formatBytes, formatDate, formatExpire, formatMoney, parseYuan } from "../lib/format.ts";
+import { formatBytes, formatDate, formatExpire, formatMoney, parseYuan, formatOrderNo, parseOrderNo } from "../lib/format.ts";
 import { findPlan, newUserBody, nextUsername, renewUserBody } from "../lib/plans.ts";
 import { provisionNew, provisionRenew } from "../lib/provision.ts";
 import { site } from "../site.config.ts";
@@ -52,7 +52,7 @@ if (cmd === "list") {
   const amount = idArg === undefined ? null : parseYuan(idArg);
   if (idArg !== undefined && amount === null) fail(`金额格式不对：${idArg}\n${USAGE}`);
   const rows = d1(`
-    SELECT o.id, c.email, o.amount, o.balance_used, o.method, o.plan_id, o.marzban_username, o.status, o.claimed_at, o.created_at
+    SELECT o.id, o.no, c.email, o.amount, o.balance_used, o.method, o.plan_id, o.marzban_username, o.status, o.claimed_at, o.created_at
     FROM orders o JOIN customers c ON c.id = o.customer_id
     WHERE o.method IN ('transfer', 'balance') AND ${amount === null ? "o.status IN ('pending', 'processing')" : `o.amount - o.balance_used = ${amount}`}
     ORDER BY o.claimed_at IS NULL, o.claimed_at, o.id`);
@@ -62,15 +62,21 @@ if (cmd === "list") {
     console.log(amount === null ? `${where}待处理的单：` : `${where}金额是 ${site.currency}${formatMoney(amount)} 的单：`);
     for (const o of rows) {
       console.log(
-        `  #${o.id}  ${dueText(o)}  ${statusText(o)}  ${o.email}  ${planName(o.plan_id)}  ${targetText(o)}  ${formatDate(o.created_at)} 下单`,
+        `  ${formatOrderNo(o.no)}  ${dueText(o)}  ${statusText(o)}  ${o.email}  ${planName(o.plan_id)}  ${targetText(o)}  ${formatDate(o.created_at)} 下单`,
       );
     }
   }
   process.exit(0);
 }
 
-const id = Number(idArg);
-if ((cmd !== "confirm" && cmd !== "cancel") || !Number.isInteger(id) || id < 1) fail(USAGE);
+// 订单号（261103-48213，带不带横线都行）；以前的内部编号（纯小数字）也还认
+if ((cmd !== "confirm" && cmd !== "cancel") || !idArg) fail(USAGE);
+const no = parseOrderNo(idArg);
+const byId = /^\d{1,9}$/.test(idArg) ? Number(idArg) : null;
+if (!no && !byId) fail(`订单号格式不对：${idArg}\n${USAGE}`);
+const [found] = d1(`SELECT id FROM orders WHERE ${no ? `no = ${q(no)}` : `id = ${byId}`}`);
+if (!found) fail(`没有订单 ${idArg}`);
+const id = found.id;
 
 const [o] = d1(`
   SELECT o.*, c.email, c.wechat, r.email AS referrer
@@ -78,8 +84,7 @@ const [o] = d1(`
   JOIN customers c ON c.id = o.customer_id
   LEFT JOIN customers r ON r.id = c.referred_by
   WHERE o.id = ${id}`);
-if (!o) fail(`没有订单 #${id}`);
-console.log(`${where}订单 #${o.id}：${o.email}，${o.plan_id ? planName(o.plan_id) : "（没有套餐）"}，${dueText(o)}，${targetText(o)}，${statusText(o)}`);
+console.log(`${where}订单 ${formatOrderNo(o.no)}：${o.email}，${o.plan_id ? planName(o.plan_id) : "（没有套餐）"}，${dueText(o)}，${targetText(o)}，${statusText(o)}`);
 
 if (cmd === "cancel") {
   if (o.status === "processing") fail("这张单正在开通，不能直接取消。先按 confirm 的提示核对 Marzban");
@@ -137,7 +142,7 @@ function markPaid(username, isNew) {
         `单还停在「开通中」，修好之后运行：npm run orders -- confirm ${id} --done ${username}${remote ? " --remote" : ""}`,
     );
   }
-  console.log(`已确认，订单 #${id} 记成已付款${isNew ? `。${username} 已绑到 ${o.email} 名下，客人登录就能看到` : ""}。${rewardText}`);
+  console.log(`已确认，订单 ${formatOrderNo(o.no)} 记成已付款${isNew ? `。${username} 已绑到 ${o.email} 名下，客人登录就能看到` : ""}。${rewardText}`);
 }
 
 const mz = marzban(remote);

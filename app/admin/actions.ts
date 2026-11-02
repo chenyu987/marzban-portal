@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { db, nowSec } from "@/lib/env";
 import { verifyPassword } from "@/lib/password";
 import { createAdminSession, currentAdmin, destroyAdminSession, logAdmin, requireAccess, requireAdmin } from "@/lib/admin";
-import { cancelPendingOrder, confirmTransferOrder, revokeOrder, verifyOrder, type AdminResult } from "@/lib/admin-orders";
+import { cancelPendingOrder, confirmTransferOrder, orderLabel, revokeOrder, verifyOrder, type AdminResult } from "@/lib/admin-orders";
 import type { FormState } from "../actions";
 import { addNode, createUser, deleteExpiredUsers, deleteNode, deleteUser, expiredUsers, findUser, getHosts, resetAllUsage, listNodes, putHosts, modifyNode, modifyUser, reconnectNode, resetUsage, restartCore, revokeSubscription } from "@/lib/marzban";
 import { changePlanBody } from "@/lib/plans";
@@ -68,7 +68,7 @@ export async function adminConfirmOrder(_: FormState, form: FormData): Promise<F
   const id = Number(form.get("id"));
   if (!Number.isInteger(id)) return { error: "订单号不对" };
   const r = await confirmTransferOrder(id);
-  await logAdmin(admin, "order.confirm", `订单 ${id}`, "ok" in r ? r.ok : `失败：${r.error}`);
+  await logAdmin(admin, "order.confirm", await orderLabel(id), "ok" in r ? r.ok : `失败：${r.error}`);
   return toState(r);
 }
 
@@ -77,7 +77,7 @@ export async function adminVerifyOrder(_: FormState, form: FormData): Promise<Fo
   const id = Number(form.get("id"));
   if (!Number.isInteger(id)) return { error: "订单号不对" };
   const r = await verifyOrder(id);
-  await logAdmin(admin, "order.verify", `订单 ${id}`, "ok" in r ? undefined : `失败：${r.error}`);
+  await logAdmin(admin, "order.verify", await orderLabel(id), "ok" in r ? undefined : `失败：${r.error}`);
   return toState(r);
 }
 
@@ -86,7 +86,7 @@ export async function adminRevokeOrder(_: FormState, form: FormData): Promise<Fo
   const id = Number(form.get("id"));
   if (!Number.isInteger(id)) return { error: "订单号不对" };
   const r = await revokeOrder(id);
-  await logAdmin(admin, "order.revoke", `订单 ${id}`, "ok" in r ? r.ok : `失败：${r.error}`);
+  await logAdmin(admin, "order.revoke", await orderLabel(id), "ok" in r ? r.ok : `失败：${r.error}`);
   return toState(r);
 }
 
@@ -95,7 +95,7 @@ export async function adminCancelOrder(_: FormState, form: FormData): Promise<Fo
   const id = Number(form.get("id"));
   if (!Number.isInteger(id)) return { error: "订单号不对" };
   const r = await cancelPendingOrder(id);
-  await logAdmin(admin, "order.cancel", `订单 ${id}`, "ok" in r ? undefined : `失败：${r.error}`);
+  await logAdmin(admin, "order.cancel", await orderLabel(id), "ok" in r ? undefined : `失败：${r.error}`);
   return toState(r);
 }
 

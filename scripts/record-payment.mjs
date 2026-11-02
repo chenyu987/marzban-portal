@@ -6,7 +6,7 @@
 // 付款记下后，数据库触发器会自动给推荐人记 10% 的奖励。
 // 客人在套餐页下了单的，用 npm run orders -- confirm <订单号> 确认，不用这个脚本。
 import { parseArgs } from "node:util";
-import { formatBytes, formatExpire, formatMoney, parseYuan } from "../lib/format.ts";
+import { formatBytes, formatExpire, formatMoney, parseYuan, formatOrderNo } from "../lib/format.ts";
 import { findPlan, newUserBody, nextUsername, renewUserBody } from "../lib/plans.ts";
 import { provisionNew, provisionRenew } from "../lib/provision.ts";
 import { site } from "../site.config.ts";
@@ -137,7 +137,7 @@ try {
     VALUES (${c.id}, ${amount}, 'manual', 'paid', ${q(note)}, ${plan ? q(plan.id) : "NULL"},
             ${action ? q(action.username) : "NULL"}, unixepoch(), unixepoch())
     RETURNING id`);
-  console.log(`已记账，订单号 ${order.id}${action?.kind === "new" ? `。${action.username} 已绑到 ${c.email} 名下，客人登录就能看到` : ""}`);
+  console.log(`已记账，订单号 ${formatOrderNo(d1(`SELECT no FROM orders WHERE id = ${order.id}`)[0]?.no)}${action?.kind === "new" ? `。${action.username} 已绑到 ${c.email} 名下，客人登录就能看到` : ""}`);
 } catch (e) {
   console.error(`\n❌ Marzban 那边已经改好了，但写数据库失败：${e.message}`);
   if (action?.kind === "new") console.error(`先手动绑定：客人登录后在订阅页粘贴 ${action.username} 的订阅链接，或者再跑一次插入 subscriptions 的 SQL`);

@@ -100,7 +100,7 @@ const TABS: { id: Platform; label: string; content: React.ReactNode }[] = [
           </li>
           <li>
             <b>加分流规则</b>（推荐）：右键刚导入的订阅 → 选「扩展覆写配置」→ 把下面的规则粘贴进去并保存。作用是
-            ChatGPT 和国外网站走代理，国内网站直连，国内网站不会因此变慢。
+            ChatGPT、Claude 和国外网站走代理，国内网站直连，国内网站不会因此变慢。
             <Shot name="mac-override-menu" alt="右键订阅选扩展覆写配置" />
             <Shot name="mac-override-edit" alt="粘贴规则" />
             <div className="mt-2">

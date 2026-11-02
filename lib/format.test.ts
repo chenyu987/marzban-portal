@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, formatRedeemCode, needsRenewal, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft } from "./format";
+import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, formatRedeemCode, needsRenewal, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft, formatOrderNo, parseOrderNo } from "./format";
 import { hashPassword, verifyPassword } from "./password";
 
 describe("parseSubToken", () => {
@@ -137,5 +137,16 @@ describe("兑换码", () => {
     expect(normalizeRedeemCode("ABCD")).toBeNull();
     expect(normalizeRedeemCode("ABCDEFGHJKMNPQR0")).toBeNull();
     expect(normalizeRedeemCode("")).toBeNull();
+  });
+});
+
+describe("订单号", () => {
+  it("显示成日期-编号，搜的时候带不带横线都认", () => {
+    expect(formatOrderNo("26110348213")).toBe("261103-48213");
+    expect(formatOrderNo(null)).toBe("-");
+    expect(parseOrderNo("261103-48213")).toBe("26110348213");
+    expect(parseOrderNo(" 26110348213 ")).toBe("26110348213");
+    expect(parseOrderNo("12")).toBeNull();
+    expect(parseOrderNo("alice")).toBeNull();
   });
 });

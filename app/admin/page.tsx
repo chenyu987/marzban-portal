@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
-import { formatExpire, formatMoney } from "@/lib/format";
+import { formatExpire, formatMoney, formatOrderNo } from "@/lib/format";
 import { findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
 import AdminHeader from "./AdminHeader";
@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 
 type Row = {
   id: number;
+  no: string | null;
   customer_id: number;
   email: string;
   wechat: string | null;
@@ -39,7 +40,7 @@ const target = (o: Row) => (o.marzban_username ? `续期 ${o.marzban_username}` 
 const due = (o: Row) =>
   `${money(o.amount - o.balance_used)}${o.balance_used > 0 ? `（套餐价 ${money(o.amount)}，余额抵扣 ${money(o.balance_used)}）` : ""}`;
 
-const SELECT = `SELECT o.id, c.id AS customer_id, c.email, c.wechat, o.amount, o.balance_used, o.method, o.status, o.plan_id, o.marzban_username,
+const SELECT = `SELECT o.id, o.no, c.id AS customer_id, c.email, c.wechat, o.amount, o.balance_used, o.method, o.status, o.plan_id, o.marzban_username,
   o.claimed_at, o.pay_method, o.payer, o.new_sub, o.paid_at, o.created_at FROM orders o JOIN customers c ON c.id = o.customer_id`;
 
 // 客人点「我已付款」的时间精确到秒（北京时间），和账单里的到账时间对
@@ -91,12 +92,12 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
       {unverified.length === 0 && <p className="text-base-content/60">没有要对账的单。</p>}
       <div className="grid gap-3 lg:grid-cols-2">
         {unverified.map((o) => {
-          const summary = `订单 ${o.id}｜${o.email}｜${planName(o.plan_id)}｜${o.marzban_username}｜应收 ${money(o.amount - o.balance_used)}｜${o.pay_method ?? "?"}`;
+          const summary = `订单 ${formatOrderNo(o.no)}｜${o.email}｜${planName(o.plan_id)}｜${o.marzban_username}｜应收 ${money(o.amount - o.balance_used)}｜${o.pay_method ?? "?"}`;
           return (
             <div key={o.id} className="card border border-info bg-base-100 shadow-sm" data-testid="unverified-order">
               <div className="card-body gap-2 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-bold">订单 {o.id}</span>
+                  <span className="font-bold">订单 {formatOrderNo(o.no)}</span>
                   <span className="badge badge-info gap-1">
                     {o.new_sub ? "新开" : "续期"} {o.marzban_username && <SubLink username={o.marzban_username} />}
                   </span>
@@ -130,12 +131,12 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
       <div className="grid gap-3 lg:grid-cols-2">
         {open.map((o) => {
           const stuck = o.status === "processing";
-          const summary = `订单 ${o.id}｜${o.email}｜${planName(o.plan_id)}｜${target(o)}｜应收 ${money(o.amount - o.balance_used)}`;
+          const summary = `订单 ${formatOrderNo(o.no)}｜${o.email}｜${planName(o.plan_id)}｜${target(o)}｜应收 ${money(o.amount - o.balance_used)}`;
           return (
             <div key={o.id} className={`card bg-base-100 shadow-sm ${stuck ? "border border-error" : o.claimed_at ? "border border-warning" : ""}`}>
               <div className="card-body gap-2 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-bold">订单 {o.id}</span>
+                  <span className="font-bold">订单 {formatOrderNo(o.no)}</span>
                   <span className={`badge ${stuck ? "badge-error" : o.claimed_at ? "badge-warning" : "badge-ghost"}`}>
                     {stuck
                       ? `开通中，需要核对${o.method === "balance" ? "（余额付款）" : ""}`
@@ -153,7 +154,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
                 {stuck ? (
                   <p className="text-sm text-error">
                     上次开通出了问题，不确定 Marzban 改没改。{o.marzban_username ? <>先点 {sub(o)} 看它现在的到期和流量，</> : "先去「订阅」页按客人的微信号搜一下有没有新开出来，"}
-                    再用命令行处理：npm run orders -- confirm {o.id} --done 订阅名 --remote（已经改好）或 --again（确实没改）
+                    再用命令行处理：npm run orders -- confirm {formatOrderNo(o.no)} --done 订阅名 --remote（已经改好）或 --again（确实没改）
                   </p>
                 ) : (
                   o.method === "transfer" && <OrderActions id={o.id} summary={summary} />

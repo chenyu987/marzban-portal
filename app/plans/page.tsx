@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
-import { formatDate, formatExpire, formatMoney, formatSubCode } from "@/lib/format";
+import { formatDate, formatExpire, formatMoney, formatSubCode, formatOrderNo } from "@/lib/format";
 import { describePlan, findPlan } from "@/lib/plans";
 import { BALANCE_SQL } from "@/lib/balance";
 import { BRAND } from "@/lib/clients";
@@ -26,12 +26,13 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
       .all<{ marzban_username: string; code: string | null }>(),
     db()
       .prepare(
-        `SELECT id, amount, balance_used, plan_id, marzban_username, status, claimed_at, created_at FROM orders
+        `SELECT id, no, amount, balance_used, plan_id, marzban_username, status, claimed_at, created_at FROM orders
          WHERE customer_id = ? AND status IN ('pending', 'processing') ORDER BY id DESC`,
       )
       .bind(customer.id)
       .all<{
         id: number;
+        no: string | null;
         amount: number;
         balance_used: number;
         plan_id: string;
@@ -97,6 +98,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
               payments={site.payments}
               order={{
                 id: o.id,
+                no: formatOrderNo(o.no),
                 planName: findPlan(site.plans, o.plan_id)?.name ?? o.plan_id,
                 amount: price(o.amount - o.balance_used),
                 deducted: o.balance_used > 0 ? price(o.balance_used) : null,

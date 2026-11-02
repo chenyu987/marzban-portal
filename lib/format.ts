@@ -155,3 +155,15 @@ export function formatSubCode(code: string | null | undefined): string {
 export function normalizeSubCode(input: string): string {
   return input.replace(/[^0-9a-z]/gi, "").toUpperCase();
 }
+
+// 订单号 26110348213 显示成 261103-48213（前 6 位是下单日期）；搜的时候带不带横线都行
+export function formatOrderNo(no: string | null | undefined): string {
+  if (!no) return "-";
+  return `${no.slice(0, 6)}-${no.slice(6)}`;
+}
+
+// 输入像订单号（11 位数字，可以带横线）就返回去掉横线的，不像就返回 null
+export function parseOrderNo(input: string): string | null {
+  const d = input.replace(/[\s-]/g, "");
+  return /^\d{11}$/.test(d) ? d : null;
+}

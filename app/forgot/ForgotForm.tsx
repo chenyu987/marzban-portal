@@ -39,7 +39,10 @@ export default function ForgotForm({ canSend }: { canSend: boolean }) {
               </button>
             </>
           ) : (
-            <p className="text-sm">请联系客服，告诉客服你注册用的邮箱，客服会发给你一个重置密码的链接。</p>
+            <>
+              <p className="text-sm">请联系客服，报上你注册用的邮箱和微信号，客服核对是你本人后，会发给你一个重置密码的链接（24 小时内有效）。</p>
+              <ContactSupport />
+            </>
           )}
           <p className="text-center text-sm text-base-content/70">
             想起来了？

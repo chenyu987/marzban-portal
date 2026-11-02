@@ -173,8 +173,8 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   const card = page.locator(".card.border").first();
   await expect(card).toContainText("请转账 ¥20");
   await expect(card).toContainText("已用余额抵扣 ¥5");
-  const orderId = (await card.locator(".card-title").innerText()).match(/\d+/)![0];
-  expect(run(["orders", "--", "list", "20"])).toContain(`#${orderId}`);
+  const orderId = (await card.locator(".card-title").innerText()).match(/\d{6}-\d{5}/)![0];
+  expect(run(["orders", "--", "list", "20"])).toContain(orderId);
   await page.goto("/dashboard");
   await expect(page.getByText("¥0.00")).toBeVisible();
 
@@ -207,7 +207,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   // 客人下三张单：第一张用支付宝付、第三张用微信付（都马上开通），第二张不付
   const claim = async (method: string, payer: string) => {
     const card = page.locator(".card.border").first();
-    const id = (await card.locator(".card-title").innerText()).match(/\d+/)![0];
+    const id = (await card.locator(".card-title").innerText()).match(/\d{6}-\d{5}/)![0];
     await card.getByLabel(method, { exact: true }).check();
     await card.getByLabel("付款人").fill(payer);
     await card.getByRole("button", { name: "我已付款" }).click();
@@ -221,7 +221,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await page.goto("/plans");
   await page.locator('button[value="p1-quarter"]').click();
   await expect(page.locator(".card.border")).toHaveCount(1);
-  const second = (await page.locator(".card.border .card-title").first().innerText()).match(/\d+/)![0];
+  const second = (await page.locator(".card.border .card-title").first().innerText()).match(/\d{6}-\d{5}/)![0];
   await page.locator('form:has(button[name="plan"]) select[name="target"]').selectOption("new");
   await page.locator('button[value="p1-month"]').click();
   await expect(page.locator(".card.border")).toHaveCount(2);

@@ -48,8 +48,8 @@ const like = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 // 「对谁」能点进去：订阅 → 订阅详情，订单 → 订单列表，客人邮箱 → 客人，节点 / Host / 兑换码 → 对应页面
 function Target({ action, target }: { action: string; target: string | null }) {
   if (!target) return null;
-  const order = /^订单 (\d+)$/.exec(target);
-  if (order) return <Link href={`/admin?view=all&q=${order[1]}`} className="link link-hover">{target}</Link>;
+  const order = /^订单 ([\d-]+)$/.exec(target);
+  if (order) return <Link href={`/admin?view=all&q=${order[1].replace("-", "")}`} className="link link-hover">{target}</Link>;
   if (action.startsWith("user.")) return <SubLink username={target} />;
   if (["balance.adjust", "password.reset_link", "subscription.bind"].includes(action))
     return <Link href={`/admin/customers?q=${encodeURIComponent(target)}`} className="link link-hover">{target}</Link>;

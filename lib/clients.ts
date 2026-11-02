@@ -20,7 +20,7 @@ export function hiddifyImport(url: string): string {
   return `hiddify://import/${url}#${encodeURIComponent(BRAND)}`;
 }
 
-// Clash Verge「扩展覆写配置」里填的分流规则：OpenAI 和国外流量走自动选节点，局域网和国内直连。
+// Clash Verge「扩展覆写配置」里填的分流规则：OpenAI、Claude 和国外流量走自动选节点，局域网和国内直连。
 // 组名必须和 Marzban 默认 Clash 模板（app/templates/clash/default.yml）里的一字不差，
 // 注意 ♻ 后面有一个看不见的 U+FE0F。线上如果换了自定义模板，这里要跟着改
 export const AUTO_GROUP = "♻️ Automatic";
@@ -30,6 +30,10 @@ export const CLASH_RULES = `rules:
   - DOMAIN-SUFFIX,chatgpt.com,${AUTO_GROUP}
   - DOMAIN-SUFFIX,oaistatic.com,${AUTO_GROUP}
   - DOMAIN-SUFFIX,oaiusercontent.com,${AUTO_GROUP}
+  - DOMAIN-SUFFIX,anthropic.com,${AUTO_GROUP}
+  - DOMAIN-SUFFIX,claude.ai,${AUTO_GROUP}
+  - DOMAIN-SUFFIX,claude.com,${AUTO_GROUP}
+  - DOMAIN-SUFFIX,claudeusercontent.com,${AUTO_GROUP}
   - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
-import { formatBytes, formatDate, formatExpire, formatMoney, STATUS_LABEL, formatSubCode, timeLeft } from "@/lib/format";
+import { formatBytes, formatDate, formatExpire, formatMoney, STATUS_LABEL, formatSubCode, timeLeft, formatOrderNo } from "@/lib/format";
 import { getUser, type MarzbanUser } from "@/lib/marzban";
 import { findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
@@ -39,13 +39,15 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
       .bind(id)
       .all<{ marzban_username: string; code: string | null; plan_id: string | null }>(),
     db()
-      .prepare("SELECT id, amount, balance_used, method, status, plan_id, marzban_username, created_at, paid_at FROM orders WHERE customer_id = ? ORDER BY id DESC LIMIT 50")
+      .prepare("SELECT id, no, amount, balance_used, method, status, plan_id, marzban_username, created_at, paid_at FROM orders WHERE customer_id = ? ORDER BY id DESC LIMIT 50")
       .bind(id)
-      .all<{ id: number; amount: number; balance_used: number; method: string; status: string; plan_id: string | null; marzban_username: string | null; created_at: number; paid_at: number | null }>(),
+      .all<{ id: number; no: string | null; amount: number; balance_used: number; method: string; status: string; plan_id: string | null; marzban_username: string | null; created_at: number; paid_at: number | null }>(),
     db()
-      .prepare("SELECT id, amount, kind, order_id, note, created_at FROM balance_entries WHERE customer_id = ? ORDER BY id DESC LIMIT 50")
+      .prepare(
+        "SELECT b.id, b.amount, b.kind, b.order_id, o.no AS order_no, b.note, b.created_at FROM balance_entries b LEFT JOIN orders o ON o.id = b.order_id WHERE b.customer_id = ? ORDER BY b.id DESC LIMIT 50",
+      )
       .bind(id)
-      .all<{ id: number; amount: number; kind: string; order_id: number | null; note: string | null; created_at: number }>(),
+      .all<{ id: number; amount: number; kind: string; order_id: number | null; order_no: string | null; note: string | null; created_at: number }>(),
     // 推荐的人，以及每个人给这位客人返了多少
     db()
       .prepare(
@@ -220,7 +222,11 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
             <tbody>
               {orders.results.map((o) => (
                 <tr key={o.id}>
-                  <td>{o.id}</td>
+                  <td className="font-mono whitespace-nowrap">
+                    <Link href={`/admin?view=all&q=${o.no ?? o.id}`} className="link link-hover">
+                      {formatOrderNo(o.no)}
+                    </Link>
+                  </td>
                   <td>{o.plan_id ? (findPlan(site.plans, o.plan_id)?.name ?? o.plan_id) : "只记账"}</td>
                   <td className="text-right whitespace-nowrap">
                     {money(o.amount)}
@@ -250,7 +256,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                 <tr key={e.id}>
                   <td>
                     {KIND[e.kind] ?? e.kind}
-                    {e.order_id ? `（订单 ${e.order_id}）` : ""}
+                    {e.order_id ? `（订单 ${formatOrderNo(e.order_no)}）` : ""}
                     {e.note ? `：${e.note}` : ""}
                   </td>
                   <td className={`text-right whitespace-nowrap ${e.amount >= 0 ? "text-success" : "text-error"}`}>

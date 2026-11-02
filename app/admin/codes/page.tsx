@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
-import { formatExpire, formatMoney, formatRedeemCode } from "@/lib/format";
+import { formatExpire, formatMoney, formatRedeemCode, formatOrderNo } from "@/lib/format";
 import { findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
 import AdminHeader from "../AdminHeader";
@@ -18,6 +18,7 @@ type Row = {
   used_by: number | null;
   used_at: number | null;
   order_id: number | null;
+  order_no: string | null;
   email: string | null;
   wechat: string | null;
   created_at: number;
@@ -55,11 +56,11 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
     binds.push(like(code || q), like(q), like(q), like(q));
   }
   const W = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const FROM = "FROM redeem_codes r LEFT JOIN customers c ON c.id = r.used_by";
+  const FROM = "FROM redeem_codes r LEFT JOIN customers c ON c.id = r.used_by LEFT JOIN orders o ON o.id = r.order_id";
   const [count, { results }] = await Promise.all([
     db().prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(r.used_by IS NULL), 0) AS unused ${FROM} ${W}`).bind(...binds).first<{ n: number; unused: number }>(),
     db()
-      .prepare(`SELECT r.code, r.plan_id, r.note, r.used_by, r.used_at, r.order_id, c.email, c.wechat, r.created_at ${FROM} ${W} ORDER BY r.created_at DESC, r.code LIMIT ? OFFSET ?`)
+      .prepare(`SELECT r.code, r.plan_id, r.note, r.used_by, r.used_at, r.order_id, o.no AS order_no, c.email, c.wechat, r.created_at ${FROM} ${W} ORDER BY r.created_at DESC, r.code LIMIT ? OFFSET ?`)
       .bind(...binds, PAGE_SIZE, (page - 1) * PAGE_SIZE)
       .all<Row>(),
   ]);
@@ -127,8 +128,8 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
                       <span className="flex flex-wrap items-center gap-1 text-sm">
                         {r.email ? <CustomerLink id={r.used_by} email={r.email} wechat={r.wechat} /> : `客人 ${r.used_by}`}
                         <span className="text-base-content/60">{formatExpire(r.used_at)} 用的，</span>
-                        <Link href={`/admin?view=all&q=${r.order_id}`} className="link link-hover">
-                          订单 {r.order_id}
+                        <Link href={`/admin?view=all&q=${r.order_no ?? r.order_id}`} className="link link-hover">
+                          订单 {formatOrderNo(r.order_no)}
                         </Link>
                       </span>
                     )}

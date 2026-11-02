@@ -1,5 +1,5 @@
 import { db } from "@/lib/env";
-import { formatExpire, formatMoney } from "@/lib/format";
+import { formatExpire, formatMoney, formatOrderNo, parseOrderNo } from "@/lib/format";
 import { fromBeijingInput } from "@/lib/admin-users";
 import { site } from "@/site.config";
 import { CustomerLink, SubLink } from "./Links";
@@ -11,6 +11,7 @@ const like = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 type Row = {
   id: number;
+  no: string | null;
   customer_id: number;
   email: string;
   wechat: string | null;
@@ -45,9 +46,14 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
   const where: string[] = [];
   const binds: (string | number)[] = [];
   if (q) {
-    if (/^\d+$/.test(q)) {
-      where.push("o.id = ?");
-      binds.push(Number(q));
+    const no = parseOrderNo(q);
+    if (no) {
+      where.push("o.no = ?");
+      binds.push(no);
+    } else if (/^\d+$/.test(q)) {
+      // 纯数字但不像订单号：可能是订单号的一部分（比如日期 261103），也可能是内部 id
+      where.push("(o.no LIKE ? OR o.id = ?)");
+      binds.push(`%${q}%`, Number(q));
     } else {
       where.push("(c.email LIKE ? ESCAPE '\\' OR c.wechat LIKE ? ESCAPE '\\' OR o.marzban_username LIKE ? ESCAPE '\\' OR o.payer LIKE ? ESCAPE '\\')");
       binds.push(like(q), like(q), like(q), like(q));
@@ -84,7 +90,7 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
       .first<{ n: number; paid: number; paid_n: number }>(),
     db()
       .prepare(
-        `SELECT o.id, c.id AS customer_id, c.email, c.wechat, o.amount, o.balance_used, o.method, o.status, o.plan_id, o.marzban_username,
+        `SELECT o.id, o.no, c.id AS customer_id, c.email, c.wechat, o.amount, o.balance_used, o.method, o.status, o.plan_id, o.marzban_username,
            o.pay_method, o.payer, o.verified_at, o.paid_at, o.created_at ${FROM} ${W} ORDER BY o.id DESC LIMIT ? OFFSET ?`,
       )
       .bind(...binds, PAGE_SIZE, (page - 1) * PAGE_SIZE)
@@ -158,7 +164,7 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
               const st = ORDER_STATUS[o.status] ?? { text: o.status, badge: "badge-ghost" };
               return (
                 <tr key={o.id} className="hover" data-testid="order-row">
-                  <td className="font-mono">{o.id}</td>
+                  <td className="font-mono whitespace-nowrap">{formatOrderNo(o.no)}</td>
                   <td className="whitespace-nowrap text-base-content/70">{formatExpire(o.created_at)}</td>
                   <td>
                     <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} />
