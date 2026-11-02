@@ -8,7 +8,17 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1 };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN">
-      <body className="min-h-screen bg-base-200">{children}</body>
+      <body className="flex min-h-screen flex-col bg-base-200">
+        <div className="flex-1">{children}</div>
+        {site.contactEmail && (
+          <footer className="py-6 text-center text-sm text-base-content/60">
+            联系我们：
+            <a href={`mailto:${site.contactEmail}`} className="link">
+              {site.contactEmail}
+            </a>
+          </footer>
+        )}
+      </body>
     </html>
   );
 }

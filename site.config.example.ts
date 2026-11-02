@@ -29,6 +29,8 @@ export type SiteConfig = {
   };
   // 教程截图放在 public/site/tutorial/ 下（不同步到公开仓库）。true 才在教程里显示截图
   tutorialShots?: boolean;
+  // 每个页面底部「联系我们」的邮箱，不填就不显示
+  contactEmail?: string;
   // 金额前面的币种符号，比如 ¥、$
   currency: string;
   // 套餐列表。空着表示还没定，记账脚本就不能开通订阅

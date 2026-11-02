@@ -30,6 +30,17 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     )
     .bind(query, like(query))
     .all<Row>();
+  // 老客人：Marzban 用户名和微信号的对应，绑到了哪个客人名下也一起查出来
+  const { results: legacy } = await db()
+    .prepare(
+      `SELECT w.marzban_username, w.wechat, c.id AS customer_id, c.email FROM marzban_wechat w
+       LEFT JOIN subscriptions s ON s.marzban_username = w.marzban_username
+       LEFT JOIN customers c ON c.id = s.customer_id
+       WHERE ?1 = '' OR w.marzban_username LIKE ?2 ESCAPE '\\' OR w.wechat LIKE ?2 ESCAPE '\\'
+       ORDER BY w.wechat, w.marzban_username LIMIT 100`,
+    )
+    .bind(query, like(query))
+    .all<{ marzban_username: string; wechat: string; customer_id: number | null; email: string | null }>();
 
   return (
     <div className="mx-auto max-w-4xl px-4 pb-16">
@@ -40,7 +51,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         <button className="btn">搜索</button>
       </form>
       {results.length === 0 ? (
-        <p className="text-base-content/60">{query ? "没有找到。" : "还没有客人。"}</p>
+        <p className="text-base-content/60">{query ? "没有找到注册过的客人。" : "还没有客人。"}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="table table-sm">
@@ -75,6 +86,40 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           </table>
           {results.length === 100 && <p className="mt-2 text-sm text-base-content/60">只显示最近 100 个，用搜索找更早的。</p>}
         </div>
+      )}
+      {legacy.length > 0 && (
+        <>
+          <h2 className="mt-10 mb-1 text-lg font-bold">Marzban 用户的微信号</h2>
+          <p className="mb-3 text-sm text-base-content/60">老客人的 Marzban 用户名一般是微信名，这里记着对应的微信号。</p>
+          <div className="overflow-x-auto">
+            <table className="table table-sm">
+              <thead>
+                <tr>
+                  <th>Marzban 用户</th>
+                  <th>微信号</th>
+                  <th>绑在哪个客人名下</th>
+                </tr>
+              </thead>
+              <tbody>
+                {legacy.map((w) => (
+                  <tr key={w.marzban_username}>
+                    <td>{w.marzban_username}</td>
+                    <td>{w.wechat}</td>
+                    <td>
+                      {w.customer_id ? (
+                        <Link href={`/admin/customers/${w.customer_id}`} className="link">
+                          {w.email}
+                        </Link>
+                      ) : (
+                        <span className="text-base-content/60">还没注册</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );
