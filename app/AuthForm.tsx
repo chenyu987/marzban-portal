@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { BRAND } from "@/lib/clients";
+import { site } from "@/site.config";
+import Brand from "./Brand";
 import type { FormState } from "./actions";
 
 type Props = {
@@ -20,11 +21,38 @@ type Props = {
 export default function AuthForm({ title, submitLabel, action, passwordAutoComplete, footer, referral, forgotLink }: Props) {
   const [state, formAction, pending] = useActionState(action, undefined);
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <form action={formAction} className="card w-full max-w-sm bg-base-100 shadow-md">
+    <main className="grid min-h-screen lg:grid-cols-2">
+      {/* 左边：品牌和卖点（大屏才有） */}
+      <aside className="brand-gradient relative hidden flex-col justify-between overflow-hidden p-12 text-white lg:flex">
+        <Brand size={40} className="text-2xl text-white" />
+        <div>
+          <h2 className="text-4xl leading-tight font-extrabold">{site.landing?.headline ?? site.brand}</h2>
+          <p className="mt-4 max-w-md text-lg text-white/85">{site.landing?.sub ?? site.description}</p>
+          {site.landing?.highlights && (
+            <ul className="mt-8 grid max-w-md gap-3">
+              {site.landing.highlights.slice(0, 4).map((h) => (
+                <li key={h.title} className="flex items-start gap-3 rounded-box bg-white/10 p-3 backdrop-blur">
+                  <span className="text-2xl" aria-hidden>
+                    {h.icon}
+                  </span>
+                  <span>
+                    <b>{h.title}</b>
+                    <span className="block text-sm text-white/80">{h.desc}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <p className="text-sm text-white/70">节点：{site.landing?.regions?.map((r) => r.name).join(" · ")}</p>
+      </aside>
+
+      {/* 右边：表单 */}
+      <div className="flex items-center justify-center px-4 py-10">
+      <form action={formAction} className="card w-full max-w-sm bg-base-100 shadow-lg">
         <div className="card-body gap-4">
-          <h1 className="text-2xl font-bold">{BRAND}</h1>
-          <p className="text-base-content/70">{title}</p>
+          <Brand size={36} className="text-2xl lg:hidden" />
+          <h1 className="text-2xl font-bold">{title}</h1>
           <label className="floating-label">
             <span>邮箱</span>
             <input
@@ -102,6 +130,7 @@ export default function AuthForm({ title, submitLabel, action, passwordAutoCompl
           </p>
         </div>
       </form>
+      </div>
     </main>
   );
 }

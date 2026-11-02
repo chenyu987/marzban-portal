@@ -4,12 +4,12 @@ import { requireCustomer } from "@/lib/session";
 import { formatDate, formatExpire, formatMoney, formatSubCode, formatOrderNo } from "@/lib/format";
 import { describePlan, findPlan } from "@/lib/plans";
 import { BALANCE_SQL } from "@/lib/balance";
-import { BRAND } from "@/lib/clients";
 import { site } from "@/site.config";
 import type { Plan } from "@/site.config.example";
 import OrderForm, { type PlanGroup } from "./OrderForm";
 import PendingOrder from "./PendingOrder";
 import RedeemForm from "./RedeemForm";
+import Brand from "../Brand";
 
 export const dynamic = "force-dynamic";
 
@@ -79,7 +79,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16">
       <header className="navbar px-0">
-        <div className="flex-1 text-xl font-bold">{BRAND}</div>
+        <Brand href="/dashboard" size={30} className="flex-1 text-xl" />
         <Link href="/dashboard" className="btn btn-ghost btn-sm">
           我的订阅
         </Link>

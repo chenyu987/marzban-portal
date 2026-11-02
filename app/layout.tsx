@@ -3,8 +3,13 @@ import { site } from "@/site.config";
 import ContactSupport from "./ContactSupport";
 import "./globals.css";
 
-export const metadata: Metadata = { title: site.brand, description: site.description };
-export const viewport: Viewport = { width: "device-width", initialScale: 1 };
+export const metadata: Metadata = {
+  title: { default: site.brand, template: `%s · ${site.brand}` },
+  description: site.landing?.sub ?? site.description,
+  icons: site.logo ? { icon: site.logo.svg, apple: site.logo.appleTouch } : undefined,
+  appleWebApp: { title: site.brand, capable: true, statusBarStyle: "default" },
+};
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: site.themeColor };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

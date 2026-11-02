@@ -6,12 +6,12 @@ import { formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, mask
 import { BALANCE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
 import { site } from "@/site.config";
 import { describePlan, findPlan } from "@/lib/plans";
-import { BRAND } from "@/lib/clients";
 import { logout } from "../actions";
 import BindForm from "./BindForm";
 import SubscriptionLink from "./SubscriptionLink";
 import ReferralCard from "./ReferralCard";
 import ContactSupport from "../ContactSupport";
+import Brand from "../Brand";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +60,7 @@ export default async function DashboardPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16">
       <header className="navbar px-0">
-        <div className="flex-1 text-xl font-bold">{BRAND}</div>
+        <Brand href="/dashboard" size={30} className="flex-1 text-xl" />
         <span className="mr-3 hidden text-sm text-base-content/70 sm:inline">{customer.email}</span>
         <Link href="/plans" className="btn btn-ghost btn-sm">
           购买/续费

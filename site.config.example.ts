@@ -27,6 +27,22 @@ export type SiteConfig = {
     // Windows 的 Hiddify 想固定某个版本时单独填，不用就和 hiddify 一样
     hiddifyWindows: string;
   };
+  // 品牌图标，文件放在 public/site/ 下（不同步到公开仓库）：svg 用在导航和登录页，其他是浏览器标签、手机主屏幕图标。
+  // 不填就只显示品牌名文字
+  logo?: { svg: string; appleTouch?: string; icon192?: string; icon512?: string; maskable512?: string };
+  // 品牌主色（手机浏览器顶栏、主屏幕启动画面用），比如 #2F6BFF
+  themeColor?: string;
+  // 首页（/）的内容。不填就只有品牌名、介绍和套餐价格。
+  // highlights：卖点卡片；regions：节点所在地；steps：几步用上；faq：常见问题
+  landing?: {
+    headline: string;
+    sub: string;
+    highlights?: { icon: string; title: string; desc: string }[];
+    // 国旗 emoji 在 Windows 上显示成字母，所以地区用文字：城市 + 国家
+    regions?: { name: string; country: string }[];
+    steps?: { title: string; desc: string }[];
+    faq?: { q: string; a: string }[];
+  };
   // 教程截图放在 public/site/tutorial/ 下（不同步到公开仓库）。true 才在教程里显示截图
   tutorialShots?: boolean;
   // 每个页面底部「联系我们」的邮箱，不填就不显示

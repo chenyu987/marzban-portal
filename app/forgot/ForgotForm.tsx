@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { BRAND } from "@/lib/clients";
 import { requestReset } from "../actions";
 import ContactSupport from "../ContactSupport";
+import Brand from "../Brand";
 
 // 还不能发邮件时（没配发信服务）不显示输入框，直接让客人找管理员
 export default function ForgotForm({ canSend }: { canSend: boolean }) {
@@ -13,7 +13,7 @@ export default function ForgotForm({ canSend }: { canSend: boolean }) {
     <main className="flex min-h-screen items-center justify-center px-4">
       <form action={action} className="card w-full max-w-sm bg-base-100 shadow-md">
         <div className="card-body gap-4">
-          <h1 className="text-2xl font-bold">{BRAND}</h1>
+          <Brand size={36} className="text-2xl" />
           <p className="text-base-content/70">忘记密码</p>
           {canSend ? (
             <>

@@ -62,6 +62,25 @@ async function logout(page: Page) {
   await expect(page).toHaveURL(/\/login/);
 }
 
+test("首页：卖点、节点、价格、常见问题，注册按钮带上推荐码", async ({ page }) => {
+  await page.goto("/?ref=ABCD2345");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByTestId("regions")).toContainText("东京");
+  // 每个档位一张价格卡，标月付价
+  await expect(page.getByTestId("pricing").locator("h3").first()).toBeVisible();
+  await expect(page.getByTestId("pricing")).toContainText("/月");
+  await expect(page.getByText("常见问题").first()).toBeVisible();
+  // 推荐链接带来的，注册页自动填好推荐码
+  await page.getByRole("link", { name: "免费注册" }).first().click();
+  await expect(page).toHaveURL(/\/register\?ref=ABCD2345/);
+  await expect(page.getByPlaceholder("推荐码（选填）")).toHaveValue("ABCD2345");
+  // 浏览器标签和主屏幕图标、manifest 都在
+  const manifest = await (await page.request.get("/manifest.webmanifest")).json();
+  expect(manifest.start_url).toBe("/dashboard");
+  expect(manifest.icons.length).toBeGreaterThan(0);
+  expect((await page.request.get(manifest.icons[0].src)).ok()).toBe(true);
+});
+
 test("客人从注册到续费、忘记密码，管理员确认订单", async ({ page }) => {
   const email = `e2e-${Date.now()}@example.test`;
   const password = "E2eTest-1234";

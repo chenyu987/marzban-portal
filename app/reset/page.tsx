@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { db, nowSec } from "@/lib/env";
 import { hashResetToken } from "@/lib/reset";
-import { BRAND } from "@/lib/clients";
 import ResetForm from "./ResetForm";
+import Brand from "../Brand";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ export default async function ResetPage({ searchParams }: { searchParams: Promis
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="card w-full max-w-sm bg-base-100 shadow-md">
         <div className="card-body gap-4">
-          <h1 className="text-2xl font-bold">{BRAND}</h1>
+          <Brand size={36} className="text-2xl" />
           <p>这个链接已经失效了（用过了或者过期了）。</p>
           <Link href="/forgot" className="btn btn-primary">
             重新申请

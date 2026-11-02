@@ -1,8 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { BRAND } from "@/lib/clients";
 import { resetPassword } from "../actions";
+import Brand from "../Brand";
 
 export default function ResetForm({ token }: { token: string }) {
   const [state, action, pending] = useActionState(resetPassword, undefined);
@@ -10,7 +10,7 @@ export default function ResetForm({ token }: { token: string }) {
     <main className="flex min-h-screen items-center justify-center px-4">
       <form action={action} className="card w-full max-w-sm bg-base-100 shadow-md">
         <div className="card-body gap-4">
-          <h1 className="text-2xl font-bold">{BRAND}</h1>
+          <Brand size={36} className="text-2xl" />
           <p className="text-base-content/70">设置新密码</p>
           <input type="hidden" name="token" value={token} />
           <label className="floating-label">
