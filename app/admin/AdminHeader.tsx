@@ -20,6 +20,9 @@ export default function AdminHeader({ email }: { email: string }) {
         <Link href="/admin/nodes" className="btn btn-ghost btn-sm">
           节点
         </Link>
+        <Link href="/admin/hosts" className="btn btn-ghost btn-sm">
+          Host
+        </Link>
         <Link href="/admin/codes" className="btn btn-ghost btn-sm">
           兑换码
         </Link>

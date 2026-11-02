@@ -163,3 +163,40 @@ export async function nodesUsage(start: Date, end: Date) {
 export const coreStats = () => api<{ version: string; started: boolean; logs_websocket: string }>("GET", "/core");
 // 重启主节点的 Xray（会顺带把所有节点也重启一遍），所有人断开几秒
 export const restartCore = () => api<unknown>("POST", "/core/restart");
+
+// ---- 入站和 Host（后台「Host」页）----
+
+export type Inbound = { tag: string; protocol: string; network: string; tls: string; port: number | string };
+// Host 有很多字段（mux、fragment……），后台只改常用的几个，其他原样带回去
+export type ProxyHost = {
+  remark: string;
+  address: string;
+  port: number | null;
+  sni: string | null;
+  host: string | null;
+  path: string | null;
+  security: "inbound_default" | "none" | "tls";
+  is_disabled?: boolean;
+  [k: string]: unknown;
+};
+
+export const listInbounds = () => api<Record<string, Inbound[]>>("GET", "/inbounds");
+export const getHosts = () => api<Record<string, ProxyHost[]>>("GET", "/hosts");
+// 整份替换：传进去的是全部入站的 Host
+export const putHosts = (hosts: Record<string, ProxyHost[]>) => api<Record<string, ProxyHost[]>>("PUT", "/hosts", hosts);
+
+// ---- 批量操作和单个用户的流量明细 ----
+const isoUtc = (d: Date) => d.toISOString().slice(0, 19);
+
+// 到期时间在 before 之前的用户名（已经过期了的）
+export const expiredUsers = (before: Date) => api<string[]>("GET", `/users/expired?${new URLSearchParams({ expired_before: isoUtc(before) })}`);
+export const deleteExpiredUsers = (before: Date) =>
+  api<string[]>("DELETE", `/users/expired?${new URLSearchParams({ expired_before: isoUtc(before) })}`);
+// 所有用户的已用流量清零
+export const resetAllUsage = () => api<unknown>("POST", "/users/reset");
+// 一个用户在一段时间里在各节点用的流量
+export const userUsage = (username: string, start: Date, end: Date) =>
+  api<{ usages: { node_id: number | null; node_name: string; used_traffic: number }[] }>(
+    "GET",
+    `/user/${encodeURIComponent(username)}/usage?${new URLSearchParams({ start: isoUtc(start), end: isoUtc(end) })}`,
+  );

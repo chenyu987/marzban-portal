@@ -9,8 +9,8 @@ import { verifyPassword } from "@/lib/password";
 import { createAdminSession, currentAdmin, destroyAdminSession, logAdmin, requireAccess, requireAdmin } from "@/lib/admin";
 import { cancelPendingOrder, confirmTransferOrder, revokeOrder, verifyOrder, type AdminResult } from "@/lib/admin-orders";
 import type { FormState } from "../actions";
-import { addNode, createUser, deleteNode, deleteUser, findUser, listNodes, modifyNode, modifyUser, reconnectNode, resetUsage, restartCore, revokeSubscription } from "@/lib/marzban";
-import { createUserBody, describeChanges, parseNodeForm, parseUserForm, USERNAME_RE, type UserFields } from "@/lib/admin-users";
+import { addNode, createUser, deleteExpiredUsers, deleteNode, deleteUser, expiredUsers, findUser, getHosts, resetAllUsage, listNodes, putHosts, modifyNode, modifyUser, reconnectNode, resetUsage, restartCore, revokeSubscription } from "@/lib/marzban";
+import { createUserBody, describeChanges, parseExpiredDays, parseNodeForm, parseUserForm, validateHosts, USERNAME_RE, type UserFields } from "@/lib/admin-users";
 import { formatBytes, formatExpire, RESET_LABEL } from "@/lib/format";
 import { findPlan } from "@/lib/plans";
 import { formatRedeemCode, newRedeemCode } from "@/lib/format";
@@ -429,4 +429,79 @@ export async function adminRestartCore(): Promise<FormState> {
   await logAdmin(admin, "core.restart", null);
   revalidatePath("/admin/nodes");
   return { ok: "Xray 已重启" };
+}
+
+// ---- Host（/admin/hosts）----
+
+// 保存一个入站的 Host：Marzban 的接口是整份替换，所以先现取全部 Host，只换掉这个入站的，别的入站原样带回去
+export async function adminSaveHosts(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const tag = String(form.get("tag") ?? "");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(String(form.get("hosts") ?? ""));
+  } catch {
+    return { error: "Host 数据不对" };
+  }
+  const r = validateHosts(parsed);
+  if ("error" in r) return { error: r.error };
+  let before: number;
+  try {
+    const all = await getHosts();
+    if (!(tag in all)) return { error: `Marzban 上没有入站 ${tag}` };
+    before = all[tag].length;
+    await putHosts({ ...all, [tag]: r.hosts as (typeof all)[string] });
+  } catch (e) {
+    return { error: `保存失败：${errText(e)}` };
+  }
+  const off = r.hosts.filter((h) => h.is_disabled).length;
+  await logAdmin(admin, "hosts.save", tag, `${before} 个 → ${r.hosts.length} 个${off ? `（${off} 个停用）` : ""}：${r.hosts.map((h) => h.remark).join("、")}`);
+  revalidatePath("/admin/hosts");
+  return { ok: `已保存 ${tag} 的 Host，客人更新订阅后生效` };
+}
+
+// ---- 批量操作（/admin/users 页底）----
+
+// 先预览：到期超过 N 天的有哪些（不改任何东西，不记日志）
+export async function adminPreviewExpired(_: FormState, form: FormData): Promise<FormState & { names?: string[] }> {
+  await requireAdmin();
+  const days = parseExpiredDays(String(form.get("days") ?? ""));
+  if (!days) return { error: "天数要写 1 到 3650 的整数" };
+  try {
+    const names = await expiredUsers(new Date(Date.now() - days * 86400_000));
+    return { ok: names.length ? `到期超过 ${days} 天的有 ${names.length} 个` : `没有到期超过 ${days} 天的用户`, names };
+  } catch (e) {
+    return { error: `查 Marzban 出错：${errText(e)}` };
+  }
+}
+
+// 删到期超过 N 天的用户，同时解除和客人的绑定（订单记录不动）
+export async function adminDeleteExpired(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const days = parseExpiredDays(String(form.get("days") ?? ""));
+  if (!days) return { error: "天数要写 1 到 3650 的整数" };
+  let names: string[];
+  try {
+    names = await deleteExpiredUsers(new Date(Date.now() - days * 86400_000));
+  } catch (e) {
+    return { error: `删除失败：${errText(e)}` };
+  }
+  if (names.length) {
+    await db().batch(names.map((n) => db().prepare("DELETE FROM subscriptions WHERE marzban_username = ?").bind(n)));
+  }
+  await logAdmin(admin, "users.delete_expired", `到期超过 ${days} 天`, names.length ? `${names.length} 个：${names.join("、")}` : "0 个");
+  revalidatePath("/admin/users");
+  return { ok: `已删除 ${names.length} 个用户` };
+}
+
+export async function adminResetAllUsage(): Promise<FormState> {
+  const admin = await requireAdmin();
+  try {
+    await resetAllUsage();
+  } catch (e) {
+    return { error: `清零失败：${errText(e)}` };
+  }
+  await logAdmin(admin, "users.reset_all_usage", "全部用户");
+  revalidatePath("/admin/users");
+  return { ok: "全部用户的已用流量已清零" };
 }

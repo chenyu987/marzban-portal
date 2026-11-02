@@ -4,6 +4,7 @@ import { formatExpire, formatMoney } from "@/lib/format";
 import { findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
 import AdminHeader from "./AdminHeader";
+import Overview from "./Overview";
 import OrderActions from "./OrderActions";
 import VerifyActions from "./VerifyActions";
 
@@ -69,8 +70,9 @@ export default async function AdminHome() {
   return (
     <div className="mx-auto max-w-3xl px-4 pb-16">
       <AdminHeader email={admin.email} />
+      <Overview pending={open.length + unverified.length} />
 
-      <h1 className="mt-4 mb-1 text-2xl font-bold">已开通、待对账</h1>
+      <h1 className="mt-6 mb-1 text-2xl font-bold">已开通、待对账</h1>
       <p className="mb-4 text-sm text-base-content/60">
         客人付完款点「我已付款」就自动开通了。按点的时间、金额、付款方式和付款人去账单里找这笔钱：找到了点「确认到账」，找不到点「没收到钱」把订阅收回。
       </p>

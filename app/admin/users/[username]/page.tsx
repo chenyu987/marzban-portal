@@ -2,9 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
-import { findUser, type MarzbanUser } from "@/lib/marzban";
+import { findUser, userUsage, type MarzbanUser } from "@/lib/marzban";
 import { formatBytes, formatExpire, RESET_LABEL, STATUS_LABEL, timeLeft } from "@/lib/format";
-import { onlineText, toBeijingInput } from "@/lib/admin-users";
+import { monthStartBeijing, onlineText, toBeijingInput } from "@/lib/admin-users";
 import AdminHeader from "../../AdminHeader";
 import { adminEditUser } from "../../actions";
 import UserForm from "../UserForm";
@@ -35,6 +35,10 @@ export default async function UserPage({ params }: { params: Promise<{ username:
     .prepare("SELECT c.id, c.email, c.wechat FROM subscriptions s JOIN customers c ON c.id = s.customer_id WHERE s.marzban_username = ?")
     .bind(username)
     .first<{ id: number; email: string; wechat: string | null }>();
+  // 本月在各节点用的流量；查不到不影响页面
+  const usage = await userUsage(username, monthStartBeijing(Date.now()), new Date())
+    .then((r) => r.usages.filter((u) => u.used_traffic > 0).sort((a, b) => b.used_traffic - a.used_traffic))
+    .catch(() => null);
   const st = STATUS_LABEL[user.status] ?? { text: user.status, badge: "badge-neutral" };
   const left = timeLeft(user.expire);
 
@@ -77,6 +81,23 @@ export default async function UserPage({ params }: { params: Promise<{ username:
           </div>
         </div>
       </div>
+
+      {usage && (
+        <div className="mb-4 rounded-box bg-base-100 p-4 text-sm shadow-sm" data-testid="node-usage">
+          <div className="mb-1 text-base-content/60">本月各节点流量</div>
+          {usage.length === 0 ? (
+            <div className="text-base-content/50">本月还没用过</div>
+          ) : (
+            <div className="flex flex-wrap gap-x-6 gap-y-1">
+              {usage.map((u) => (
+                <span key={u.node_name}>
+                  {u.node_id === null ? "面板本机" : u.node_name} <b>{formatBytes(u.used_traffic)}</b>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <UserActions username={user.username} url={user.subscription_url} />
 

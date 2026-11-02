@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createUserBody, describeChanges, fromBeijingInput, monthStartBeijing, onlineText, parseNodeForm, parseUserForm, toBeijingInput } from "./admin-users";
+import { createUserBody, describeChanges, fromBeijingInput, monthStartBeijing, onlineText, parseExpiredDays, parseNodeForm, validateHosts, parseUserForm, toBeijingInput } from "./admin-users";
 
 const GB = 1024 ** 3;
 const form = (o: Record<string, string>) => (k: string) => o[k] ?? "";
@@ -91,5 +91,31 @@ describe("monthStartBeijing", () => {
     // 北京时间 2026-12-01 03:00 = UTC 11-30 19:00，月初应是北京 12-01 00:00 = UTC 11-30 16:00
     expect(monthStartBeijing(Date.parse("2026-11-30T19:00:00Z")).toISOString()).toBe("2026-11-30T16:00:00.000Z");
     expect(monthStartBeijing(Date.parse("2026-11-15T00:00:00Z")).toISOString()).toBe("2026-10-31T16:00:00.000Z");
+  });
+});
+
+describe("validateHosts", () => {
+  const ok = { remark: "🇯🇵 东京 {USERNAME}", address: "jp.example.com", port: "", security: "inbound_default", mux_enable: true };
+  it("整理字段，后台不改的字段原样带回去", () => {
+    expect(validateHosts([{ ...ok, sni: " ", path: "/x " }])).toEqual({
+      hosts: [{ ...ok, port: null, sni: null, host: null, path: "/x", is_disabled: false }],
+    });
+    expect(validateHosts([{ ...ok, port: "8443", is_disabled: 1 }])).toHaveProperty("hosts.0.port", 8443);
+    expect(validateHosts([])).toEqual({ hosts: [] });
+  });
+  it("填错给出是第几个、哪里错", () => {
+    expect(validateHosts("x")).toHaveProperty("error");
+    expect(validateHosts([{ ...ok, remark: " " }])).toEqual({ error: "第 1 个 Host的备注（客人看到的节点名）不能空" });
+    expect(validateHosts([ok, { ...ok, address: "" }])).toHaveProperty("error", "第 2 个 Host的地址不能空");
+    expect(validateHosts([{ ...ok, address: "https://jp.example.com" }])).toHaveProperty("error");
+    expect(validateHosts([{ ...ok, port: "0" }])).toHaveProperty("error");
+    expect(validateHosts([{ ...ok, security: "reality" }])).toHaveProperty("error");
+  });
+});
+
+describe("parseExpiredDays", () => {
+  it("只收 1–3650 的整数", () => {
+    expect(parseExpiredDays(" 30 ")).toBe(30);
+    for (const bad of ["", "0", "-1", "1.5", "3651", "abc"]) expect(parseExpiredDays(bad)).toBeNull();
   });
 });

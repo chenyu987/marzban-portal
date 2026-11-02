@@ -391,7 +391,50 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await admin.getByRole("button", { name: "重启 Xray" }).click();
   await expect(admin.getByText("Xray 已重启")).toBeVisible();
 
-  // 日志页能按操作筛
+  // 首页总览：一排数字，待处理订单能点进去
+  await admin.goto("/admin");
+  await expect(admin.getByTestId("overview")).toContainText("本月成交");
+  await expect(admin.getByTestId("overview")).toContainText("出错的节点");
+
+  // 批量：建一个到期 100 天的用户，先预览再删；全部流量清零
+  const oldMz = `e2e_old_${stamp}`.slice(0, 32);
+  await mockMarzban("POST", "/user", { username: oldMz, expire: Math.floor(Date.now() / 1000) - 100 * 86400 });
+  await admin.goto("/admin/users");
+  await admin.getByLabel("天数").fill("90");
+  await admin.getByRole("button", { name: "先看看有哪些" }).click();
+  await expect(admin.getByText(oldMz)).toBeVisible();
+  const delBtn = admin.getByRole("button", { name: /^删除这 \d+ 个$/ });
+  const count = (await delBtn.innerText()).match(/\d+/)![0];
+  admin.removeAllListeners("dialog");
+  admin.on("dialog", (d) => d.accept(d.message().includes("全部清零") ? "全部清零" : count));
+  await delBtn.click();
+  await expect(admin.getByText(`已删除 ${count} 个用户`)).toBeVisible();
+  await admin.getByRole("button", { name: "全部清零" }).click();
+  await expect(admin.getByText("全部用户的已用流量已清零")).toBeVisible();
+  admin.removeAllListeners("dialog");
+  admin.on("dialog", (d) => d.accept());
+
+    // Host：给第一个入站改备注、加一个、填错被拦、保存；别的入站和后台不改的字段不受影响
+  await admin.goto("/admin/hosts");
+  const card = admin.getByTestId("inbound").filter({ hasText: "VLESS TCP REALITY" });
+  await card.getByLabel("备注（节点名）").first().fill("🇯🇵 东京 {USERNAME}");
+  await card.getByRole("button", { name: "加一个 Host" }).click();
+  await expect(card.getByText("有没保存的改动")).toBeVisible();
+  await card.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(card.getByText("第 2 个 Host的备注（客人看到的节点名）不能空")).toBeVisible();
+  await card.getByLabel("备注（节点名）").nth(1).fill("🇯🇵 东京备用");
+  await card.getByLabel("地址").nth(1).fill("jp2.example.test");
+  await card.getByLabel("端口").nth(1).fill("8443");
+  await card.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(card.getByText("已保存 VLESS TCP REALITY 的 Host")).toBeVisible();
+  const savedHosts = (await mockMarzban("GET", "/hosts")) as unknown as Record<string, Record<string, unknown>[]>;
+  expect(savedHosts["VLESS TCP REALITY"].map((h) => [h.remark, h.port, h.mux_enable])).toEqual([
+    ["🇯🇵 东京 {USERNAME}", null, true],
+    ["🇯🇵 东京备用", 8443, undefined],
+  ]);
+  expect(savedHosts["VLESS NODE2"]).toHaveLength(1);
+
+    // 日志页能按操作筛
   await admin.goto("/admin/logs?action=codes.create");
   await expect(admin.locator("tbody tr", { hasText: adminEmail })).toContainText("2 个：e2e 测试");
 
@@ -419,6 +462,9 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
     "node.disable",
     "node.delete",
     "core.restart",
+    "users.delete_expired",
+    "users.reset_all_usage",
+    "hosts.save",
   ]);
 
   // 退出后回到登录页

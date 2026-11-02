@@ -31,6 +31,9 @@ const ACTIONS: Record<string, string> = {
   "node.reconnect": "重连节点",
   "node.delete": "删除节点",
   "core.restart": "重启 Xray",
+  "hosts.save": "保存 Host",
+  "users.delete_expired": "删除过期用户",
+  "users.reset_all_usage": "全部流量清零",
 };
 
 type Row = { id: number; admin_email: string; action: string; target: string | null; detail: string | null; ip: string | null; created_at: number };

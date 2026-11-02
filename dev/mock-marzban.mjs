@@ -41,6 +41,13 @@ for (const n of [
   nextNodeId++;
 }
 
+// Host：每个入站一个，带一个后台不改的字段（mux_enable），检查保存时会不会被弄丢
+const hosts = Object.fromEntries(
+  Object.values(INBOUNDS)
+    .flat()
+    .map((tag) => [tag, [{ remark: `${tag} {USERNAME}`, address: "{SERVER_IP}", port: null, sni: null, host: null, path: null, security: "inbound_default", is_disabled: false, mux_enable: true }]]),
+);
+
 const adminTokens = new Set();
 const users = new Map(); // username -> user
 const subTokens = new Map(); // sub token -> username
@@ -215,6 +222,44 @@ const server = http.createServer(async (req, res) => {
       const limit = Number(q.get("limit") ?? list.length);
       log(200);
       return send(res, 200, { users: list.slice(offset, offset + limit).map(toResponse), total: list.length });
+    }
+
+    // ---- 批量操作和流量明细 ----
+    if (path === "/api/users/expired" && (req.method === "GET" || req.method === "DELETE")) {
+      const before = Date.parse(`${url.searchParams.get("expired_before")}Z`) / 1000;
+      const names = [...users.values()].filter((u) => u.expire && u.expire < before).map((u) => u.username);
+      if (req.method === "DELETE") for (const n of names) users.delete(n);
+      log(200);
+      return send(res, 200, names);
+    }
+    if (path === "/api/users/reset" && req.method === "POST") {
+      for (const u of users.values()) {
+        u.used_traffic = 0;
+        if (u.status === "limited") u.status = "active";
+      }
+      return log(200), send(res, 200, {});
+    }
+    if ((m = /^\/api\/user\/([^/]+)\/usage$/.exec(path)) && req.method === "GET") {
+      const u = users.get(decodeURIComponent(m[1]));
+      if (!u) return log(404), send(res, 404, { detail: "User not found" });
+      log(200);
+      return send(res, 200, { username: u.username, usages: [{ node_id: null, node_name: "Master", used_traffic: u.used_traffic }, { node_id: 1, node_name: "东京", used_traffic: 0 }] });
+    }
+
+    // ---- 入站和 Host ----
+    if (path === "/api/inbounds" && req.method === "GET") {
+      const out = {};
+      for (const [proto, tags] of Object.entries(INBOUNDS)) out[proto] = tags.map((tag, i) => ({ tag, protocol: proto, network: "tcp", tls: proto === "vless" ? "reality" : "none", port: 443 + i }));
+      log(200);
+      return send(res, 200, out);
+    }
+    if (path === "/api/hosts" && req.method === "GET") return log(200), send(res, 200, hosts);
+    if (path === "/api/hosts" && req.method === "PUT") {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      for (const tag of Object.keys(body)) if (!Object.values(INBOUNDS).flat().includes(tag)) return log(400), send(res, 400, { detail: `Inbound ${tag} doesn't exist` });
+      Object.assign(hosts, body);
+      log(200);
+      return send(res, 200, hosts);
     }
 
     // ---- 节点和核心 ----

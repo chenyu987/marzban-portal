@@ -134,3 +134,39 @@ export function monthStartBeijing(nowMs: number): Date {
   const bj = new Date(nowMs + 8 * 3600_000);
   return new Date(Date.UTC(bj.getUTCFullYear(), bj.getUTCMonth(), 1) - 8 * 3600_000);
 }
+
+// ---- Host 校验 ----
+export const HOST_SECURITY = ["inbound_default", "none", "tls"] as const;
+
+// 后台提交上来的一个入站的 Host 列表：备注、地址必填；端口空着就用入站的端口；
+// 其他字段（mux、fragment 等后台不改的）原样保留
+export function validateHosts(input: unknown): { hosts: Record<string, unknown>[] } | { error: string } {
+  if (!Array.isArray(input)) return { error: "Host 数据不对" };
+  const out: Record<string, unknown>[] = [];
+  for (const [i, raw] of input.entries()) {
+    if (!raw || typeof raw !== "object") return { error: `第 ${i + 1} 个 Host 数据不对` };
+    const h = raw as Record<string, unknown>;
+    const n = `第 ${i + 1} 个 Host`;
+    const remark = String(h.remark ?? "").trim();
+    const address = String(h.address ?? "").trim();
+    if (!remark) return { error: `${n}的备注（客人看到的节点名）不能空` };
+    if (!address) return { error: `${n}的地址不能空` };
+    if (/^https?:\/\//i.test(address)) return { error: `${n}的地址不要带 http://` };
+    let port: number | null = null;
+    if (h.port !== null && h.port !== undefined && String(h.port).trim() !== "") {
+      port = Number(h.port);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) return { error: `${n}的端口要是 1 到 65535，或者留空用入站的端口` };
+    }
+    const security = String(h.security ?? "inbound_default");
+    if (!(HOST_SECURITY as readonly string[]).includes(security)) return { error: `${n}的安全设置不对` };
+    const opt = (v: unknown) => (v === null || v === undefined || String(v).trim() === "" ? null : String(v).trim());
+    out.push({ ...h, remark, address, port, sni: opt(h.sni), host: opt(h.host), path: opt(h.path), security, is_disabled: !!h.is_disabled });
+  }
+  return { hosts: out };
+}
+
+// 「到期超过 N 天」的 N：1–3650 的整数
+export function parseExpiredDays(v: string): number | null {
+  const n = Number(v.trim());
+  return Number.isInteger(n) && n >= 1 && n <= 3650 ? n : null;
+}

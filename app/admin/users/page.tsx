@@ -5,6 +5,7 @@ import { getSystem, listUsers, type MarzbanUser, type SystemStats, type UserStat
 import { formatBytes, formatExpire, RESET_LABEL, STATUS_LABEL } from "@/lib/format";
 import { onlineText, SORTS, STATUS_FILTERS } from "@/lib/admin-users";
 import AdminHeader from "../AdminHeader";
+import BulkActions from "./BulkActions";
 
 export const dynamic = "force-dynamic";
 
@@ -186,6 +187,9 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
           </div>
         </div>
       )}
+      <div className="mt-8">
+        <BulkActions />
+      </div>
     </div>
   );
 }
