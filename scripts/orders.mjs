@@ -73,7 +73,7 @@ const id = Number(idArg);
 if ((cmd !== "confirm" && cmd !== "cancel") || !Number.isInteger(id) || id < 1) fail(USAGE);
 
 const [o] = d1(`
-  SELECT o.*, c.email, r.email AS referrer
+  SELECT o.*, c.email, c.wechat, r.email AS referrer
   FROM orders o
   JOIN customers c ON c.id = o.customer_id
   LEFT JOIN customers r ON r.id = c.referred_by
@@ -162,9 +162,9 @@ if (o.marzban_username) {
   if (!current.expire) fail(`${o.marzban_username} 永不到期，不用续期。取消这张单，和客人确认要不要新开`);
   action = { kind: "renew", username: o.marzban_username, current };
 } else {
-  let username = nextUsername(o.customer_id, subs);
+  let username = nextUsername(o.customer_id, subs, o.wechat);
   // 万一 Marzban 上已经有同名用户（比如之前手动建过），序号往后挪
-  while (await mz.getUser(username)) username = nextUsername(o.customer_id, [...subs, username]);
+  while (await mz.getUser(username)) username = nextUsername(o.customer_id, [...subs, username], o.wechat);
   action = { kind: "new", username };
 }
 

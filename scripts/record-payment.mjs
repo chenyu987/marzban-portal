@@ -47,7 +47,7 @@ const d1 = (sql) => d1At(remote, sql);
 
 // ---- 查客人 ----
 const [c] = d1(`
-  SELECT c.id, c.email, r.email AS referrer
+  SELECT c.id, c.email, c.wechat, r.email AS referrer
   FROM customers c LEFT JOIN customers r ON r.id = c.referred_by
   WHERE c.email = ${q(email.trim().toLowerCase())}`);
 if (!c) fail(`没有找到客人 ${email}`);
@@ -69,9 +69,9 @@ if (plan) {
     if (!current.expire) fail(`${values.renew} 永不到期，不用续期。只想记账就去掉 --plan`);
     action = { kind: "renew", username: values.renew, current };
   } else if (values.new || subs.length === 0) {
-    let username = nextUsername(c.id, subs);
+    let username = nextUsername(c.id, subs, c.wechat);
     // 万一 Marzban 上已经有同名用户（比如之前手动建过），序号往后挪
-    while (await mz.getUser(username)) username = nextUsername(c.id, [...subs, username]);
+    while (await mz.getUser(username)) username = nextUsername(c.id, [...subs, username], c.wechat);
     action = { kind: "new", username };
   } else {
     fail(`${c.email} 名下已经有订阅：${subs.join("、")}\n续期加 --renew <用户名>，再开一个新的加 --new`);

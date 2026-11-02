@@ -81,6 +81,8 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await expect(title).toBeVisible();
   await expect(page.locator(".card-title").filter({ hasText: /^c\d+_\d+$/ })).toHaveCount(0);
   const username = await title.innerText();
+  // Marzban 用户名用注册时填的微信号；每次 e2e 都用同一个微信号，Marzban 里已经有了就往后加序号
+  expect(username).toMatch(/^e2e_wx_test(_\d+)?$/);
 
   // 有订阅以后，「绑定已有订阅」收成页面最下面的小链接，点开才有输入框
   await expect(page.getByRole("heading", { name: "绑定已有订阅" })).toHaveCount(0);

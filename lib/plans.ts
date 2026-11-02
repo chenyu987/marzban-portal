@@ -28,16 +28,26 @@ export function setIpNote(note: string | null | undefined, ip: number): string {
   return old.trim() ? `${old.trimEnd()} ${tag}` : tag;
 }
 
-// Marzban 用户名：c<客人id>_<序号>，序号接着这个客人已有的往下排。不带邮箱，因为用户名会显示在客户端里
-export function nextUsername(customerId: number, existing: string[]): string {
-  const prefix = `c${customerId}_`;
+// 微信号转成 Marzban 能用的用户名：只留小写字母、数字、下划线（减号换成下划线），最长 28 位给序号留位置。
+// 转出来不够 3 位就不用，返回 null
+export function wechatUsername(wechat: string | null | undefined): string | null {
+  const base = (wechat ?? "").toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 28);
+  return base.length >= 3 ? base : null;
+}
+
+// Marzban 用户名：管理员在面板里一眼看出是谁，所以用客人的微信号，第一个就叫微信号，再开的接着 _2、_3 往下排。
+// 没有微信号的老客人用 c<客人id>_<序号>。不带邮箱，因为用户名会显示在客人的订阅页上
+export function nextUsername(customerId: number, existing: string[], wechat?: string | null): string {
+  const base = wechatUsername(wechat);
+  const prefix = base ? `${base}_` : `c${customerId}_`;
   let max = 0;
   for (const u of existing) {
+    if (base && u === base) max = Math.max(max, 1);
     if (!u.startsWith(prefix)) continue;
     const n = Number(u.slice(prefix.length));
     if (Number.isInteger(n) && n > max) max = n;
   }
-  return `${prefix}${max + 1}`;
+  return base && max === 0 ? base : `${prefix}${max + 1}`;
 }
 
 const dataLimit = (plan: Plan) => (plan.dataGB === null ? 0 : plan.dataGB * GB); // Marzban 里 0 表示不限

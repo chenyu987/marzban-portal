@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Plan } from "../site.config.example";
-import { findPlan, newUserBody, nextUsername, renewUserBody, renewedExpire, setIpNote } from "./plans";
+import { findPlan, newUserBody, nextUsername, renewUserBody, renewedExpire, setIpNote, wechatUsername } from "./plans";
 
 const now = 1_800_000_000;
 const plan: Plan = { id: "month", name: "月付", price: 2000, days: 30, dataGB: 100, ip: 3 };
@@ -34,6 +34,19 @@ describe("nextUsername", () => {
   it("接着已有的序号往下排，忽略别人的和老用户名", () => {
     expect(nextUsername(7, [])).toBe("c7_1");
     expect(nextUsername(7, ["alice", "c7_1", "c7_3", "c17_9"])).toBe("c7_4");
+  });
+  it("有微信号就用微信号，第二个起加序号", () => {
+    expect(nextUsername(7, [], "Alice-88")).toBe("alice_88");
+    expect(nextUsername(7, ["alice_88"], "Alice-88")).toBe("alice_88_2");
+    expect(nextUsername(7, ["c7_1", "alice_88", "alice_88_3"], "Alice-88")).toBe("alice_88_4");
+  });
+  it("微信号太短或全是怪字符时退回 c<id>_<序号>", () => {
+    expect(wechatUsername("ab")).toBeNull();
+    expect(nextUsername(7, ["c7_1"], "")).toBe("c7_2");
+    expect(nextUsername(7, [], null)).toBe("c7_1");
+  });
+  it("太长的截到 28 位", () => {
+    expect(wechatUsername("a".repeat(40))).toBe("a".repeat(28));
   });
 });
 

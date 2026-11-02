@@ -1,6 +1,7 @@
 // 服务端共用的开通逻辑：客人网页（兑换码、余额购买）和管理后台确认订单都用。
 // 不放在 app/actions.ts 里：那个文件 export 的函数都会变成浏览器能直接调用的 Server Action
 import "server-only";
+import { db } from "./env";
 import { createUser, findUser, modifyUser, resetUsage } from "./marzban";
 import { nextUsername } from "./plans";
 import { provisionNew, provisionRenew, type ProvisionOps, type ProvisionResult } from "./provision";
@@ -20,9 +21,11 @@ export async function provisionTarget(
   now: number,
 ): Promise<{ error: string } | ProvisionResult> {
   if (target === "new") {
-    let username = nextUsername(customerId, subs);
-    // Marzban 上万一已经有同名用户（比如管理员手动建过），序号往后挪
-    while (await findUser(username)) username = nextUsername(customerId, [...subs, username]);
+    // 用户名用客人的微信号，管理员在面板里一眼看出是谁
+    const c = await db().prepare("SELECT wechat FROM customers WHERE id = ?").bind(customerId).first<{ wechat: string | null }>();
+    let username = nextUsername(customerId, subs, c?.wechat);
+    // Marzban 上万一已经有同名用户（管理员手动建过、或者别人的微信号转出来一样），序号往后挪
+    while (await findUser(username)) username = nextUsername(customerId, [...subs, username], c?.wechat);
     return provisionNew(marzbanOps, username, plan, now);
   }
   const current = await findUser(target);
