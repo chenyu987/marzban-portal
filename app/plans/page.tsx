@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
 import { formatDate, formatExpire, formatMoney, formatSubCode, formatOrderNo } from "@/lib/format";
@@ -10,6 +9,7 @@ import OrderForm, { type PlanGroup } from "./OrderForm";
 import PendingOrder from "./PendingOrder";
 import RedeemForm from "./RedeemForm";
 import Brand from "../Brand";
+import CustomerNav from "../CustomerNav";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +71,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
         price: price(p.price),
         amount: formatMoney(p.price).replace(/\.00$/, ""),
         fen: p.price,
+        days: p.days,
         tag: show?.tags?.[p.id],
       })),
     };
@@ -78,15 +79,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16">
-      <header className="navbar px-0">
-        <Brand href="/dashboard" size={30} className="flex-1 text-xl" />
-        <Link href="/dashboard" className="btn btn-ghost btn-sm">
-          我的订阅
-        </Link>
-        <Link href="/tutorial" className="btn btn-ghost btn-sm">
-          安装教程
-        </Link>
-      </header>
+      <CustomerNav />
 
       <h1 className="mt-4 mb-4 text-2xl font-bold">购买套餐</h1>
 
@@ -116,7 +109,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
         <p className="text-base-content/70">套餐还在准备中。</p>
       ) : (
         <>
-          {canTransfer && <p className="mb-3 text-sm text-base-content/70">点价格下单，按提示扫码付款，付完点「我已付款」马上开通。有余额时可以直接抵扣。</p>}
+          {canTransfer && <p className="mb-3 text-sm text-base-content/70">选好套餐点「下单」，按提示扫码付款，付完点「我已付款」马上开通。有余额时可以直接抵扣。</p>}
           {renewSub && <p className="mb-3 font-medium">给订阅 {renewSub.label} 续期：选一个套餐，续上的天数从原来的到期时间往后加。</p>}
           <OrderForm
             groups={groups}

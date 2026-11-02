@@ -90,6 +90,16 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await register(page, email, password);
   // 页面底部有「复制客服邮箱」，客人找客服不用另外去找联系方式
   await expect(page.getByRole("button", { name: /复制客服邮箱/ })).toBeVisible();
+  // 新客人：三步上手的引导，第一步能直接去选套餐
+  await expect(page.getByTestId("onboarding")).toContainText("选套餐付款");
+  // 套餐页：卡片默认月付；切到年付能看到折合每月多少、比按月买省多少；原版价目表收在「看完整价目表」里
+  await page.goto("/plans");
+  await page.getByRole("tab", { name: /^年付/ }).click();
+  await expect(page.getByTestId("plan-cards")).toContainText("比按月买省");
+  await expect(page.getByTestId("plan-cards")).toContainText("折合");
+  await page.getByRole("tab", { name: /^月付/ }).click();
+  await page.goto("/dashboard");
+
   // 还没订阅：绑定框整张卡片显示
   await expect(page.getByRole("heading", { name: "绑定已有订阅" })).toBeVisible();
 
@@ -299,10 +309,13 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await page.locator('button[value="p1-month"]').click();
   const first = await claim("支付宝", "付款人甲");
   await page.goto("/plans");
+  // 卡片按周期显示：先切到季付
+  await page.getByRole("tab", { name: /^季付/ }).click();
   await page.locator('button[value="p1-quarter"]').click();
   await expect(page.locator(".card.border")).toHaveCount(1);
   const second = (await page.locator(".card.border .card-title").first().innerText()).match(/\d{6}-\d{5}/)![0];
   await page.locator('form:has(button[name="plan"]) select[name="target"]').selectOption("new");
+  await page.getByRole("tab", { name: /^月付/ }).click();
   await page.locator('button[value="p1-month"]').click();
   await expect(page.locator(".card.border")).toHaveCount(2);
   const third = await claim("微信", "付款人乙");

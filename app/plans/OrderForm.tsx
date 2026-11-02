@@ -11,7 +11,7 @@ export type PlanGroup = {
   accent?: boolean;
   highlight?: "hot" | "top";
   // price：带币种的价格，确认框里用；amount：价目表上的数字；fen：价格（分），用余额抵扣时算还要付多少
-  plans: { id: string; label: string; name: string; price: string; amount: string; fen: number; tag?: string }[];
+  plans: { id: string; label: string; name: string; price: string; amount: string; fen: number; days: number; tag?: string }[];
 };
 
 // 「月付」→「/月」，跟在价格后面
@@ -43,6 +43,22 @@ export default function OrderForm({
   const deduct = useBalance ? balance : 0;
   const canOrder = canTransfer || balance > 0;
   const money = (fen: number) => `${currency}${(fen / 100).toFixed(2).replace(/\.00$/, "")}`;
+  // 周期按第一档的顺序（月付、季付、半年付、年付）；默认月付
+  const periods = groups[0]?.plans.map((p) => p.label) ?? [];
+  const [period, setPeriod] = useState(0);
+  // 每个周期最多能省百分之几（按各档比按月买省得最多的算），写在周期按钮上
+  const bestSave = periods.map((_, i) =>
+    Math.max(
+      0,
+      ...groups.map((g) => {
+        const p = g.plans[i];
+        const m = g.plans[0];
+        if (!p || !m) return 0;
+        const months = Math.max(1, Math.round(p.days / 30));
+        return 1 - p.fen / (m.fen * months);
+      }),
+    ),
+  );
 
   return (
     <form
@@ -93,6 +109,65 @@ export default function OrderForm({
       {state?.error?.includes("联系客服") && <ContactSupport />}
       {state?.ok && <div role="alert" className="alert alert-success alert-soft">{state.ok}</div>}
 
+      {/* 周期切换：同一档的月付、季付……按周期看，旁边写比按月买省多少 */}
+      <div role="tablist" className="tabs tabs-box self-center">
+        {periods.map((label, i) => (
+          <button key={label} type="button" role="tab" className={`tab ${i === period ? "tab-active" : ""}`} onClick={() => setPeriod(i)}>
+            {label}
+            {bestSave[i] > 0 && <span className="ml-1 text-xs text-success">省{Math.round(bestSave[i] * 100)}%</span>}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="plan-cards">
+        {groups.map((g) => {
+          const p = g.plans[period] ?? g.plans[0];
+          const month = g.plans[0];
+          const months = Math.max(1, Math.round(p.days / 30));
+          const save = month.fen * months - p.fen;
+          const hot = g.highlight === "hot";
+          const top = g.highlight === "top";
+          return (
+            <div
+              key={g.name}
+              className={`relative flex flex-col rounded-box bg-base-100 p-5 shadow-sm ${hot ? "ring-2 ring-primary" : "border border-base-300/70"}`}
+            >
+              {(hot || top) && <span className={`badge absolute -top-3 left-5 ${hot ? "badge-primary" : "badge-accent"}`}>{hot ? "最受欢迎" : "旗舰"}</span>}
+              <h3 className="text-lg font-bold">{g.name}</h3>
+              <p className="text-sm text-base-content/60">{g.lines.at(-1)}</p>
+              <div className="mt-3 flex items-baseline gap-1">
+                <span className="text-3xl font-extrabold">{money(p.fen)}</span>
+                <span className="text-base-content/60">{per(p.label)}</span>
+              </div>
+              <div className="min-h-5 text-sm">
+                {months > 1 && <span className="text-base-content/60">折合 {money(Math.round(p.fen / months))}/月</span>}
+                {save > 0 && <span className="ml-2 text-success">比按月买省 {money(save)}</span>}
+              </div>
+              {p.tag && <span className="mt-1 text-xs text-error">{p.tag}</span>}
+              <div className="flex-1" />
+              {canOrder ? (
+                <button
+                  name="plan"
+                  value={p.id}
+                  data-name={p.name}
+                  data-price={p.price}
+                  data-fen={p.fen}
+                  disabled={pending || (!canTransfer && deduct < p.fen)}
+                  className={`btn mt-4 ${hot ? "btn-primary" : "btn-outline"}`}
+                >
+                  {pending && <span className="loading loading-spinner loading-xs" />}
+                  {deduct >= p.fen ? "用余额买，马上开通" : "下单"}
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 原版价目表（照 Canva 上的排法）：只看，下单在上面的卡片上点 */}
+      <details className="text-sm">
+        <summary className="cursor-pointer text-base-content/60">看完整价目表</summary>
+        <div className="mt-2">
       <div className="grid grid-cols-4 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 sm:grid-cols-[6rem_1.7fr_repeat(4,1fr)]">
         {groups.map((g) => {
           const hot = g.highlight === "hot";
@@ -124,21 +199,7 @@ export default function OrderForm({
                   </>
                 );
                 const cell = "flex min-h-14 flex-col items-center justify-center bg-base-100 px-1 py-2 text-center";
-                return canOrder ? (
-                  <button
-                    key={p.id}
-                    name="plan"
-                    value={p.id}
-                    data-name={p.name}
-                    data-price={p.price}
-                    data-fen={p.fen}
-                    disabled={pending || (!canTransfer && deduct < p.fen)}
-                    title={`${p.name} ${p.price}，点击下单`}
-                    className={`${cell} cursor-pointer transition hover:bg-primary hover:text-primary-content disabled:cursor-not-allowed disabled:opacity-40`}
-                  >
-                    {inner}
-                  </button>
-                ) : (
+                return (
                   <div key={p.id} className={cell}>
                     {inner}
                   </div>
@@ -148,6 +209,8 @@ export default function OrderForm({
           );
         })}
       </div>
+        </div>
+      </details>
     </form>
   );
 }

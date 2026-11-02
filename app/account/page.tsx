@@ -1,9 +1,7 @@
-import Link from "next/link";
 import { requireCustomer, countSessions } from "@/lib/session";
-import { BRAND } from "@/lib/clients";
 import { CLIENTS } from "@/lib/account";
-import { logout } from "../actions";
 import { EmailForm, LogoutOthers, PasswordForm, PrefsForm, WechatForm } from "./AccountForms";
+import CustomerNav from "../CustomerNav";
 
 export const dynamic = "force-dynamic";
 
@@ -13,17 +11,7 @@ export default async function AccountPage() {
   const sessions = await countSessions(customer.id);
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16">
-      <header className="navbar px-0">
-        <Link href="/dashboard" className="flex-1 text-xl font-bold">
-          {BRAND}
-        </Link>
-        <Link href="/dashboard" className="btn btn-ghost btn-sm">
-          我的订阅
-        </Link>
-        <form action={logout}>
-          <button className="btn btn-ghost btn-sm">退出</button>
-        </form>
-      </header>
+      <CustomerNav />
 
       <h1 className="mt-4 mb-1 text-2xl font-bold">账户</h1>
       <p className="mb-6 text-sm text-base-content/60">改了马上生效。</p>

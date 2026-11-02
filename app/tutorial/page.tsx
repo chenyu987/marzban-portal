@@ -5,6 +5,8 @@ import { BRAND, DOWNLOADS, detectPlatform, type Platform } from "@/lib/clients";
 import { site } from "@/site.config";
 import CopyRules from "./CopyRules";
 import Brand from "../Brand";
+import CustomerNav from "../CustomerNav";
+import { currentCustomer } from "@/lib/session";
 
 // iPhone 用 Shadowrocket，Mac 用 Clash Verge，Windows 和安卓用 Hiddify。
 // 不推荐 ClashX Meta 那种手动拖 yaml 文件的做法：那不是订阅，节点变了不会自动更新
@@ -203,12 +205,7 @@ export default async function TutorialPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16">
-      <header className="navbar px-0">
-        <Brand href="/dashboard" size={30} className="flex-1 text-xl" />
-        <Link href="/dashboard" className="btn btn-ghost btn-sm">
-          我的订阅
-        </Link>
-      </header>
+      <CustomerNav loggedIn={!!(await currentCustomer())} />
 
       <h1 className="mt-4 mb-4 text-2xl font-bold">安装教程</h1>
 

@@ -6,12 +6,12 @@ import { formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, mask
 import { BALANCE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
 import { site } from "@/site.config";
 import { describePlan, findPlan } from "@/lib/plans";
-import { logout } from "../actions";
 import BindForm from "./BindForm";
 import SubscriptionLink from "./SubscriptionLink";
 import ReferralCard from "./ReferralCard";
 import ContactSupport from "../ContactSupport";
 import Brand from "../Brand";
+import CustomerNav from "../CustomerNav";
 
 export const dynamic = "force-dynamic";
 
@@ -59,36 +59,37 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16">
-      <header className="navbar px-0">
-        <Brand href="/dashboard" size={30} className="flex-1 text-xl" />
-        <span className="mr-3 hidden text-sm text-base-content/70 sm:inline">{customer.email}</span>
-        <Link href="/plans" className="btn btn-ghost btn-sm">
-          购买/续费
-        </Link>
-        <Link href="/tutorial" className="btn btn-ghost btn-sm">
-          安装教程
-        </Link>
-        <Link href="/account" className="btn btn-ghost btn-sm">
-          账户
-        </Link>
-        <form action={logout}>
-          <button className="btn btn-ghost btn-sm">退出</button>
-        </form>
-      </header>
+      <CustomerNav />
 
-      <h1 className="mt-4 mb-4 text-2xl font-bold">我的订阅</h1>
+      <div className="mt-4 mb-4">
+        <p className="text-sm text-base-content/60">你好，{customer.wechat ?? customer.email.split("@")[0]}</p>
+        <h1 className="text-2xl font-bold">我的订阅</h1>
+      </div>
 
       <div className="flex flex-col gap-4">
         {subs.length === 0 && (
-          <div className="card bg-base-100 shadow-sm">
-            <div className="card-body">
-              <p>
-                你还没有订阅。
-                <Link href="/plans" className="link link-primary">
-                  去买一个套餐
-                </Link>
-                ，或者如果管理员之前发过订阅链接给你，在下面粘贴就能绑定到这个账号。
-              </p>
+          <div className="card bg-base-100 shadow-sm" data-testid="onboarding">
+            <div className="card-body gap-4">
+              <h2 className="card-title">三步用上</h2>
+              <ol className="grid gap-3 sm:grid-cols-3">
+                {[
+                  { title: "选套餐付款", desc: "支付宝或微信扫码，付完点「我已付款」马上开通", href: "/plans", cta: "去选套餐" },
+                  { title: "装客户端", desc: "按你的设备装好 App，教程每一步都有截图", href: "/tutorial", cta: "看安装教程" },
+                  { title: "一键导入", desc: "开通后回到这里，点你用的客户端就能导入", href: null, cta: null },
+                ].map((s, i) => (
+                  <li key={s.title} className="flex flex-col gap-2 rounded-box bg-base-200 p-4">
+                    <span className="brand-gradient flex h-8 w-8 items-center justify-center rounded-full font-bold text-white">{i + 1}</span>
+                    <b>{s.title}</b>
+                    <span className="text-sm text-base-content/60">{s.desc}</span>
+                    {s.href && (
+                      <Link href={s.href} className={`btn btn-sm mt-auto ${i === 0 ? "btn-primary" : ""}`}>
+                        {s.cta}
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ol>
+              <p className="text-sm text-base-content/60">以前客服直接发过订阅链接给你的，在下面粘贴就能绑到这个账号。</p>
             </div>
           </div>
         )}
@@ -144,6 +145,10 @@ function SubscriptionCard({ user, code, planId, preferred }: { user: MarzbanUser
   const left = timeLeft(user.expire);
   const reset = user.data_limit ? RESET_LABEL[user.data_limit_reset_strategy ?? ""] : undefined;
   const pct = user.data_limit ? Math.min(100, (user.used_traffic / user.data_limit) * 100) : null;
+  // 剩余天数和这期套餐的总天数（不知道套餐就按 30 天画环）
+  const daysLeft = user.expire ? Math.max(0, Math.ceil((user.expire * 1000 - Date.now()) / 86400_000)) : null;
+  const period = (planId ? findPlan(site.plans, planId)?.days : undefined) ?? 30;
+  const daysPct = daysLeft === null ? 100 : Math.min(100, (daysLeft / period) * 100);
 
   return (
     <div className="card bg-base-100 shadow-sm">
@@ -156,32 +161,38 @@ function SubscriptionCard({ user, code, planId, preferred }: { user: MarzbanUser
           <span className={`badge ${status.badge}`}>{status.text}</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <div className="text-sm text-base-content/60">到期时间</div>
-            <div className="font-medium">{formatExpire(user.expire)}</div>
-            {left && <div className={`text-sm ${left.urgent ? "text-error" : "text-base-content/60"}`}>{left.text}</div>}
-          </div>
-          <div>
-            <div className="text-sm text-base-content/60">流量</div>
-            <div className="font-medium">
-              {formatBytes(user.used_traffic)} / {user.data_limit ? formatBytes(user.data_limit) : "不限"}
+        {/* 两个圆环：剩余天数（占这期套餐天数的多少）、已用流量。手机上上下排 */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex items-center gap-3">
+            <Ring pct={daysPct} tone={left?.urgent ? "text-error" : "text-primary"}>
+              <span className="text-lg leading-none font-bold">{daysLeft === null ? "∞" : daysLeft}</span>
+              <span className="text-[10px] text-base-content/60">{daysLeft === null ? "永久" : "天"}</span>
+            </Ring>
+            <div className="min-w-0">
+              <div className="text-sm text-base-content/60">到期时间</div>
+              <div className="font-medium">{formatExpire(user.expire)}</div>
+              {left && <div className={`text-sm ${left.urgent ? "text-error" : "text-base-content/60"}`}>{left.text}</div>}
             </div>
-            {pct !== null && (
-              <progress
-                className={`progress w-full ${pct >= 90 ? "progress-error" : "progress-primary"}`}
-                value={pct}
-                max={100}
-              />
-            )}
-            {reset && <div className="text-sm text-base-content/60">{reset}</div>}
+          </div>
+          <div className="flex items-center gap-3">
+            <Ring pct={pct ?? 0} tone={pct !== null && pct >= 90 ? "text-error" : "text-secondary"}>
+              <span className="text-sm leading-none font-bold">{pct === null ? "∞" : `${Math.round(pct)}%`}</span>
+              <span className="text-[10px] text-base-content/60">{pct === null ? "不限" : "已用"}</span>
+            </Ring>
+            <div className="min-w-0">
+              <div className="text-sm text-base-content/60">流量</div>
+              <div className="font-medium">
+                {formatBytes(user.used_traffic)} / {user.data_limit ? formatBytes(user.data_limit) : "不限"}
+              </div>
+              {reset && <div className="text-sm text-base-content/60">{reset}</div>}
+            </div>
           </div>
         </div>
 
         {needsRenewal(user.expire) ? (
-          <div role="alert" className="alert alert-warning alert-soft flex-wrap justify-between">
+          <div role="alert" className={`alert flex-wrap justify-between ${left?.text === "已到期" ? "alert-error" : "alert-warning"}`}>
             <span>{left?.text === "已到期" ? "这个订阅已经到期了，续费后马上恢复。" : `这个订阅${left?.text ?? "快"}到期，记得续费。`}</span>
-            <Link href={`/plans?renew=${encodeURIComponent(user.username)}`} className="btn btn-warning btn-sm">
+            <Link href={`/plans?renew=${encodeURIComponent(user.username)}`} className="btn btn-neutral btn-sm">
               续费
             </Link>
           </div>
@@ -196,6 +207,21 @@ function SubscriptionCard({ user, code, planId, preferred }: { user: MarzbanUser
         <SubscriptionLink username={user.username} url={user.subscription_url} preferred={preferred} />
         <SubscriptionId code={code} />
       </div>
+    </div>
+  );
+}
+
+// 圆环进度（daisyUI radial-progress），中间放数字
+function Ring({ pct, tone, children }: { pct: number; tone: string; children: React.ReactNode }) {
+  return (
+    <div
+      className={`radial-progress shrink-0 ${tone}`}
+      // 底下画一圈浅色轨道，不然只有进度那一段弧
+      style={{ "--value": Math.round(pct), "--size": "4.25rem", "--thickness": "6px", boxShadow: "inset 0 0 0 6px var(--color-base-300)" } as React.CSSProperties}
+      role="progressbar"
+      aria-valuenow={Math.round(pct)}
+    >
+      <span className="flex flex-col items-center text-base-content">{children}</span>
     </div>
   );
 }
