@@ -19,11 +19,12 @@ export default async function DashboardPage() {
     .prepare("SELECT marzban_username FROM subscriptions WHERE customer_id = ? ORDER BY id")
     .bind(customer.id)
     .all<{ marzban_username: string }>();
-  // 被推荐的人只给推荐人看打码后的邮箱
+  // 被推荐的人给推荐人看微信号（推荐人本来就认识）；没填微信号的老账号显示打码后的邮箱
   const { results: referred } = await db()
-    .prepare("SELECT email, created_at FROM customers WHERE referred_by = ? ORDER BY id DESC")
+    .prepare("SELECT email, wechat, created_at FROM customers WHERE referred_by = ? ORDER BY id DESC")
     .bind(customer.id)
-    .all<{ email: string; created_at: number }>();
+    .all<{ email: string; wechat: string | null; created_at: number }>();
+  const friend = (r: { email: string; wechat?: string | null }) => (r.wechat ? `微信 ${r.wechat}` : maskEmail(r.email));
   const balance = await db().prepare(BALANCE_SQL).bind(customer.id).first<{ balance: number }>();
   const { results: rewards } = await db().prepare(REFERRAL_REWARDS_SQL).bind(customer.id).all<RewardRow>();
   const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
@@ -80,10 +81,10 @@ export default async function DashboardPage() {
       <div className="mt-8">
         <ReferralCard
           code={customer.referral_code}
-          referrals={referred.map((r) => ({ email: maskEmail(r.email), createdAt: formatDate(r.created_at) }))}
+          referrals={referred.map((r) => ({ email: friend(r), createdAt: formatDate(r.created_at) }))}
           balance={money(balance?.balance ?? 0)}
           rewards={rewards.map((r) => ({
-            email: maskEmail(r.email),
+            email: friend(r),
             date: formatDate(r.created_at),
             paid: money(r.paid),
             reward: money(r.reward),
