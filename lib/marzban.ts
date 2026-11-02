@@ -13,6 +13,8 @@ export type MarzbanUser = {
   online_at?: string | null; // 最后一次连上的时间，UTC，不带时区；没连过是 null
   created_at?: string;
   lifetime_used_traffic?: number;
+  links?: string[]; // 每个节点一条连接链接（vless://…），客户端不支持订阅时手动导入用
+  on_hold_expire_duration?: number | null; // on_hold 时：首次连上后有效多少秒
 };
 
 export type UserStatus = MarzbanUser["status"];

@@ -11,7 +11,7 @@ import { cancelPendingOrder, confirmTransferOrder, orderLabel, revokeOrder, veri
 import type { FormState } from "../actions";
 import { addNode, createUser, deleteExpiredUsers, deleteNode, deleteUser, expiredUsers, findUser, getHosts, resetAllUsage, listNodes, putHosts, modifyNode, modifyUser, reconnectNode, resetUsage, restartCore, revokeSubscription } from "@/lib/marzban";
 import { changePlanBody } from "@/lib/plans";
-import { createUserBody, describeChanges, parseExpiredDays, parseNodeForm, parseUserForm, validateHosts, USERNAME_RE, type UserFields } from "@/lib/admin-users";
+import { createUserBody, describeChanges, parseOnHoldDays, parseExpiredDays, parseNodeForm, parseUserForm, validateHosts, USERNAME_RE, type UserFields } from "@/lib/admin-users";
 import { formatBytes, formatExpire, RESET_LABEL } from "@/lib/format";
 import { findPlan } from "@/lib/plans";
 import { formatRedeemCode, newRedeemCode } from "@/lib/format";
@@ -223,6 +223,8 @@ export async function adminCreateUser(_: FormState, form: FormData): Promise<For
   if (!USERNAME_RE.test(username)) return { error: "订阅名只能是 3–32 位小写字母、数字、下划线" };
   const r = parseUserForm(formGetter(form), { now: nowSec() });
   if ("error" in r) return { error: r.error };
+  const hold = parseOnHoldDays(String(form.get("onHoldDays") ?? ""));
+  if ("error" in hold) return { error: hold.error };
 
   // 选填：绑到客人名下，按邮箱或微信号找
   const who = String(form.get("customer") ?? "").trim();
@@ -237,7 +239,7 @@ export async function adminCreateUser(_: FormState, form: FormData): Promise<For
 
   try {
     if (await findUser(username)) return { error: `Marzban 上已经有 ${username} 了，换个名字` };
-    await createUser(createUserBody(username, r.fields));
+    await createUser(createUserBody(username, r.fields, hold.days));
   } catch (e) {
     return { error: `新建失败：${errText(e)}` };
   }
@@ -247,7 +249,11 @@ export async function adminCreateUser(_: FormState, form: FormData): Promise<For
       .bind(customer.id, username, nowSec())
       .run();
   }
-  const detail = (["data_limit", "expire", "note"] as const).map((k) => fieldText(k, r.fields[k])).join("；");
+  const detail = [
+    fieldText("data_limit", r.fields.data_limit),
+    hold.days ? `首次连上后 ${hold.days} 天` : fieldText("expire", r.fields.expire),
+    fieldText("note", r.fields.note),
+  ].join("；");
   await logAdmin(admin, "user.create", username, customer ? `${detail}；绑到 ${customer.email}` : detail);
   redirect(`/admin/users/${encodeURIComponent(username)}`);
 }

@@ -321,7 +321,19 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await expect(admin.locator("tr", { hasText: codes[1] })).toContainText(customer);
   await expect(admin.locator("tr", { hasText: codes[0] })).toHaveCount(0);
 
-  // 全部订单：按状态筛、按订单号搜，客人和订阅能点进去
+  // 试用：首次连上才开始计时（Marzban 的 on_hold），连上后有效 3 天；详情页能看到每个节点的连接链接
+  const trialUser = `e2e_trial_${stamp}`.slice(0, 32);
+  await admin.goto("/admin/users/new");
+  await admin.locator('input[name="username"]').fill(trialUser);
+  await admin.locator('input[name="onHoldDays"]').fill("3");
+  await admin.getByRole("button", { name: "新建" }).click();
+  await expect(admin).toHaveURL(new RegExp(`/admin/users/${trialUser}$`));
+  await expect(admin.getByText("首次连上后 3 天")).toBeVisible();
+  expect(await mockMarzban("GET", `/user/${trialUser}`)).toMatchObject({ status: "on_hold", expire: null, on_hold_expire_duration: 3 * 86400 });
+  await admin.getByTestId("node-links").locator("summary").click();
+  await expect(admin.getByTestId("node-links").getByRole("button", { name: "复制" }).first()).toBeVisible();
+
+    // 全部订单：按状态筛、按订单号搜，客人和订阅能点进去
   await admin.goto("/admin?view=all&status=cancelled");
   await expect(admin.getByTestId("orders-summary")).toContainText("筛出");
   for (const row of await admin.getByTestId("order-row").all()) await expect(row).toContainText("已取消");
@@ -493,6 +505,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
     "subscription.bind",
     "codes.create",
     "code.void",
+    "user.create",
     "subscription.bind",
     "user.create",
     "user.edit",

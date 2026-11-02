@@ -34,6 +34,9 @@ export default async function NodesPage() {
     error = e instanceof Error ? e.message : String(e);
   }
 
+  // 各节点本月流量画成条，最多的那个是满格，一眼看出流量都跑在哪
+  const maxUsage = Math.max(1, ...usage.values());
+
   return (
     <div className="mx-auto max-w-5xl px-4 pb-16">
       <AdminHeader email={admin.email} />
@@ -95,6 +98,10 @@ export default async function NodesPage() {
                   <span className="text-sm text-base-content/60">
                     {n.address}:{n.port}（API {n.api_port}）｜Xray {n.xray_version ?? "-"}｜倍率 {n.usage_coefficient}｜本月 {formatBytes(usage.get(n.id) ?? 0)}
                   </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-base-content/60">
+                  本月流量
+                  <progress className="progress progress-primary w-48" value={usage.get(n.id) ?? 0} max={maxUsage} />
                 </div>
                 {n.status === "error" && n.message && <div className="alert alert-error alert-soft text-sm">{n.message}</div>}
                 <NodeActions node={n} />

@@ -180,6 +180,7 @@ const server = http.createServer(async (req, res) => {
         note: body.note ?? "",
         inbounds: createInbounds(body),
       });
+      users.get(body.username).on_hold_expire_duration = body.on_hold_expire_duration ?? null;
       log(200);
       return send(res, 200, toResponse(users.get(body.username)));
     }

@@ -12,7 +12,7 @@ function Alert({ state }: { state?: { error?: string; ok?: string } }) {
 
 // 订阅链接（复制、二维码）和三个危险操作：清零流量、重置订阅链接、删除。都先弹框确认，删除要把用户名打一遍。
 // 三个操作用按钮直接调 Server Action，不包 <form>：刚保存完页面还在刷新时点表单，会变成整页提交，结果提示就丢了
-export default function UserActions({ username, url }: { username: string; url: string }) {
+export default function UserActions({ username, url, links }: { username: string; url: string; links: string[] }) {
   const [result, setResult] = useState<{ error?: string; ok?: string } | undefined>();
   const [pending, startTransition] = useTransition();
   const [qr, setQr] = useState<string | null>(null);
@@ -70,6 +70,22 @@ export default function UserActions({ username, url }: { username: string; url: 
         {pending && <span className="loading loading-spinner loading-sm self-center" />}
       </div>
       <Alert state={result} />
+      {links.length > 0 && (
+        <details className="text-sm" data-testid="node-links">
+          <summary className="cursor-pointer text-base-content/70">每个节点的连接链接（{links.length} 条，客户端不支持订阅时手动导入）</summary>
+          <ul className="mt-2 flex flex-col gap-1">
+            {links.map((l) => (
+              <li key={l} className="flex items-center gap-2">
+                <span className="w-32 shrink-0 truncate text-base-content/70">{decodeURIComponent(l.split("#")[1] ?? "")}</span>
+                <code className="min-w-0 flex-1 truncate text-xs text-base-content/50">{l}</code>
+                <button type="button" className="btn btn-xs" onClick={() => navigator.clipboard.writeText(l)}>
+                  复制
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       {shown && (
         <div className="flex flex-col items-center gap-2 rounded-box bg-base-200 p-4">
           {qr ? <img src={qr} alt="订阅二维码" width={220} height={220} /> : <span className="loading loading-spinner" />}

@@ -104,8 +104,12 @@ export default async function UserPage({ params }: { params: Promise<{ username:
       <div className="mb-4 grid grid-cols-2 gap-4 rounded-box bg-base-100 p-4 shadow-sm">
         <div>
           <div className="text-sm text-base-content/60">到期</div>
-          <div className="font-medium">{formatExpire(user.expire)}</div>
-          {left && <div className="text-sm text-base-content/60">{left.text}</div>}
+          <div className="font-medium">
+            {user.status === "on_hold" && user.on_hold_expire_duration
+              ? `首次连上后 ${Math.round(user.on_hold_expire_duration / 86400)} 天`
+              : formatExpire(user.expire)}
+          </div>
+          {user.status === "on_hold" ? <div className="text-sm text-base-content/60">还没连过，连上才开始计时</div> : left && <div className="text-sm text-base-content/60">{left.text}</div>}
         </div>
         <div>
           <div className="text-sm text-base-content/60">流量</div>
@@ -125,11 +129,13 @@ export default async function UserPage({ params }: { params: Promise<{ username:
           {usage.length === 0 ? (
             <div className="text-base-content/50">本月还没用过</div>
           ) : (
-            <div className="flex flex-wrap gap-x-6 gap-y-1">
+            <div className="flex flex-col gap-1">
               {usage.map((u) => (
-                <span key={u.node_name}>
-                  {u.node_id === null ? "面板本机" : u.node_name} <b>{formatBytes(u.used_traffic)}</b>
-                </span>
+                <div key={u.node_name} className="grid grid-cols-[6rem_1fr_5rem] items-center gap-2">
+                  <span className="truncate">{u.node_id === null ? "面板本机" : u.node_name}</span>
+                  <progress className="progress progress-primary w-full" value={u.used_traffic} max={usage[0].used_traffic} />
+                  <b className="text-right">{formatBytes(u.used_traffic)}</b>
+                </div>
               ))}
             </div>
           )}
@@ -138,7 +144,7 @@ export default async function UserPage({ params }: { params: Promise<{ username:
 
       <PlanCard username={user.username} current={currentPlan} options={planOptions} />
 
-      <UserActions username={user.username} url={user.subscription_url} />
+      <UserActions username={user.username} url={user.subscription_url} links={user.links ?? []} />
 
       <h2 className="mt-8 mb-2 text-lg font-bold">修改</h2>
       <UserForm

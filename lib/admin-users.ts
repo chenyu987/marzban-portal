@@ -80,9 +80,18 @@ export function parseUserForm(
   };
 }
 
-// POST /api/user 的请求体：只开 VLESS，inbounds 给空对象，Marzban 会勾上全部 VLESS 入站（和 lib/plans.ts 的 newUserBody 一样）
-export function createUserBody(username: string, f: UserFields) {
-  return { username, proxies: { vless: { flow: "xtls-rprx-vision" } }, inbounds: {}, ...f };
+// POST /api/user 的请求体：只开 VLESS，inbounds 给空对象，Marzban 会勾上全部 VLESS 入站（和 lib/plans.ts 的 newUserBody 一样）。
+// onHoldDays：「首次连上才开始计时」（Marzban 的 on_hold，适合试用），连上后有效这么多天；这时不设到期时间
+export function createUserBody(username: string, f: UserFields, onHoldDays?: number | null) {
+  const base = { username, proxies: { vless: { flow: "xtls-rprx-vision" } }, inbounds: {}, ...f };
+  return onHoldDays ? { ...base, status: "on_hold", expire: 0, on_hold_expire_duration: onHoldDays * DAY } : base;
+}
+
+// 新建时「首次连上后有效几天」：空 = 不用这个功能；1–3650 的整数
+export function parseOnHoldDays(v: string): { days: number | null } | { error: string } {
+  if (!v.trim()) return { days: null };
+  const n = Number(v.trim());
+  return Number.isInteger(n) && n >= 1 && n <= 3650 ? { days: n } : { error: "首次连上后有效天数要写 1 到 3650 的整数" };
 }
 
 // 「3 分钟前」这种。Marzban 的 online_at 是 UTC 但不带时区

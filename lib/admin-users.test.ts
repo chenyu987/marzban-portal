@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createUserBody, describeChanges, fromBeijingInput, monthStartBeijing, onlineText, parseExpiredDays, parseNodeForm, validateHosts, parseUserForm, toBeijingInput } from "./admin-users";
+import { parseOnHoldDays, createUserBody, describeChanges, fromBeijingInput, monthStartBeijing, onlineText, parseExpiredDays, parseNodeForm, validateHosts, parseUserForm, toBeijingInput } from "./admin-users";
 
 const GB = 1024 ** 3;
 const form = (o: Record<string, string>) => (k: string) => o[k] ?? "";
@@ -117,5 +117,19 @@ describe("parseExpiredDays", () => {
   it("只收 1–3650 的整数", () => {
     expect(parseExpiredDays(" 30 ")).toBe(30);
     for (const bad of ["", "0", "-1", "1.5", "3651", "abc"]) expect(parseExpiredDays(bad)).toBeNull();
+  });
+});
+
+describe("首次连上才开始计时", () => {
+  const f = { data_limit: 0, data_limit_reset_strategy: "no_reset" as const, expire: 1_900_000_000, note: "", status: "active" as const };
+  it("填了天数：状态 on_hold、不设到期、连上后有效 N 天", () => {
+    expect(createUserBody("trial_1", f, 3)).toMatchObject({ status: "on_hold", expire: 0, on_hold_expire_duration: 3 * 86400 });
+    expect(createUserBody("trial_1", f)).toMatchObject({ status: "active", expire: 1_900_000_000 });
+    expect(createUserBody("trial_1", f)).not.toHaveProperty("on_hold_expire_duration");
+  });
+  it("天数校验", () => {
+    expect(parseOnHoldDays("")).toEqual({ days: null });
+    expect(parseOnHoldDays(" 7 ")).toEqual({ days: 7 });
+    for (const bad of ["0", "1.5", "abc", "9999"]) expect(parseOnHoldDays(bad)).toHaveProperty("error");
   });
 });

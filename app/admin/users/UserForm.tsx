@@ -67,7 +67,10 @@ export default function UserForm({
             <input name="addDays" inputMode="numeric" placeholder="比如 30" className="input input-sm w-full" />
           </label>
         ) : (
-          <div />
+          <label className="flex flex-col gap-1">
+            <span className="text-sm text-base-content/70">或者首次连上才开始计时，有效几天（适合试用；填了就不看到期时间）</span>
+            <input name="onHoldDays" inputMode="numeric" placeholder="比如 3" className="input input-sm w-full" />
+          </label>
         )}
         <label className="flex flex-col gap-1">
           <span className="text-sm text-base-content/70">状态</span>
