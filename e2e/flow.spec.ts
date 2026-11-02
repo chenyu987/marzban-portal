@@ -139,6 +139,67 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await page.getByPlaceholder("密码", { exact: true }).fill(newPassword);
   await page.getByRole("button", { name: "登录" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
+
+  // 账户页：客人自己改微信号、偏好、邮箱、密码，退出其他设备
+  // 先在另一个浏览器里也登录一次，后面验证「改密码 / 退出其他设备」会把它踢掉
+  const other = await page.context().browser()!.newContext();
+  const otherPage = await other.newPage();
+  await otherPage.goto("/login");
+  await otherPage.getByPlaceholder("邮箱").fill(email);
+  await otherPage.getByPlaceholder("密码", { exact: true }).fill(newPassword);
+  await otherPage.getByRole("button", { name: "登录" }).click();
+  await expect(otherPage).toHaveURL(/\/dashboard/);
+
+  await page.getByRole("link", { name: "账户" }).click();
+  await expect(page.getByText("现在有 2 台设备登录着")).toBeVisible();
+  await page.getByLabel("微信号").fill("坏的 微信");
+  await page.getByRole("button", { name: "保存微信号" }).click();
+  await expect(page.getByText("微信号格式不对")).toBeVisible();
+  await page.getByLabel("微信号").fill("e2e_wx_new");
+  await page.getByRole("button", { name: "保存微信号" }).click();
+  await expect(page.getByText("微信号已更新")).toBeVisible();
+  expect(query(`SELECT wechat FROM customers WHERE email = '${email}'`)[0].wechat).toBe("e2e_wx_new");
+
+  // 常用客户端选 Hiddify：订阅页上 Hiddify 的导入按钮排到导入按钮的最前面
+  await page.getByLabel("常用客户端").selectOption("hiddify");
+  await page.getByRole("button", { name: "保存偏好" }).click();
+  await expect(page.getByText("已保存")).toBeVisible();
+  await page.goto("/dashboard");
+  await expect(page.getByRole("link", { name: /^导入 / }).first()).toHaveText("导入 Hiddify");
+
+  // 改邮箱：密码错了不让改；别人用过的邮箱不让改；对了就改，之后用新邮箱登录
+  const newEmail = email.replace("e2e-", "e2e-new-");
+  await page.goto("/account");
+  await page.getByLabel("新邮箱").fill(newEmail);
+  await page.getByLabel("当前密码（改邮箱）").fill("wrong-password");
+  await page.getByRole("button", { name: "改邮箱" }).click();
+  await expect(page.getByText("当前密码不对")).toBeVisible();
+  await page.getByLabel("当前密码（改邮箱）").fill(newPassword);
+  await page.getByRole("button", { name: "改邮箱" }).click();
+  await expect(page.getByText(`登录邮箱已改成 ${newEmail}`)).toBeVisible();
+
+  // 改密码：两次不一样被拦；改好后另一台设备被退出
+  const third = "E2eTest-9999";
+  await page.getByLabel("当前密码", { exact: true }).fill(newPassword);
+  await page.getByLabel("新密码", { exact: true }).fill(third);
+  await page.getByLabel("再输一次新密码").fill("E2eTest-0000");
+  await page.getByRole("button", { name: "改密码" }).click();
+  await expect(page.getByText("两次输的新密码不一样")).toBeVisible();
+  await page.getByLabel("当前密码", { exact: true }).fill(newPassword);
+  await page.getByLabel("新密码", { exact: true }).fill(third);
+  await page.getByLabel("再输一次新密码").fill(third);
+  await page.getByRole("button", { name: "改密码" }).click();
+  await expect(page.getByText("其他 1 台设备已退出登录")).toBeVisible();
+  await otherPage.goto("/dashboard");
+  await expect(otherPage).toHaveURL(/\/login/);
+  await other.close();
+
+  // 用新邮箱、新密码登录
+  await logout(page);
+  await page.getByPlaceholder("邮箱").fill(newEmail);
+  await page.getByPlaceholder("密码", { exact: true }).fill(third);
+  await page.getByRole("button", { name: "登录" }).click();
+  await expect(page).toHaveURL(/\/dashboard/);
 });
 
 test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({ page }) => {

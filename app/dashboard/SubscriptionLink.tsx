@@ -4,16 +4,18 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { clashVergeImport, hiddifyImport, shadowrocketImport } from "@/lib/clients";
 import { resetSubscriptionLink } from "../actions";
+import { orderClients, type ClientId } from "@/lib/account";
 
 // 大部分客人用 iPhone，Shadowrocket 固定放导入按钮的第一个
-const IMPORTS: { label: string; href: (url: string) => string }[] = [
-  { label: "导入 Shadowrocket", href: shadowrocketImport },
-  { label: "导入 Clash Verge", href: clashVergeImport },
-  { label: "导入 Hiddify", href: hiddifyImport },
+const IMPORTS: { id: ClientId; label: string; href: (url: string) => string }[] = [
+  { id: "shadowrocket", label: "导入 Shadowrocket", href: shadowrocketImport },
+  { id: "clash", label: "导入 Clash Verge", href: clashVergeImport },
+  { id: "hiddify", label: "导入 Hiddify", href: hiddifyImport },
 ];
 
 // 订阅链接等于密码：默认收起，二维码在浏览器里本地生成，不交给任何第三方服务
-export default function SubscriptionLink({ username, url }: { username: string; url: string }) {
+// preferred：客人在「账户」里选的常用客户端，它的导入按钮排最前
+export default function SubscriptionLink({ username, url, preferred }: { username: string; url: string; preferred?: string | null }) {
   const [shown, setShown] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -38,7 +40,7 @@ export default function SubscriptionLink({ username, url }: { username: string; 
         <button type="button" onClick={() => setShown(!shown)} className="btn btn-sm">
           {shown ? "收起二维码" : "显示二维码"}
         </button>
-        {IMPORTS.map((c) => (
+        {orderClients(IMPORTS, preferred).map((c) => (
           <a key={c.label} href={c.href(url)} className="btn btn-sm">
             {c.label}
           </a>

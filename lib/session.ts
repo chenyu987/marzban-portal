@@ -5,7 +5,7 @@ import { db, nowSec } from "./env";
 const COOKIE = "sid";
 const TTL = 30 * 86400;
 
-export type Customer = { id: number; email: string; referral_code: string };
+export type Customer = { id: number; email: string; referral_code: string; wechat: string | null; pref_client: string | null; notify_expiry: number };
 
 async function sha256(s: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
@@ -33,7 +33,7 @@ export async function currentCustomer(): Promise<Customer | null> {
   if (!token) return null;
   return db()
     .prepare(
-      `SELECT c.id, c.email, c.referral_code FROM sessions s JOIN customers c ON c.id = s.customer_id
+      `SELECT c.id, c.email, c.referral_code, c.wechat, c.pref_client, c.notify_expiry FROM sessions s JOIN customers c ON c.id = s.customer_id
        WHERE s.id = ? AND s.expires_at > ?`,
     )
     .bind(await sha256(token), nowSec())
@@ -51,4 +51,18 @@ export async function destroySession() {
   const token = jar.get(COOKIE)?.value;
   if (token) await db().prepare("DELETE FROM sessions WHERE id = ?").bind(await sha256(token)).run();
   jar.delete(COOKIE);
+}
+
+// 这个客人现在有几台设备登录着（没过期的会话）
+export async function countSessions(customerId: number): Promise<number> {
+  const r = await db().prepare("SELECT COUNT(*) AS n FROM sessions WHERE customer_id = ? AND expires_at > ?").bind(customerId, nowSec()).first<{ n: number }>();
+  return r?.n ?? 0;
+}
+
+// 退出这个客人在其他设备上的登录，当前这台保留。返回退出了几台
+export async function destroyOtherSessions(customerId: number): Promise<number> {
+  const token = (await cookies()).get(COOKIE)?.value;
+  const keep = token ? await sha256(token) : "";
+  const r = await db().prepare("DELETE FROM sessions WHERE customer_id = ? AND id <> ?").bind(customerId, keep).run();
+  return r.meta.changes ?? 0;
 }

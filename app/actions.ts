@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db, nowSec } from "@/lib/env";
 import { hashPassword, verifyPassword } from "@/lib/password";
-import { createSession, destroySession, requireCustomer } from "@/lib/session";
+import { createSession, destroyOtherSessions, destroySession, requireCustomer } from "@/lib/session";
 import { lookupSubscription, revokeSubscription } from "@/lib/marzban";
 import { formatExpire, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
 import { findPlan } from "@/lib/plans";
@@ -20,9 +20,8 @@ import { hashResetToken, newResetToken, RESET_MAX_PER_HOUR, RESET_TTL_SELF, rese
 // email：出错时带回去当输入框的默认值。React 19 提交后会重置表单，不带回去邮箱就被清空了
 export type FormState = { error?: string; ok?: string; email?: string; ref?: string; wechat?: string } | undefined;
 
+import { emailError, isClient, passwordError, wechatError } from "@/lib/account";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-// 微信号是 6–20 位字母、数字、下划线、减号；没设微信号的人会填绑定的手机号（11 位数字），也能搜到
-const WECHAT_RE = /^[A-Za-z0-9_-]{5,30}$/;
 
 export async function register(_: FormState, form: FormData): Promise<FormState> {
   const email = String(form.get("email") ?? "").trim().toLowerCase();
@@ -30,10 +29,8 @@ export async function register(_: FormState, form: FormData): Promise<FormState>
   const wechat = String(form.get("wechat") ?? "").trim();
   const refInput = String(form.get("ref") ?? "").trim();
   const back = { email, ref: refInput, wechat };
-  if (!EMAIL_RE.test(email)) return { error: "邮箱格式不对", ...back };
-  if (password.length < 8) return { error: "密码至少 8 位", ...back };
-  if (!wechat) return { error: "请填微信号，方便客服联系你", ...back };
-  if (!WECHAT_RE.test(wechat)) return { error: "微信号格式不对：只能是字母、数字、下划线或减号，也可以填微信绑定的手机号", ...back };
+  const invalid = emailError(email) ?? passwordError(password) ?? wechatError(wechat);
+  if (invalid) return { error: invalid, ...back };
 
   // 推荐码可以不填；填了就必须是真的，免得客人以为填上了其实没记到
   const code = normalizeReferralCode(refInput);
@@ -512,3 +509,71 @@ export async function buyWithBalance(_: FormState, form: FormData): Promise<Form
   };
 }
 
+
+// ---- 客人自己的「账户」页 ----
+
+// 改微信号
+export async function updateWechat(_: FormState, form: FormData): Promise<FormState> {
+  const customer = await requireCustomer();
+  const wechat = String(form.get("wechat") ?? "").trim();
+  const error = wechatError(wechat);
+  if (error) return { error, wechat };
+  await db().prepare("UPDATE customers SET wechat = ? WHERE id = ?").bind(wechat, customer.id).run();
+  revalidatePath("/account");
+  return { ok: "微信号已更新" };
+}
+
+// 改登录邮箱：要输当前密码（防止别人趁你登录着把邮箱改走）；新邮箱不能被别人用过
+export async function updateEmail(_: FormState, form: FormData): Promise<FormState> {
+  const customer = await requireCustomer();
+  const email = String(form.get("email") ?? "").trim().toLowerCase();
+  const password = String(form.get("password") ?? "");
+  const invalid = emailError(email);
+  if (invalid) return { error: invalid, email };
+  if (email === customer.email) return { error: "和现在的邮箱一样", email };
+  const me = await db().prepare("SELECT password_hash FROM customers WHERE id = ?").bind(customer.id).first<{ password_hash: string }>();
+  if (!me || !(await verifyPassword(password, me.password_hash))) return { error: "当前密码不对", email };
+  const taken = await db().prepare("SELECT 1 FROM customers WHERE email = ?").bind(email).first();
+  if (taken) return { error: "这个邮箱已经被别的账号用了", email };
+  await db().prepare("UPDATE customers SET email = ? WHERE id = ?").bind(email, customer.id).run();
+  revalidatePath("/account");
+  return { ok: `登录邮箱已改成 ${email}，下次用它登录` };
+}
+
+// 改密码：要输当前密码；改完其他设备上的登录都退出，这台保留
+export async function updatePassword(_: FormState, form: FormData): Promise<FormState> {
+  const customer = await requireCustomer();
+  const current = String(form.get("current") ?? "");
+  const next = String(form.get("next") ?? "");
+  if (next !== String(form.get("confirm") ?? "")) return { error: "两次输的新密码不一样" };
+  const invalid = passwordError(next);
+  if (invalid) return { error: invalid };
+  const me = await db().prepare("SELECT password_hash FROM customers WHERE id = ?").bind(customer.id).first<{ password_hash: string }>();
+  if (!me || !(await verifyPassword(current, me.password_hash))) return { error: "当前密码不对" };
+  await db().prepare("UPDATE customers SET password_hash = ? WHERE id = ?").bind(await hashPassword(next), customer.id).run();
+  const out = await destroyOtherSessions(customer.id);
+  revalidatePath("/account");
+  return { ok: out > 0 ? `密码已修改，其他 ${out} 台设备已退出登录` : "密码已修改" };
+}
+
+// 偏好：常用客户端、到期提醒
+export async function updatePrefs(_: FormState, form: FormData): Promise<FormState> {
+  const customer = await requireCustomer();
+  const client = String(form.get("client") ?? "");
+  const notify = form.get("notify") ? 1 : 0;
+  await db()
+    .prepare("UPDATE customers SET pref_client = ?, notify_expiry = ? WHERE id = ?")
+    .bind(isClient(client) ? client : null, notify, customer.id)
+    .run();
+  revalidatePath("/account");
+  revalidatePath("/dashboard");
+  return { ok: "已保存" };
+}
+
+// 退出其他设备（手机丢了、在别人电脑上登过）
+export async function logoutOthers(): Promise<FormState> {
+  const customer = await requireCustomer();
+  const out = await destroyOtherSessions(customer.id);
+  revalidatePath("/account");
+  return { ok: out > 0 ? `已退出其他 ${out} 台设备` : "没有别的设备登录着" };
+}

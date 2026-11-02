@@ -68,6 +68,9 @@ export default async function DashboardPage() {
         <Link href="/tutorial" className="btn btn-ghost btn-sm">
           安装教程
         </Link>
+        <Link href="/account" className="btn btn-ghost btn-sm">
+          账户
+        </Link>
         <form action={logout}>
           <button className="btn btn-ghost btn-sm">退出</button>
         </form>
@@ -91,7 +94,7 @@ export default async function DashboardPage() {
         )}
         {subs.map(({ username, code, user }) =>
           user ? (
-            <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} />
+            <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} preferred={customer.pref_client} />
           ) : (
             <UnavailableCard key={username} code={code} />
           ),
@@ -135,7 +138,7 @@ function SubscriptionId({ code }: { code: string | null }) {
   );
 }
 
-function SubscriptionCard({ user, code, planId }: { user: MarzbanUser; code: string | null; planId?: string }) {
+function SubscriptionCard({ user, code, planId, preferred }: { user: MarzbanUser; code: string | null; planId?: string; preferred: string | null }) {
   const { title, subtitle } = planHeading(planId);
   const status = STATUS_LABEL[user.status] ?? { text: user.status, badge: "badge-neutral" };
   const left = timeLeft(user.expire);
@@ -190,7 +193,7 @@ function SubscriptionCard({ user, code, planId }: { user: MarzbanUser; code: str
           )
         )}
 
-        <SubscriptionLink username={user.username} url={user.subscription_url} />
+        <SubscriptionLink username={user.username} url={user.subscription_url} preferred={preferred} />
         <SubscriptionId code={code} />
       </div>
     </div>
