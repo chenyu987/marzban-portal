@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Plan } from "../site.config.example";
-import { findPlan, newUserBody, nextUsername, renewUserBody, renewedExpire, setIpNote, wechatUsername } from "./plans";
+import { changePlanBody, findPlan, newUserBody, nextUsername, renewUserBody, renewedExpire, setIpNote, wechatUsername } from "./plans";
 
 const now = 1_800_000_000;
 const plan: Plan = { id: "month", name: "月付", price: 2000, days: 30, dataGB: 100, ip: 3 };
@@ -89,5 +89,15 @@ describe("请求体", () => {
   it("findPlan", () => {
     expect(findPlan([plan], "month")).toBe(plan);
     expect(findPlan([plan], "year")).toBeUndefined();
+  });
+});
+
+describe("changePlanBody", () => {
+  it("只改流量、重置方式和 ip=N，备注里别的内容保留，不碰到期时间", () => {
+    const limited = { id: "a", name: "a", price: 1, days: 30, dataGB: 20, dataReset: "month" as const, ip: 2 };
+    const unlimited = { id: "b", name: "b", price: 1, days: 30, dataGB: null, ip: 5 };
+    expect(changePlanBody({ note: "老客人 ip=2" }, unlimited)).toEqual({ data_limit: 0, data_limit_reset_strategy: "no_reset", note: "老客人 ip=5" });
+    expect(changePlanBody({ note: null }, limited)).toEqual({ data_limit: 20 * 1024 ** 3, data_limit_reset_strategy: "month", note: "ip=2" });
+    expect(changePlanBody({}, limited)).not.toHaveProperty("expire");
   });
 });

@@ -6,6 +6,8 @@ import { formatBytes, formatExpire, RESET_LABEL, STATUS_LABEL } from "@/lib/form
 import { onlineText, SORTS, STATUS_FILTERS } from "@/lib/admin-users";
 import AdminHeader from "../AdminHeader";
 import { CustomerLink } from "../Links";
+import { findPlan } from "@/lib/plans";
+import { site } from "@/site.config";
 import BulkActions from "./BulkActions";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +40,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const names = data?.users.map((u) => u.username) ?? [];
   const owners = new Map<string, { id: number; email: string; wechat: string | null }>();
   const legacyWechat = new Map<string, string>();
+  const planOf = new Map<string, string>();
   if (names.length) {
     const { results } = await db()
       .prepare(
@@ -53,6 +56,11 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       .bind(...names)
       .all<{ marzban_username: string; wechat: string }>();
     for (const r of old) legacyWechat.set(r.marzban_username, r.wechat);
+    const { results: plans } = await db()
+      .prepare(`SELECT marzban_username, plan_id FROM subscription_plans WHERE marzban_username IN (${names.map(() => "?").join(",")})`)
+      .bind(...names)
+      .all<{ marzban_username: string; plan_id: string }>();
+    for (const r of plans) planOf.set(r.marzban_username, findPlan(site.plans, r.plan_id)?.group ?? r.plan_id);
   }
 
   const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
@@ -137,6 +145,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
               <tr>
                 <th>订阅（Marzban 用户名）</th>
                 <th>客人</th>
+                <th>套餐</th>
                 <th>状态</th>
                 <th>到期</th>
                 <th>流量</th>
@@ -166,6 +175,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                         <span className="text-base-content/40">-</span>
                       )}
                     </td>
+                    <td className="whitespace-nowrap">{planOf.get(u.username) ?? <span className="text-base-content/40">-</span>}</td>
                     <td>
                       <span className={`badge badge-sm ${st.badge}`}>{st.text}</span>
                     </td>

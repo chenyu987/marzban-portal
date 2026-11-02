@@ -36,11 +36,11 @@ export default async function DashboardPage() {
   const balance = await db().prepare(BALANCE_SQL).bind(customer.id).first<{ balance: number }>();
   const { results: rewards } = await db().prepare(REFERRAL_REWARDS_SQL).bind(customer.id).all<RewardRow>();
   const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
-  // 每个订阅最近一次付款买的套餐，用来当卡片标题；管理员直接发链接、后来绑定进来的老订阅没有订单
+  // 每个订阅现在的套餐（付款时自动记，管理员改套餐也改这里），用来当卡片标题；没记过的老订阅显示「我的订阅」
   const { results: paid } = await db()
     .prepare(
-      `SELECT marzban_username, plan_id FROM orders
-       WHERE customer_id = ? AND status = 'paid' AND plan_id IS NOT NULL AND marzban_username IS NOT NULL ORDER BY id`,
+      `SELECT p.marzban_username, p.plan_id FROM subscription_plans p
+       JOIN subscriptions s ON s.marzban_username = p.marzban_username WHERE s.customer_id = ?`,
     )
     .bind(customer.id)
     .all<{ marzban_username: string; plan_id: string }>();

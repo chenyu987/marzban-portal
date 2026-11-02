@@ -9,6 +9,9 @@ import AdminHeader from "../../AdminHeader";
 import { adminEditUser } from "../../actions";
 import UserForm from "../UserForm";
 import UserActions from "./UserActions";
+import PlanCard from "./PlanCard";
+import { describePlan, findPlan } from "@/lib/plans";
+import { site } from "@/site.config";
 import BindToCustomer from "./BindToCustomer";
 import BindButton from "../../BindButton";
 import { CustomerLink } from "../../Links";
@@ -53,6 +56,14 @@ export default async function UserPage({ params }: { params: Promise<{ username:
         )
         .bind(username)
         .first<{ wechat: string; match_id: number | null; match_email: string | null }>();
+  const planRow = await db().prepare("SELECT plan_id FROM subscription_plans WHERE marzban_username = ?").bind(username).first<{ plan_id: string }>();
+  // 套餐说明：价目表上那行（比如「单设备  20G流量/月」），没配就写流量
+  const desc = (id: string) => {
+    const p = findPlan(site.plans, id)!;
+    return site.planGroups?.[p.group ?? p.name]?.lines?.at(-1) ?? describePlan(p);
+  };
+  const currentPlan = planRow && findPlan(site.plans, planRow.plan_id) ? { id: planRow.plan_id, name: findPlan(site.plans, planRow.plan_id)!.name, desc: desc(planRow.plan_id) } : null;
+  const planOptions = site.plans.map((p) => ({ id: p.id, name: p.name, desc: desc(p.id) }));
   const st = STATUS_LABEL[user.status] ?? { text: user.status, badge: "badge-neutral" };
   const left = timeLeft(user.expire);
 
@@ -124,6 +135,8 @@ export default async function UserPage({ params }: { params: Promise<{ username:
           )}
         </div>
       )}
+
+      <PlanCard username={user.username} current={currentPlan} options={planOptions} />
 
       <UserActions username={user.username} url={user.subscription_url} />
 

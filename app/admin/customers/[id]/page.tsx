@@ -31,7 +31,13 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   if (!c) notFound();
 
   const [subs, orders, entries, referred] = await Promise.all([
-    db().prepare("SELECT marzban_username, code FROM subscriptions WHERE customer_id = ? ORDER BY id").bind(id).all<{ marzban_username: string; code: string | null }>(),
+    db()
+      .prepare(
+        `SELECT s.marzban_username, s.code, p.plan_id FROM subscriptions s
+         LEFT JOIN subscription_plans p ON p.marzban_username = s.marzban_username WHERE s.customer_id = ? ORDER BY s.id`,
+      )
+      .bind(id)
+      .all<{ marzban_username: string; code: string | null; plan_id: string | null }>(),
     db()
       .prepare("SELECT id, amount, balance_used, method, status, plan_id, marzban_username, created_at, paid_at FROM orders WHERE customer_id = ? ORDER BY id DESC LIMIT 50")
       .bind(id)
@@ -71,11 +77,12 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
     .first<{ balance: number; paid: number; paid_n: number }>();
   // 每个订阅现在的状态从 Marzban 查，查不到也不影响页面
   const users = await Promise.all(
-    subs.results.map(async ({ marzban_username, code }) => {
+    subs.results.map(async ({ marzban_username, code, plan_id }) => {
+      const plan = plan_id ? (findPlan(site.plans, plan_id)?.name ?? plan_id) : null;
       try {
-        return { username: marzban_username, code, user: (await getUser(marzban_username)) as MarzbanUser | null };
+        return { username: marzban_username, code, plan, user: (await getUser(marzban_username)) as MarzbanUser | null };
       } catch {
-        return { username: marzban_username, code, user: null };
+        return { username: marzban_username, code, plan, user: null };
       }
     }),
   );
@@ -146,7 +153,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
       )}
       {users.length === 0 && <p className="mb-2 text-sm text-base-content/60">名下还没有订阅。可以新开一个，或者在下面把 Marzban 上已有的订阅绑过来。</p>}
       <div className="grid gap-3 sm:grid-cols-2">
-        {users.map(({ username, code, user }) => {
+        {users.map(({ username, code, plan, user }) => {
           const st = user ? (STATUS_LABEL[user.status] ?? { text: user.status, badge: "badge-neutral" }) : null;
           const pct = user?.data_limit ? Math.min(100, (user.used_traffic / user.data_limit) * 100) : null;
           const left = user ? timeLeft(user.expire) : null;
@@ -161,7 +168,9 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                 <span className="font-mono font-bold">{username}</span>
                 {st ? <span className={`badge badge-sm ${st.badge}`}>{st.text}</span> : <span className="badge badge-sm badge-error">Marzban 上查不到</span>}
               </div>
-              <div className="text-xs text-base-content/50">订阅编号 {formatSubCode(code)}</div>
+              <div className="text-xs text-base-content/50">
+                {plan ?? "没记套餐"}｜订阅编号 {formatSubCode(code)}
+              </div>
               {user && (
                 <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
                   <div>

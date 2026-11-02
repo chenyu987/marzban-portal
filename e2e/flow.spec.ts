@@ -38,6 +38,11 @@ const query = (command: string) =>
     }),
   )[0].results as Record<string, unknown>[];
 
+// 订阅的随机编号（订阅页上显示成 7F3A-9C21）
+const usernameCode = (username: string) => {
+  const c = String(query(`SELECT code FROM subscriptions WHERE marzban_username = '${username}'`)[0].code);
+  return `${c.slice(0, 4)}-${c.slice(4)}`;
+};
 // 订阅页上只显示随机的订阅编号（7F3A-9C21），按编号从库里查回 Marzban 用户名
 const usernameOf = (code: string) =>
   String(query(`SELECT marzban_username FROM subscriptions WHERE code = '${code.replace("-", "")}'`)[0].marzban_username);
@@ -333,9 +338,9 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   const maybe = admin.getByTestId("maybe-subs");
   await expect(maybe).toContainText(legacyUser);
   await maybe.getByRole("button", { name: "绑定" }).click();
-  await expect(maybe.getByText("已绑定 ✓")).toBeVisible();
-  await admin.reload();
+  // 绑完页面会刷新：这块提示跟着消失（没有待绑的了），订阅卡片出现在客人名下。不等「已绑定 ✓」，它可能来不及显示
   await expect(admin.getByTestId("customer-sub").filter({ hasText: legacyUser })).toBeVisible();
+  await expect(admin.getByTestId("maybe-subs")).toHaveCount(0);
   // 按老订阅名搜能找到客人；下面老订阅表里这一行也显示「已绑定」
   await admin.goto(`/admin/customers?q=${legacyUser}&has=sub`);
   await expect(admin.getByRole("link", { name: customer }).first()).toBeVisible();
@@ -360,6 +365,17 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await admin.getByRole("button", { name: "保存修改" }).click();
   await expect(admin.getByText("已保存到 Marzban")).toBeVisible();
   expect((await mockMarzban("GET", `/user/${mzUser}`)) as { data_limit?: number | null }).toMatchObject({ data_limit: null });
+
+  // 改套餐：Marzban 上流量和设备数按新套餐改，到期不变；客人订阅页标题变成新套餐名
+  const expireBefore = ((await mockMarzban("GET", `/user/${mzUser}`)) as { expire?: number }).expire;
+  const planCard = admin.getByTestId("plan-card");
+  await expect(planCard).toContainText("没记套餐");
+  await planCard.getByLabel("换成哪个套餐").selectOption("p3-month");
+  await planCard.getByRole("button", { name: "改成这个套餐" }).click();
+  await expect(planCard.getByText("已改成 高速版 月付")).toBeVisible();
+  expect(await mockMarzban("GET", `/user/${mzUser}`)).toMatchObject({ data_limit: null, note: "ip=2", expire: expireBefore });
+  await page.goto("/dashboard");
+  await expect(page.locator(".card", { hasText: usernameCode(mzUser) }).locator(".card-title")).toHaveText("高速版");
 
   await admin.getByRole("button", { name: "流量清零" }).click();
   await expect(admin.getByText("流量已清零")).toBeVisible();
@@ -480,6 +496,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
     "subscription.bind",
     "user.create",
     "user.edit",
+    "user.change_plan",
     "user.reset_usage",
     "user.revoke_sub",
     "user.delete",

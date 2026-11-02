@@ -71,6 +71,11 @@ export function newUserBody(username: string, plan: Plan, now: number) {
   };
 }
 
+// 后台「改套餐」用的 PUT /api/user/{username} 请求体：只按新套餐改流量上限、重置方式、设备数（备注里的 ip=N），到期时间不动
+export function changePlanBody(current: { note?: string | null }, plan: Plan) {
+  return { data_limit: dataLimit(plan), data_limit_reset_strategy: resetStrategy(plan), note: setIpNote(current.note, plan.ip) };
+}
+
 // 续期用的 PUT /api/user/{username} 请求体。流量另外调 reset 接口清零
 export function renewUserBody(current: { expire: number | null; note?: string | null }, plan: Plan, now: number) {
   return {

@@ -10,6 +10,7 @@ import { createAdminSession, currentAdmin, destroyAdminSession, logAdmin, requir
 import { cancelPendingOrder, confirmTransferOrder, revokeOrder, verifyOrder, type AdminResult } from "@/lib/admin-orders";
 import type { FormState } from "../actions";
 import { addNode, createUser, deleteExpiredUsers, deleteNode, deleteUser, expiredUsers, findUser, getHosts, resetAllUsage, listNodes, putHosts, modifyNode, modifyUser, reconnectNode, resetUsage, restartCore, revokeSubscription } from "@/lib/marzban";
+import { changePlanBody } from "@/lib/plans";
 import { createUserBody, describeChanges, parseExpiredDays, parseNodeForm, parseUserForm, validateHosts, USERNAME_RE, type UserFields } from "@/lib/admin-users";
 import { formatBytes, formatExpire, RESET_LABEL } from "@/lib/format";
 import { findPlan } from "@/lib/plans";
@@ -523,4 +524,32 @@ export async function adminBindUser(_: FormState, form: FormData): Promise<FormS
   const r = await adminBindSubscription(undefined, f);
   if (r?.ok) revalidatePath(`/admin/users/${encodeURIComponent(String(form.get("username") ?? ""))}`);
   return r;
+}
+
+// 改套餐：按新套餐改 Marzban 上的流量上限、重置方式、设备数（ip=N），到期时间不动；记下现在的套餐，客人订阅页标题跟着变
+export async function adminChangePlan(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const username = String(form.get("username") ?? "");
+  const plan = findPlan(site.plans, String(form.get("plan") ?? ""));
+  if (!plan) return { error: "请选套餐" };
+  let current;
+  try {
+    current = await findUser(username);
+    if (!current) return { error: `Marzban 上没有 ${username}` };
+    await modifyUser(username, changePlanBody(current, plan));
+  } catch (e) {
+    return { error: `改套餐失败：${errText(e)}` };
+  }
+  const before = await db().prepare("SELECT plan_id FROM subscription_plans WHERE marzban_username = ?").bind(username).first<{ plan_id: string }>();
+  await db()
+    .prepare(
+      `INSERT INTO subscription_plans (marzban_username, plan_id, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT (marzban_username) DO UPDATE SET plan_id = excluded.plan_id, updated_at = excluded.updated_at`,
+    )
+    .bind(username, plan.id, nowSec())
+    .run();
+  const from = before ? (findPlan(site.plans, before.plan_id)?.name ?? before.plan_id) : "没记套餐";
+  await logAdmin(admin, "user.change_plan", username, `${from} → ${plan.name}`);
+  revalidatePath(`/admin/users/${encodeURIComponent(username)}`);
+  return { ok: `已改成 ${plan.name}：流量和设备数已按新套餐改好，到期时间没变` };
 }

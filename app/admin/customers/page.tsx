@@ -69,6 +69,13 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     .bind(query, like(query))
     .all<{ marzban_username: string; wechat: string; customer_id: number | null; email: string | null; customer_wechat: string | null; match_id: number | null; match_email: string | null }>();
   const params = { q: query, has, sort: sort === "new" ? "" : sort };
+  // 老订阅按微信号合成「人」：同一个微信号的几个订阅放一行
+  const people = new Map<string, { wechat: string; subs: typeof legacy }>();
+  for (const w of legacy) {
+    const key = w.wechat.toLowerCase();
+    if (!people.has(key)) people.set(key, { wechat: w.wechat, subs: [] });
+    people.get(key)!.subs.push(w);
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-4 pb-16">
@@ -142,43 +149,46 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         </div>
       )}
       <Pager base="/admin/customers" params={params} page={page} pageSize={PAGE_SIZE} total={total?.n ?? 0} />
-      {legacy.length > 0 && (
+      {people.size > 0 && (
         <>
-          <h2 className="mt-10 mb-1 text-lg font-bold">老订阅（portal 上线前开的）</h2>
+          <h2 className="mt-10 mb-1 text-lg font-bold">老客人（portal 上线前开的订阅）</h2>
           <p className="mb-3 text-sm text-base-content/60">
-            按微信号就知道是谁的。客人注册网站账号后，如果填的微信号一样，这里会出现「绑定」按钮，点一下他就能在网站上看到、续费。不自动绑：微信号别人也能填，要你确认是本人。
+            按微信号就知道是谁：一个微信号一行，名下的老订阅都列在后面。客人注册网站账号时填的微信号一样，就会出现「绑定」按钮，点一下他就能在网站上看到、续费。不自动绑：微信号别人也能填，要你确认是本人。
           </p>
           <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
             <table className="table table-sm">
               <thead>
                 <tr>
                   <th>客人（微信号）</th>
-                  <th>订阅</th>
-                  <th>网站账号</th>
+                  <th>订阅和网站账号</th>
                 </tr>
               </thead>
               <tbody>
-                {legacy.map((w) => (
-                  <tr key={w.marzban_username} data-testid="legacy-sub">
-                    <td className="font-medium">{w.wechat}</td>
+                {[...people.values()].map((p) => (
+                  <tr key={p.wechat} data-testid="legacy-person">
+                    <td className="align-top font-medium">{p.wechat}</td>
                     <td>
-                      <SubLink username={w.marzban_username} />
-                    </td>
-                    <td>
-                      {w.customer_id ? (
-                        <span className="flex items-center gap-2">
-                          <span className="badge badge-sm badge-success">已绑定</span>
-                          <CustomerLink id={w.customer_id} email={w.email ?? ""} wechat={w.customer_wechat} />
-                        </span>
-                      ) : w.match_id ? (
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm">同微信号的客人</span>
-                          <CustomerLink id={w.match_id} email={w.match_email ?? ""} />
-                          <BindButton customerId={w.match_id} username={w.marzban_username} who={w.match_email ?? ""} />
-                        </span>
-                      ) : (
-                        <span className="text-sm text-base-content/50">还没注册网站账号</span>
-                      )}
+                      <div className="flex flex-col gap-1">
+                        {p.subs.map((w) => (
+                          <div key={w.marzban_username} className="flex flex-wrap items-center gap-2" data-testid="legacy-sub">
+                            <SubLink username={w.marzban_username} />
+                            {w.customer_id ? (
+                              <>
+                                <span className="badge badge-sm badge-success">已绑定</span>
+                                <CustomerLink id={w.customer_id} email={w.email ?? ""} wechat={w.customer_wechat} />
+                              </>
+                            ) : w.match_id ? (
+                              <>
+                                <span className="text-sm text-base-content/60">同微信号的客人</span>
+                                <CustomerLink id={w.match_id} email={w.match_email ?? ""} />
+                                <BindButton customerId={w.match_id} username={w.marzban_username} who={w.match_email ?? ""} />
+                              </>
+                            ) : (
+                              <span className="text-sm text-base-content/50">还没注册网站账号</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </td>
                   </tr>
                 ))}
