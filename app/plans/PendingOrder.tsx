@@ -96,7 +96,7 @@ export default function PendingOrder({ order, payments }: { order: OpenOrder; pa
               <input
                 name="payer"
                 maxLength={40}
-                placeholder="付款人昵称或名字（选填，方便对账）"
+                placeholder="付款人昵称或名字（选填）"
                 aria-label="付款人"
                 className="input input-sm w-full"
               />
