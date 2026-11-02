@@ -53,17 +53,25 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
     const g = p.group ?? p.name;
     byGroup.set(g, [...(byGroup.get(g) ?? []), p]);
   }
-  const groups: PlanGroup[] = [...byGroup].map(([name, plans]) => ({
-    name,
-    description: describe(plans[0]),
-    plans: plans.map((p) => ({
-      id: p.id,
-      name: p.name,
-      label: p.name.replace(name, "").trim() || `${p.days} 天`,
-      price: price(p.price),
-      fen: p.price,
-    })),
-  }));
+  const groups: PlanGroup[] = [...byGroup].map(([name, plans]) => {
+    const show = site.planGroups?.[name];
+    return {
+      name,
+      title: show?.title ?? name,
+      lines: show?.lines ?? [describe(plans[0])],
+      accent: show?.accent,
+      highlight: show?.highlight,
+      plans: plans.map((p) => ({
+        id: p.id,
+        name: p.name,
+        label: p.name.replace(name, "").trim() || `${p.days} 天`,
+        price: price(p.price),
+        amount: formatMoney(p.price).replace(/\.00$/, ""),
+        fen: p.price,
+        tag: show?.tags?.[p.id],
+      })),
+    };
+  });
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16">
@@ -116,7 +124,13 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
           />
         </>
       )}
-      {site.deviceLimitNote && <p className="mt-4 text-sm text-base-content/60">{site.deviceLimitNote}</p>}
+      {site.planNotes && site.planNotes.length > 0 && (
+        <div className="mt-4 space-y-1 text-sm text-base-content/60">
+          {site.planNotes.map((n) => (
+            <p key={n}>{n}</p>
+          ))}
+        </div>
+      )}
 
       <div className="mt-8">
         <RedeemForm note={site.purchaseNote} subscriptions={subscriptions} defaultTarget={renewTarget} />
@@ -127,6 +141,5 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
 
 function describe(p: Plan): string {
   const data = p.dataGB === null ? "不限流量" : `${p.dataGB} GB${p.dataReset === "month" ? "/月" : ""}`;
-  const ip = p.ip ? `同时在线 ${p.ip} 个 IP` : "不限设备";
-  return `${data}，${ip}`;
+  return data;
 }

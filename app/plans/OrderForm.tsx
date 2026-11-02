@@ -1,14 +1,23 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { Fragment, useActionState, useState } from "react";
 import { createOrder } from "../actions";
 
 export type PlanGroup = {
   name: string;
-  description: string;
-  // fen：价格（分），用余额抵扣时算还要付多少
-  plans: { id: string; label: string; name: string; price: string; fen: number }[];
+  title: string;
+  lines: string[];
+  accent?: boolean;
+  highlight?: "hot" | "top";
+  // price：带币种的价格，确认框里用；amount：价目表上的数字；fen：价格（分），用余额抵扣时算还要付多少
+  plans: { id: string; label: string; name: string; price: string; amount: string; fen: number; tag?: string }[];
 };
+
+// 「月付」→「/月」，跟在价格后面
+const per = (label: string) => (label.endsWith("付") ? `/${label.slice(0, -1)}` : "");
+
+// 价目表照 Canva 上的原版：一行一档，名字、说明、四个价格各占一格，格子之间有线。
+// 手机上放不下六列，名字和说明占一行，四个价格排在下一行
 
 // 套餐价目表。能买时每个价格都是一个按钮，点了先确认再下单。
 // 有余额时默认勾选「用余额抵扣」：余额够付全款就马上开通；不够就抵扣一部分，剩下的转账。
@@ -82,14 +91,38 @@ export default function OrderForm({
       {state?.error && <div role="alert" className="alert alert-error alert-soft">{state.error}</div>}
       {state?.ok && <div role="alert" className="alert alert-success alert-soft">{state.ok}</div>}
 
-      {groups.map((g) => (
-        <div key={g.name} className="card bg-base-100 shadow-sm">
-          <div className="card-body gap-2">
-            <h2 className="card-title text-base">{g.name}</h2>
-            <p className="text-sm text-base-content/70">{g.description}</p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {g.plans.map((p) =>
-                canOrder ? (
+      <div className="grid grid-cols-4 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 sm:grid-cols-[6rem_1.7fr_repeat(4,1fr)]">
+        {groups.map((g) => {
+          const hot = g.highlight === "hot";
+          const top = g.highlight === "top";
+          return (
+            <Fragment key={g.name}>
+              <div
+                className={`flex flex-col items-center justify-center p-2 text-center font-bold ${hot ? "bg-error text-error-content" : "bg-base-100"} ${top ? "text-error" : ""}`}
+              >
+                {hot && <span className="text-xs leading-none">hot</span>}
+                {top && <span className="text-xs leading-none">👑</span>}
+                {g.title}
+              </div>
+              <div className="col-span-3 flex flex-col items-center justify-center bg-base-100 p-2 text-center text-sm sm:col-span-1">
+                {g.lines.map((l, i) => (
+                  <span key={l} className={top || (g.accent && i === 0) ? "text-error" : ""}>
+                    {l}
+                  </span>
+                ))}
+              </div>
+              {g.plans.map((p) => {
+                const inner = (
+                  <>
+                    {p.tag && <span className="text-xs leading-tight text-error">{p.tag}</span>}
+                    <span className={`whitespace-nowrap ${top ? "font-bold text-error" : ""}`}>
+                      {p.amount}
+                      {per(p.label)}
+                    </span>
+                  </>
+                );
+                const cell = "flex min-h-14 flex-col items-center justify-center bg-base-100 px-1 py-2 text-center";
+                return canOrder ? (
                   <button
                     key={p.id}
                     name="plan"
@@ -98,22 +131,21 @@ export default function OrderForm({
                     data-price={p.price}
                     data-fen={p.fen}
                     disabled={pending || (!canTransfer && deduct < p.fen)}
-                    className="btn h-auto flex-col gap-0 py-3"
+                    title={`${p.name} ${p.price}，点击下单`}
+                    className={`${cell} cursor-pointer transition hover:bg-primary hover:text-primary-content disabled:cursor-not-allowed disabled:opacity-40`}
                   >
-                    <span className="text-sm font-normal text-base-content/60">{p.label}</span>
-                    <span className="text-lg font-bold">{p.price}</span>
+                    {inner}
                   </button>
                 ) : (
-                  <div key={p.id} className="rounded-box bg-base-200 p-3 text-center">
-                    <div className="text-sm text-base-content/60">{p.label}</div>
-                    <div className="text-lg font-bold">{p.price}</div>
+                  <div key={p.id} className={cell}>
+                    {inner}
                   </div>
-                ),
-              )}
-            </div>
-          </div>
-        </div>
-      ))}
+                );
+              })}
+            </Fragment>
+          );
+        })}
+      </div>
     </form>
   );
 }

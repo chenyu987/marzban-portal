@@ -27,12 +27,22 @@ export type SiteConfig = {
     // Windows 的 Hiddify 想固定某个版本时单独填，不用就和 hiddify 一样
     hiddifyWindows: string;
   };
-  // 教程页「注意」里关于设备/IP 限制的说明。没有限制就填 null
-  deviceLimitNote: string | null;
+  // 教程截图放在 public/site/tutorial/ 下（不同步到公开仓库）。true 才在教程里显示截图
+  tutorialShots?: boolean;
   // 金额前面的币种符号，比如 ¥、$
   currency: string;
   // 套餐列表。空着表示还没定，记账脚本就不能开通订阅
   plans: Plan[];
+  // 套餐页价目表上每一档怎么显示，按 Plan.group 对应，没写的档位只显示档位名和流量。
+  // title：第一列的名字；lines：第二列的说明，每条一行；accent：说明第一行标红；
+  // highlight：hot 名字格标红底、写上 hot，top 名字上加 👑、整行标红加粗；
+  // tags：价格上面的小标签，按套餐 id 写，比如 { "p3-quarter": "（买的最多）" }
+  planGroups?: Record<
+    string,
+    { title: string; lines?: string[]; accent?: boolean; highlight?: "hot" | "top"; tags?: Record<string, string> }
+  >;
+  // 价目表下面的说明，每条一行
+  planNotes?: string[];
   // 套餐页上告诉客人怎么买兑换码，比如「付款后联系客服微信 xxx 领取兑换码」
   purchaseNote: string;
   // 客人在套餐页下单后看到的收款方式。客人转账时备注订单号，管理员看到钱到了用 npm run orders -- confirm 确认。
@@ -54,7 +64,6 @@ export const site: SiteConfig = {
     hiddify: "https://github.com/hiddify/hiddify-app/releases/latest",
     hiddifyWindows: "https://github.com/hiddify/hiddify-app/releases/latest",
   },
-  deviceLimitNote: null,
   currency: "¥",
   plans: [
     { id: "month", name: "月付", price: 2000, days: 30, dataGB: 100, ip: 3 },
