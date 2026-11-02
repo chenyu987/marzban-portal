@@ -19,6 +19,11 @@ const ACTIONS: Record<string, string> = {
   "subscription.bind": "绑定订阅",
   "codes.create": "生成兑换码",
   "code.void": "作废兑换码",
+  "user.create": "新建用户",
+  "user.edit": "修改用户",
+  "user.reset_usage": "流量清零",
+  "user.revoke_sub": "重置订阅链接",
+  "user.delete": "删除用户",
 };
 
 type Row = { id: number; admin_email: string; action: string; target: string | null; detail: string | null; ip: string | null; created_at: number };

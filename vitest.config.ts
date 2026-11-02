@@ -5,5 +5,6 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: { alias: { "@": fileURLToPath(new URL(".", import.meta.url)) } },
   // e2e/ 是 Playwright 的端到端测试，用 npm run e2e 跑，不归 vitest 管
-  test: { exclude: ["e2e/**", "node_modules/**"] },
+  // .next、.open-next 是打包产物，里面会带一份 node_modules，不能扫
+  test: { exclude: ["e2e/**", "node_modules/**", ".next/**", ".open-next/**"] },
 });

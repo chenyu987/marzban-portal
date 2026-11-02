@@ -118,7 +118,8 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await expect(page.getByText("重置链接已经发过去了")).toBeVisible();
 
   // 管理员生成重置链接 → 设新密码 → 自动登录；同一个链接不能再用
-  const link = run(["password:reset-link", "--", email]).match(/http:\/\/localhost:3000\/reset\?token=\S+/)![0];
+  // 只取路径：脚本按 site.config 拼的是 3000 端口，本地用 E2E_PORT 换了端口时也能打开
+  const link = run(["password:reset-link", "--", email]).match(/\/reset\?token=\S+/)![0];
   await page.goto(link);
   await page.getByPlaceholder("新密码（至少 8 位）").fill(newPassword);
   await page.getByPlaceholder("再输一次").fill(newPassword);
@@ -314,6 +315,42 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await expect(admin.locator("tr", { hasText: codes[1] })).toContainText(customer);
   await expect(admin.locator("tr", { hasText: codes[0] })).toHaveCount(0);
 
+  // Marzban 用户：新建（绑到客人名下）、改流量和到期、清零流量、重置链接、删除，都直接改 Marzban
+  const mzUser = `e2e_mz_${stamp}`.slice(0, 32);
+  await admin.goto("/admin/users");
+  await expect(admin.getByText("在用 / 全部用户")).toBeVisible();
+  await admin.getByRole("link", { name: "新建用户" }).click();
+  await admin.locator('input[name="username"]').fill(mzUser);
+  await admin.locator('input[name="customer"]').fill(customer);
+  await admin.locator('input[name="dataGB"]').fill("50");
+  await admin.locator('select[name="resetStrategy"]').selectOption("month");
+  await admin.getByRole("button", { name: "新建" }).click();
+  await expect(admin).toHaveURL(new RegExp(`/admin/users/${mzUser}$`));
+  await expect(admin.getByText(customer)).toBeVisible();
+  expect((await mockMarzban("GET", `/user/${mzUser}`)) as { data_limit?: number }).toMatchObject({ data_limit: 50 * 1024 ** 3 });
+
+  await admin.locator('input[name="dataGB"]').fill("");
+  await admin.locator('input[name="addDays"]').fill("30");
+  await admin.getByRole("button", { name: "保存修改" }).click();
+  await expect(admin.getByText("已保存到 Marzban")).toBeVisible();
+  expect((await mockMarzban("GET", `/user/${mzUser}`)) as { data_limit?: number | null }).toMatchObject({ data_limit: null });
+
+  await admin.getByRole("button", { name: "流量清零" }).click();
+  await expect(admin.getByText("流量已清零")).toBeVisible();
+  await admin.getByRole("button", { name: "重置订阅链接", exact: true }).click();
+  await expect(admin.getByText("订阅链接已重置")).toBeVisible();
+
+  await admin.goto(`/admin/users?q=${mzUser}`);
+  await expect(admin.getByTestId("marzban-user")).toHaveCount(1);
+  await admin.getByRole("link", { name: mzUser }).click();
+  admin.removeAllListeners("dialog");
+  admin.on("dialog", (d) => (d.type() === "prompt" ? d.accept(mzUser) : d.accept()));
+  await admin.getByRole("button", { name: "删除用户" }).click();
+  await expect(admin).toHaveURL(/\/admin\/users$/);
+  expect(query(`SELECT 1 FROM subscriptions WHERE marzban_username = '${mzUser}'`)).toHaveLength(0);
+  admin.removeAllListeners("dialog");
+  admin.on("dialog", (d) => d.accept());
+
   // 日志页能按操作筛
   await admin.goto("/admin/logs?action=codes.create");
   await expect(admin.locator("tbody tr", { hasText: adminEmail })).toContainText("2 个：e2e 测试");
@@ -331,6 +368,11 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
     "subscription.bind",
     "codes.create",
     "code.void",
+    "user.create",
+    "user.edit",
+    "user.reset_usage",
+    "user.revoke_sub",
+    "user.delete",
   ]);
 
   // 退出后回到登录页

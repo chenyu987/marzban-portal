@@ -10,6 +10,24 @@ export type MarzbanUser = {
   used_traffic: number;
   subscription_url: string;
   note?: string | null;
+  online_at?: string | null; // 最后一次连上的时间，UTC，不带时区；没连过是 null
+  created_at?: string;
+  lifetime_used_traffic?: number;
+};
+
+export type UserStatus = MarzbanUser["status"];
+
+// GET /api/system：面板首页那几个数
+export type SystemStats = {
+  version: string;
+  mem_total: number;
+  mem_used: number;
+  cpu_cores: number;
+  cpu_usage: number;
+  total_user: number;
+  users_active: number;
+  incoming_bandwidth: number;
+  outgoing_bandwidth: number;
 };
 
 export class MarzbanError extends Error {
@@ -51,12 +69,16 @@ async function api<T>(method: string, path: string, body?: unknown, retried = fa
   return normalize((await res.json()) as T);
 }
 
-// 没设 XRAY_SUBSCRIPTION_URL_PREFIX 时 Marzban 返回的是相对路径 /sub/...
+// 没设 XRAY_SUBSCRIPTION_URL_PREFIX 时 Marzban 返回的是相对路径 /sub/...；用户列表里的每个也一样处理
 function normalize<T>(data: T): T {
-  const u = data as Partial<MarzbanUser>;
-  if (typeof u?.subscription_url === "string" && u.subscription_url.startsWith("/")) {
-    u.subscription_url = env().MARZBAN_URL + u.subscription_url;
-  }
+  const fix = (u: Partial<MarzbanUser>) => {
+    if (typeof u?.subscription_url === "string" && u.subscription_url.startsWith("/")) {
+      u.subscription_url = env().MARZBAN_URL + u.subscription_url;
+    }
+  };
+  const list = (data as { users?: Partial<MarzbanUser>[] })?.users;
+  if (Array.isArray(list)) list.forEach(fix);
+  else fix(data as Partial<MarzbanUser>);
   return data;
 }
 
@@ -84,6 +106,19 @@ export const resetUsage = (username: string) =>
 
 export const revokeSubscription = (username: string) =>
   api<MarzbanUser>("POST", `/user/${encodeURIComponent(username)}/revoke_sub`);
+
+export const deleteUser = (username: string) => api<unknown>("DELETE", `/user/${encodeURIComponent(username)}`);
+
+// 用户列表（后台「用户」页）。search 按用户名和备注模糊搜；sort 是 Marzban 的写法，前面加 - 表示倒序
+export function listUsers(p: { offset: number; limit: number; search?: string; status?: UserStatus; sort?: string }) {
+  const qs = new URLSearchParams({ offset: String(p.offset), limit: String(p.limit) });
+  if (p.search) qs.set("search", p.search);
+  if (p.status) qs.set("status", p.status);
+  if (p.sort) qs.set("sort", p.sort);
+  return api<{ users: MarzbanUser[]; total: number }>("GET", `/users?${qs}`);
+}
+
+export const getSystem = () => api<SystemStats>("GET", "/system");
 
 // 用订阅 token 查是谁的订阅（公开接口，不用管理员 token）。查不到返回 null
 export async function lookupSubscription(subToken: string): Promise<{ username: string } | null> {

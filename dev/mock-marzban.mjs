@@ -176,6 +176,53 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, toResponse(u));
     }
 
+    if ((m = /^\/api\/user\/([^/]+)$/.exec(path)) && req.method === "DELETE") {
+      const name = decodeURIComponent(m[1]);
+      if (!users.has(name)) return log(404), send(res, 404, { detail: "User not found" });
+      users.delete(name);
+      for (const [t, u] of subTokens) if (u === name) subTokens.delete(t);
+      log(200);
+      return send(res, 200, {});
+    }
+
+    // 用户列表：search 按用户名和备注模糊搜，status 筛状态，sort 前面加 - 是倒序，offset/limit 翻页
+    if (path === "/api/users" && req.method === "GET") {
+      const q = url.searchParams;
+      const search = (q.get("search") ?? "").toLowerCase();
+      const status = q.get("status");
+      const sort = q.get("sort") ?? "";
+      let list = [...users.values()].filter(
+        (u) => (!search || u.username.toLowerCase().includes(search) || (u.note ?? "").toLowerCase().includes(search)) && (!status || u.status === status),
+      );
+      if (sort) {
+        const key = sort.replace(/^-/, "");
+        const dir = sort.startsWith("-") ? -1 : 1;
+        list.sort((a, b) => ((a[key] ?? 0) > (b[key] ?? 0) ? dir : (a[key] ?? 0) < (b[key] ?? 0) ? -dir : 0));
+      }
+      const offset = Number(q.get("offset") ?? 0);
+      const limit = Number(q.get("limit") ?? list.length);
+      log(200);
+      return send(res, 200, { users: list.slice(offset, offset + limit).map(toResponse), total: list.length });
+    }
+
+    if (path === "/api/system" && req.method === "GET") {
+      const all = [...users.values()];
+      log(200);
+      return send(res, 200, {
+        version: "0.8.4",
+        mem_total: 1024 ** 3,
+        mem_used: 400 * 1024 ** 2,
+        cpu_cores: 1,
+        cpu_usage: 12.5,
+        total_user: all.length,
+        users_active: all.filter((u) => u.status === "active").length,
+        incoming_bandwidth: 10 * GB,
+        outgoing_bandwidth: 90 * GB,
+        incoming_bandwidth_speed: 0,
+        outgoing_bandwidth_speed: 0,
+      });
+    }
+
     if ((m = /^\/api\/user\/([^/]+)\/reset$/.exec(path)) && req.method === "POST") {
       const u = users.get(decodeURIComponent(m[1]));
       if (!u) return log(404), send(res, 404, { detail: "User not found" });

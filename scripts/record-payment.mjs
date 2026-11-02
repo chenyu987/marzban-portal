@@ -71,7 +71,9 @@ if (plan) {
   } else if (values.new || subs.length === 0) {
     let username = nextUsername(c.id, subs, c.wechat);
     // 万一 Marzban 上已经有同名用户（比如之前手动建过），序号往后挪
-    while (await mz.getUser(username)) username = nextUsername(c.id, [...subs, username], c.wechat);
+    // 库里还绑着（Marzban 上被手动删了）也算占用，不然写绑定时撞唯一约束
+    const bound = (name) => d1(`SELECT 1 FROM subscriptions WHERE marzban_username = ${q(name)}`).length > 0;
+    while (bound(username) || (await mz.getUser(username))) username = nextUsername(c.id, [...subs, username], c.wechat);
     action = { kind: "new", username };
   } else {
     fail(`${c.email} 名下已经有订阅：${subs.join("、")}\n续期加 --renew <用户名>，再开一个新的加 --new`);

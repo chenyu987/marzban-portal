@@ -9,7 +9,9 @@ import { verifyPassword } from "@/lib/password";
 import { createAdminSession, currentAdmin, destroyAdminSession, logAdmin, requireAccess, requireAdmin } from "@/lib/admin";
 import { cancelPendingOrder, confirmTransferOrder, revokeOrder, verifyOrder, type AdminResult } from "@/lib/admin-orders";
 import type { FormState } from "../actions";
-import { findUser } from "@/lib/marzban";
+import { createUser, deleteUser, findUser, modifyUser, resetUsage, revokeSubscription } from "@/lib/marzban";
+import { createUserBody, describeChanges, parseUserForm, USERNAME_RE, type UserFields } from "@/lib/admin-users";
+import { formatBytes, formatExpire, RESET_LABEL } from "@/lib/format";
 import { findPlan } from "@/lib/plans";
 import { formatRedeemCode, newRedeemCode } from "@/lib/format";
 import { hashResetToken, newResetToken, RESET_TTL_ADMIN, resetLink } from "@/lib/reset";
@@ -198,4 +200,130 @@ export async function adminVoidCode(_: FormState, form: FormData): Promise<FormS
   await logAdmin(admin, "code.void", formatRedeemCode(code));
   // 不刷新页面：刷新的话这一行马上消失，看不到「已作废」。下次打开页面就没有它了
   return { ok: "已作废" };
+}
+
+// ---- Marzban 用户（/admin/users）：直接改 Marzban，和面板是同一份数据 ----
+
+const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const formGetter = (form: FormData) => (k: string) => String(form.get(k) ?? "");
+
+// 操作日志里怎么写每个字段
+function fieldText(k: keyof UserFields, v: unknown): string {
+  if (k === "expire") return `到期 ${formatExpire((v as number) || null)}`;
+  if (k === "data_limit") return `流量 ${v ? formatBytes(v as number) : "不限"}`;
+  if (k === "data_limit_reset_strategy") return RESET_LABEL[String(v)] ?? "不重置";
+  if (k === "status") return v === "disabled" ? "停用" : "启用";
+  return `备注「${v ?? ""}」`;
+}
+
+export async function adminCreateUser(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const username = String(form.get("username") ?? "").trim().toLowerCase();
+  if (!USERNAME_RE.test(username)) return { error: "用户名只能是 3–32 位小写字母、数字、下划线" };
+  const r = parseUserForm(formGetter(form), { now: nowSec() });
+  if ("error" in r) return { error: r.error };
+
+  // 选填：绑到客人名下，按邮箱或微信号找
+  const who = String(form.get("customer") ?? "").trim();
+  let customer: { id: number; email: string } | null = null;
+  if (who) {
+    customer = await db()
+      .prepare("SELECT id, email FROM customers WHERE email = ?1 OR wechat = ?2")
+      .bind(who.toLowerCase(), who)
+      .first<{ id: number; email: string }>();
+    if (!customer) return { error: `没有邮箱或微信号是 ${who} 的客人` };
+  }
+
+  try {
+    if (await findUser(username)) return { error: `Marzban 上已经有 ${username} 了，换个名字` };
+    await createUser(createUserBody(username, r.fields));
+  } catch (e) {
+    return { error: `新建失败：${errText(e)}` };
+  }
+  if (customer) {
+    await db()
+      .prepare("INSERT INTO subscriptions (customer_id, marzban_username, created_at) VALUES (?, ?, ?)")
+      .bind(customer.id, username, nowSec())
+      .run();
+  }
+  const detail = (["data_limit", "expire", "note"] as const).map((k) => fieldText(k, r.fields[k])).join("；");
+  await logAdmin(admin, "user.create", username, customer ? `${detail}；绑到 ${customer.email}` : detail);
+  redirect(`/admin/users/${encodeURIComponent(username)}`);
+}
+
+export async function adminEditUser(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const username = String(form.get("username") ?? "");
+  let current;
+  try {
+    current = await findUser(username);
+  } catch (e) {
+    return { error: `查 Marzban 出错：${errText(e)}` };
+  }
+  if (!current) return { error: `Marzban 上没有 ${username}` };
+  const r = parseUserForm(formGetter(form), { now: nowSec(), currentExpire: current.expire });
+  if ("error" in r) return { error: r.error };
+
+  // 到期、流量用完、未激活这些状态是 Marzban 自己算的：表单上没改启用/停用就不发 status，免得把它们硬改成启用
+  const before: Partial<UserFields> = {
+    data_limit: current.data_limit ?? 0,
+    data_limit_reset_strategy: current.data_limit_reset_strategy ?? "no_reset",
+    expire: current.expire ?? 0,
+    note: current.note ?? "",
+    status: current.status === "disabled" ? "disabled" : "active",
+  };
+  const { status, ...rest } = r.fields;
+  const body = status === before.status ? rest : r.fields;
+  try {
+    await modifyUser(username, body);
+  } catch (e) {
+    return { error: `保存失败：${errText(e)}` };
+  }
+  await logAdmin(admin, "user.edit", username, describeChanges(before, r.fields, fieldText));
+  revalidatePath(`/admin/users/${encodeURIComponent(username)}`);
+  return { ok: "已保存到 Marzban" };
+}
+
+export async function adminResetUsage(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const username = String(form.get("username") ?? "");
+  try {
+    await resetUsage(username);
+  } catch (e) {
+    return { error: `清零失败：${errText(e)}` };
+  }
+  await logAdmin(admin, "user.reset_usage", username);
+  revalidatePath(`/admin/users/${encodeURIComponent(username)}`);
+  return { ok: "流量已清零" };
+}
+
+export async function adminRevokeSub(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const username = String(form.get("username") ?? "");
+  try {
+    await revokeSubscription(username);
+  } catch (e) {
+    return { error: `重置失败：${errText(e)}` };
+  }
+  await logAdmin(admin, "user.revoke_sub", username);
+  revalidatePath(`/admin/users/${encodeURIComponent(username)}`);
+  return { ok: "订阅链接已重置，把新链接发给客人" };
+}
+
+// 删 Marzban 用户，同时解除和客人的绑定（不然客人订阅页一直显示「查不到」）。订单记录不动
+export async function adminDeleteUser(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const username = String(form.get("username") ?? "");
+  const owner = await db()
+    .prepare("SELECT c.email FROM subscriptions s JOIN customers c ON c.id = s.customer_id WHERE s.marzban_username = ?")
+    .bind(username)
+    .first<{ email: string }>();
+  try {
+    await deleteUser(username);
+  } catch (e) {
+    return { error: `删除失败：${errText(e)}` };
+  }
+  await db().prepare("DELETE FROM subscriptions WHERE marzban_username = ?").bind(username).run();
+  await logAdmin(admin, "user.delete", username, owner ? `原来绑在 ${owner.email} 名下` : undefined);
+  redirect("/admin/users");
 }

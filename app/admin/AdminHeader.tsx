@@ -14,6 +14,9 @@ export default function AdminHeader({ email }: { email: string }) {
         <Link href="/admin/customers" className="btn btn-ghost btn-sm">
           客人
         </Link>
+        <Link href="/admin/users" className="btn btn-ghost btn-sm">
+          用户
+        </Link>
         <Link href="/admin/codes" className="btn btn-ghost btn-sm">
           兑换码
         </Link>

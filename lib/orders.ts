@@ -24,8 +24,11 @@ export async function provisionTarget(
     // 用户名用客人的微信号，管理员在面板里一眼看出是谁
     const c = await db().prepare("SELECT wechat FROM customers WHERE id = ?").bind(customerId).first<{ wechat: string | null }>();
     let username = nextUsername(customerId, subs, c?.wechat);
-    // Marzban 上万一已经有同名用户（管理员手动建过、或者别人的微信号转出来一样），序号往后挪
-    while (await findUser(username)) username = nextUsername(customerId, [...subs, username], c?.wechat);
+    // 名字被占了就序号往后挪：Marzban 上已经有（管理员手动建过、别人的微信号转出来一样），
+    // 或者库里还绑着（Marzban 上被手动删了但绑定还在，再用会撞唯一约束）
+    const taken = async (name: string) =>
+      !!(await db().prepare("SELECT 1 FROM subscriptions WHERE marzban_username = ?").bind(name).first()) || !!(await findUser(name));
+    while (await taken(username)) username = nextUsername(customerId, [...subs, username], c?.wechat);
     return provisionNew(marzbanOps, username, plan, now);
   }
   const current = await findUser(target);
