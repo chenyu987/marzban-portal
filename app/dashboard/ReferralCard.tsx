@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-export type Referral = { email: string; createdAt: string };
+export type Referral = { email: string; createdAt: string; earned: string };
 export type Reward = { email: string; date: string; paid: string; reward: string };
 
 // 推荐链接用当前访问的域名拼，换域名或者在本地测试都不用改配置
@@ -47,9 +47,14 @@ export default function ReferralCard({ code, referrals, balance, rewards }: Prop
           {referrals.length > 0 && (
             <ul className="divide-y divide-base-200 text-sm">
               {referrals.map((r, i) => (
-                <li key={i} className="flex justify-between py-2">
-                  <span>{r.email}</span>
-                  <span className="text-base-content/60">{r.createdAt} 注册</span>
+                <li key={i} className="flex flex-wrap justify-between gap-x-4 py-2">
+                  <span>
+                    {r.email}
+                    <span className="ml-2 text-base-content/60">{r.createdAt} 注册</span>
+                  </span>
+                  <span>
+                    已为你返 <span className="font-medium text-success">{r.earned}</span>
+                  </span>
                 </li>
               ))}
             </ul>
