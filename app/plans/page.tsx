@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
 import { formatDate, formatExpire, formatMoney } from "@/lib/format";
-import { findPlan } from "@/lib/plans";
+import { describePlan, findPlan } from "@/lib/plans";
 import { BALANCE_SQL } from "@/lib/balance";
 import { BRAND } from "@/lib/clients";
 import { site } from "@/site.config";
@@ -58,7 +58,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
     return {
       name,
       title: show?.title ?? name,
-      lines: show?.lines ?? [describe(plans[0])],
+      lines: show?.lines ?? [describePlan(plans[0])],
       accent: show?.accent,
       highlight: show?.highlight,
       plans: plans.map((p) => ({
@@ -137,9 +137,4 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
       </div>
     </div>
   );
-}
-
-function describe(p: Plan): string {
-  const data = p.dataGB === null ? "不限流量" : `${p.dataGB} GB${p.dataReset === "month" ? "/月" : ""}`;
-  return data;
 }

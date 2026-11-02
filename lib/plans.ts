@@ -9,6 +9,11 @@ export function findPlan(plans: Plan[], id: string): Plan | undefined {
   return plans.find((p) => p.id === id);
 }
 
+// 一句话说清流量，套餐页和订阅卡片共用
+export function describePlan(p: Plan): string {
+  return p.dataGB === null ? "不限流量" : `${p.dataGB} GB${p.dataReset === "month" ? "/月" : ""}`;
+}
+
 // 续期从原到期时间往后加；已经过期的从现在算，免得客人白白损失过期那几天之后的时间
 export function renewedExpire(current: number | null, days: number, now: number): number {
   const base = current && current > now ? current : now;

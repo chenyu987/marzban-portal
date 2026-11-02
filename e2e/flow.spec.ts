@@ -76,9 +76,10 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await card.getByRole("button", { name: "我已付款" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
 
-  // 订阅页出现新订阅
-  const title = page.locator(".card-title").filter({ hasText: /^c\d+_\d+$/ }).first();
+  // 订阅页出现新订阅：标题是套餐档位名，副标题是价目表上的说明，用户名放在角落当订阅编号
+  const title = page.getByTestId("sub-id").first();
   await expect(title).toBeVisible();
+  await expect(page.locator(".card-title").filter({ hasText: /^c\d+_\d+$/ })).toHaveCount(0);
   const username = await title.innerText();
 
   // 有订阅以后，「绑定已有订阅」收成页面最下面的小链接，点开才有输入框
@@ -146,9 +147,11 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
 
   // 订阅页有了新订阅，余额剩 ¥5
   await page.goto("/dashboard");
-  const title = page.locator(".card-title").filter({ hasText: /^c\d+_\d+$/ }).first();
+  const title = page.getByTestId("sub-id").first();
   await expect(title).toBeVisible();
   const username = await title.innerText();
+  // 卡片标题是套餐档位名（p1 是普通版），不是用户名
+  await expect(page.locator(".card-title").filter({ hasText: "普通版" }).first()).toBeVisible();
   await expect(page.getByText("¥5.00")).toBeVisible();
 
   // 余额不够付全款：抵扣 ¥5，还要转 ¥20；管理员列表里显示的也是 ¥20
@@ -210,7 +213,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await page.locator('button[value="p1-month"]').click();
   await expect(page.locator(".card.border")).toHaveCount(2);
   const third = await claim("微信", "付款人乙");
-  await expect(page.locator(".card-title").filter({ hasText: /^c\d+_\d+$/ })).toHaveCount(2);
+  await expect(page.getByTestId("sub-id")).toHaveCount(2);
 
   // 客人的登录进不了后台：会被带到后台自己的登录页
   await page.goto("/admin");
@@ -251,7 +254,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
 
   // 客人那边：第二张单不见了
   await page.goto("/dashboard");
-  await expect(page.locator(".card-title").filter({ hasText: /^c\d+_\d+$/ }).first()).toBeVisible();
+  await expect(page.getByTestId("sub-id").first()).toBeVisible();
   await page.goto("/plans");
   await expect(page.locator(".card.border")).toHaveCount(0);
 

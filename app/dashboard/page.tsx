@@ -5,6 +5,7 @@ import { getUser, type MarzbanUser } from "@/lib/marzban";
 import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, needsRenewal, RESET_LABEL, STATUS_LABEL, timeLeft } from "@/lib/format";
 import { BALANCE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
 import { site } from "@/site.config";
+import { describePlan, findPlan } from "@/lib/plans";
 import { BRAND } from "@/lib/clients";
 import { logout } from "../actions";
 import BindForm from "./BindForm";
@@ -28,6 +29,15 @@ export default async function DashboardPage() {
   const balance = await db().prepare(BALANCE_SQL).bind(customer.id).first<{ balance: number }>();
   const { results: rewards } = await db().prepare(REFERRAL_REWARDS_SQL).bind(customer.id).all<RewardRow>();
   const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
+  // 每个订阅最近一次付款买的套餐，用来当卡片标题；管理员直接发链接、后来绑定进来的老订阅没有订单
+  const { results: paid } = await db()
+    .prepare(
+      `SELECT marzban_username, plan_id FROM orders
+       WHERE customer_id = ? AND status = 'paid' AND plan_id IS NOT NULL AND marzban_username IS NOT NULL ORDER BY id`,
+    )
+    .bind(customer.id)
+    .all<{ marzban_username: string; plan_id: string }>();
+  const planOf = new Map(paid.map((o) => [o.marzban_username, o.plan_id]));
 
   // 一个订阅查失败不影响其他订阅显示
   const subs = await Promise.all(
@@ -73,7 +83,11 @@ export default async function DashboardPage() {
           </div>
         )}
         {subs.map(({ username, user }) =>
-          user ? <SubscriptionCard key={username} user={user} /> : <UnavailableCard key={username} username={username} />,
+          user ? (
+            <SubscriptionCard key={username} user={user} planId={planOf.get(username)} />
+          ) : (
+            <UnavailableCard key={username} username={username} />
+          ),
         )}
         {subs.length === 0 && <BindForm />}
       </div>
@@ -97,7 +111,25 @@ export default async function DashboardPage() {
   );
 }
 
-function SubscriptionCard({ user }: { user: MarzbanUser }) {
+// 标题用套餐档位名（不带月付、季付：续费可能换周期）；副标题优先用价目表上那行说明，比如「单设备  20G流量/月」
+function planHeading(planId: string | undefined): { title: string; subtitle?: string } {
+  const plan = planId ? findPlan(site.plans, planId) : undefined;
+  if (!plan) return { title: "我的订阅" };
+  const group = plan.group ?? plan.name;
+  return { title: group, subtitle: site.planGroups?.[group]?.lines?.at(-1) ?? describePlan(plan) };
+}
+
+// 用户名（Marzban 里的，比如 c4_1）客人看不懂，放在卡片角落当订阅编号，找客服时报这个
+function SubscriptionId({ username }: { username: string }) {
+  return (
+    <p className="text-right text-xs text-base-content/50">
+      订阅编号 <span data-testid="sub-id">{username}</span>
+    </p>
+  );
+}
+
+function SubscriptionCard({ user, planId }: { user: MarzbanUser; planId?: string }) {
+  const { title, subtitle } = planHeading(planId);
   const status = STATUS_LABEL[user.status] ?? { text: user.status, badge: "badge-neutral" };
   const left = timeLeft(user.expire);
   const reset = user.data_limit ? RESET_LABEL[user.data_limit_reset_strategy ?? ""] : undefined;
@@ -106,8 +138,11 @@ function SubscriptionCard({ user }: { user: MarzbanUser }) {
   return (
     <div className="card bg-base-100 shadow-sm">
       <div className="card-body gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="card-title">{user.username}</h2>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h2 className="card-title">{title}</h2>
+            {subtitle && <p className="text-sm text-base-content/60">{subtitle}</p>}
+          </div>
           <span className={`badge ${status.badge}`}>{status.text}</span>
         </div>
 
@@ -149,6 +184,7 @@ function SubscriptionCard({ user }: { user: MarzbanUser }) {
         )}
 
         <SubscriptionLink username={user.username} url={user.subscription_url} />
+        <SubscriptionId username={user.username} />
       </div>
     </div>
   );
@@ -158,10 +194,11 @@ function UnavailableCard({ username }: { username: string }) {
   return (
     <div className="card bg-base-100 shadow-sm">
       <div className="card-body">
-        <h2 className="card-title">{username}</h2>
+        <h2 className="card-title">我的订阅</h2>
         <div role="alert" className="alert alert-warning alert-soft">
           暂时查不到这个订阅的信息，请稍后刷新。一直这样的话请联系管理员。
         </div>
+        <SubscriptionId username={username} />
       </div>
     </div>
   );

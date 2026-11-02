@@ -5,7 +5,7 @@ import QRCode from "qrcode";
 import { clashVergeImport, hiddifyImport, shadowrocketImport } from "@/lib/clients";
 import { resetSubscriptionLink } from "../actions";
 
-// 大部分客人用 iPhone，Shadowrocket 固定放第一个
+// 大部分客人用 iPhone，Shadowrocket 固定放导入按钮的第一个
 const IMPORTS: { label: string; href: (url: string) => string }[] = [
   { label: "导入 Shadowrocket", href: shadowrocketImport },
   { label: "导入 Clash Verge", href: clashVergeImport },
@@ -31,17 +31,18 @@ export default function SubscriptionLink({ username, url }: { username: string; 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-2">
-        {IMPORTS.map((c, i) => (
-          <a key={c.label} href={c.href(url)} className={`btn btn-sm ${i === 0 ? "btn-primary" : ""}`}>
-            {c.label}
-          </a>
-        ))}
+        {/* 复制链接和二维码哪个客户端都能用，放最前面 */}
         <button type="button" onClick={copy} className="btn btn-sm">
           {copied ? "已复制 ✓" : "复制订阅链接"}
         </button>
         <button type="button" onClick={() => setShown(!shown)} className="btn btn-sm">
           {shown ? "收起二维码" : "显示二维码"}
         </button>
+        {IMPORTS.map((c, i) => (
+          <a key={c.label} href={c.href(url)} className={`btn btn-sm ${i === 0 ? "btn-primary" : ""}`}>
+            {c.label}
+          </a>
+        ))}
       </div>
 
       {shown && (
