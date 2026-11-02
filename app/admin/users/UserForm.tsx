@@ -5,7 +5,7 @@ import { RESET_STRATEGIES } from "@/lib/admin-users";
 import { RESET_LABEL } from "@/lib/format";
 import type { FormState } from "../../actions";
 
-type Defaults = { dataGB: string; reset: string; expire: string; note: string; status: string };
+type Defaults = { dataGB: string; reset: string; expire: string; note: string; status: string; customer?: string };
 
 // 新建和编辑共用。改的是线上 Marzban，提交前弹框再确认一次
 export default function UserForm({
@@ -24,7 +24,7 @@ export default function UserForm({
       action={formAction}
       onSubmit={(e) => {
         const name = editing ? username : String(new FormData(e.currentTarget).get("username") ?? "");
-        if (!confirm(editing ? `保存对 ${name} 的修改？会马上改到 Marzban 上` : `在 Marzban 上新建用户 ${name}？`)) e.preventDefault();
+        if (!confirm(editing ? `保存对 ${name} 的修改？会马上改到 Marzban 上` : `在 Marzban 上新建订阅 ${name}？`)) e.preventDefault();
       }}
       className="card bg-base-100 shadow-sm"
     >
@@ -33,14 +33,14 @@ export default function UserForm({
           <input type="hidden" name="username" value={username} />
         ) : (
           <label className="flex flex-col gap-1 sm:col-span-2">
-            <span className="text-sm text-base-content/70">用户名（3–32 位小写字母、数字、下划线，建好就不能改）</span>
+            <span className="text-sm text-base-content/70">订阅名，也就是 Marzban 用户名（3–32 位小写字母、数字、下划线，建好就不能改）</span>
             <input name="username" required pattern="[a-z0-9_]{3,32}" placeholder="比如客人的微信号" className="input input-sm w-full" />
           </label>
         )}
         {!editing && (
           <label className="flex flex-col gap-1 sm:col-span-2">
             <span className="text-sm text-base-content/70">绑到哪个客人名下（填客人的邮箱或微信号，选填；绑了客人登录就能看到）</span>
-            <input name="customer" placeholder="选填" className="input input-sm w-full" />
+            <input name="customer" defaultValue={defaults.customer} placeholder="选填" className="input input-sm w-full" />
           </label>
         )}
         <label className="flex flex-col gap-1">

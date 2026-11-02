@@ -1,117 +1,183 @@
-import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
 import { formatDate, formatMoney, normalizeSubCode } from "@/lib/format";
 import { site } from "@/site.config";
 import AdminHeader from "../AdminHeader";
+import { CustomerLink, SubLink } from "../Links";
+import BindButton from "../BindButton";
+import { FilterBar, Pager, pageOf, param } from "../ui";
 
 export const dynamic = "force-dynamic";
 
-type Row = { id: number; email: string; wechat: string | null; created_at: number; referrer: string | null; subs: number; balance: number; paid: number };
+type Row = { id: number; email: string; wechat: string | null; created_at: number; referrer: string | null; referrer_id: number | null; sub_names: string | null; balance: number; paid: number };
 
 const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
 // LIKE 里 % 和 _ 是通配符，客人搜的字里有这两个要转义
 const like = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
-// 客人列表：按邮箱或 Marzban 用户名搜，最多显示 100 个，新注册的在前
-export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ q?: string | string[] }> }) {
+// 客人列表：按邮箱、微信号、订阅名或订阅编号搜，最多显示 100 个，新注册的在前
+const PAGE_SIZE = 30;
+const SORTS: Record<string, { label: string; sql: string }> = {
+  new: { label: "最新注册的在前", sql: "c.id DESC" },
+  paid: { label: "付款最多的在前", sql: "paid DESC, c.id DESC" },
+  balance: { label: "余额最多的在前", sql: "balance DESC, c.id DESC" },
+};
+const HAS: Record<string, { label: string; sql: string }> = {
+  sub: { label: "有订阅", sql: "EXISTS (SELECT 1 FROM subscriptions s WHERE s.customer_id = c.id)" },
+  nosub: { label: "没有订阅", sql: "NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.customer_id = c.id)" },
+  balance: { label: "有余额", sql: "(SELECT COALESCE(SUM(amount), 0) FROM balance_entries b WHERE b.customer_id = c.id) > 0" },
+  referred: { label: "别人推荐来的", sql: "c.referred_by IS NOT NULL" },
+  nowechat: { label: "没填微信号", sql: "c.wechat IS NULL" },
+};
+
+// 客人列表：搜邮箱、微信号、订阅名或订阅编号，按有没有订阅 / 余额 / 推荐人筛，排序、翻页。
+// 下面是还没注册网站账号的老客人（按微信号对上他们的老订阅）
+export default async function CustomersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = await requireAdmin();
-  const { q } = await searchParams;
-  const query = typeof q === "string" ? q.trim() : "";
+  const sp = await searchParams;
+  const query = param(sp, "q");
+  const has = param(sp, "has") in HAS ? param(sp, "has") : "";
+  const sort = param(sp, "sort") in SORTS ? param(sp, "sort") : "new";
+  const page = pageOf(sp);
+  const where = `(?1 = '' OR c.email LIKE ?2 ESCAPE '\\' OR c.wechat LIKE ?2 ESCAPE '\\' OR c.id IN (SELECT customer_id FROM subscriptions WHERE marzban_username LIKE ?2 ESCAPE '\\' OR code = ?3))${has ? ` AND ${HAS[has].sql}` : ""}`;
+  const binds = [query, like(query), normalizeSubCode(query)];
+  const total = await db().prepare(`SELECT COUNT(*) AS n FROM customers c WHERE ${where}`).bind(...binds).first<{ n: number }>();
   const { results } = await db()
     .prepare(
-      `SELECT c.id, c.email, c.wechat, c.created_at, r.email AS referrer,
-         (SELECT COUNT(*) FROM subscriptions s WHERE s.customer_id = c.id) AS subs,
+      `SELECT c.id, c.email, c.wechat, c.created_at, r.email AS referrer, r.id AS referrer_id,
+         (SELECT GROUP_CONCAT(marzban_username) FROM subscriptions s WHERE s.customer_id = c.id) AS sub_names,
          (SELECT COALESCE(SUM(amount), 0) FROM balance_entries b WHERE b.customer_id = c.id) AS balance,
          (SELECT COALESCE(SUM(amount), 0) FROM orders o WHERE o.customer_id = c.id AND o.status = 'paid') AS paid
        FROM customers c LEFT JOIN customers r ON r.id = c.referred_by
-       WHERE ?1 = '' OR c.email LIKE ?2 ESCAPE '\\' OR c.wechat LIKE ?2 ESCAPE '\\' OR c.id IN (SELECT customer_id FROM subscriptions WHERE marzban_username LIKE ?2 ESCAPE '\\' OR code = ?3)
-       ORDER BY c.id DESC LIMIT 100`,
+       WHERE ${where}
+       ORDER BY ${SORTS[sort].sql} LIMIT ?4 OFFSET ?5`,
     )
-    .bind(query, like(query), normalizeSubCode(query))
+    .bind(...binds, PAGE_SIZE, (page - 1) * PAGE_SIZE)
     .all<Row>();
-  // 老客人：Marzban 用户名和微信号的对应，绑到了哪个客人名下也一起查出来
+  // 老订阅：绑没绑、绑在谁名下；没绑的看有没有同微信号的注册客人（不分大小写），给一键绑定
   const { results: legacy } = await db()
     .prepare(
-      `SELECT w.marzban_username, w.wechat, c.id AS customer_id, c.email FROM marzban_wechat w
+      `SELECT w.marzban_username, w.wechat, c.id AS customer_id, c.email, c.wechat AS customer_wechat, m.id AS match_id, m.email AS match_email
+       FROM marzban_wechat w
        LEFT JOIN subscriptions s ON s.marzban_username = w.marzban_username
        LEFT JOIN customers c ON c.id = s.customer_id
+       -- 同微信号的注册客人可能不止一个（微信号没限制唯一），取最早注册的那个
+       LEFT JOIN customers m ON s.id IS NULL AND m.id = (SELECT id FROM customers x WHERE x.wechat = w.wechat COLLATE NOCASE ORDER BY id LIMIT 1)
        WHERE ?1 = '' OR w.marzban_username LIKE ?2 ESCAPE '\\' OR w.wechat LIKE ?2 ESCAPE '\\'
-       ORDER BY w.wechat, w.marzban_username LIMIT 100`,
+       ORDER BY c.id IS NOT NULL, w.wechat COLLATE NOCASE, w.marzban_username LIMIT 200`,
     )
     .bind(query, like(query))
-    .all<{ marzban_username: string; wechat: string; customer_id: number | null; email: string | null }>();
+    .all<{ marzban_username: string; wechat: string; customer_id: number | null; email: string | null; customer_wechat: string | null; match_id: number | null; match_email: string | null }>();
+  const params = { q: query, has, sort: sort === "new" ? "" : sort };
 
   return (
-    <div className="mx-auto max-w-4xl px-4 pb-16">
+    <div className="mx-auto max-w-5xl px-4 pb-16">
       <AdminHeader email={admin.email} />
-      <h1 className="mt-4 mb-4 text-2xl font-bold">客人</h1>
-      <form className="mb-4 flex gap-2">
-        <input name="q" defaultValue={query} placeholder="邮箱、微信号、Marzban 用户名或订阅编号" className="input w-full" />
-        <button className="btn">搜索</button>
-      </form>
+      <div className="mt-4 mb-1 flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="text-2xl font-bold">客人</h1>
+        <span className="text-sm text-base-content/60">在网站上注册的人；每个客人名下可以有好几个订阅（Marzban 用户）</span>
+      </div>
+      <FilterBar base="/admin/customers" active={!!(query || has || sort !== "new")}>
+        <input name="q" defaultValue={query} placeholder="邮箱、微信号、订阅名或订阅编号" className="input input-sm w-64" />
+        <select name="has" defaultValue={has} className="select select-sm w-36" aria-label="筛选">
+          <option value="">全部客人</option>
+          {Object.entries(HAS).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v.label}
+            </option>
+          ))}
+        </select>
+        <select name="sort" defaultValue={sort} className="select select-sm w-40" aria-label="排序">
+          {Object.entries(SORTS).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v.label}
+            </option>
+          ))}
+        </select>
+      </FilterBar>
       {results.length === 0 ? (
         <p className="text-base-content/60">{query ? "没有找到注册过的客人。" : "还没有客人。"}</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
           <table className="table table-sm">
             <thead>
               <tr>
-                <th>邮箱</th>
-                <th>微信</th>
-                <th>注册</th>
+                <th>客人</th>
                 <th>订阅</th>
-                <th>余额</th>
-                <th>已付款</th>
+                <th className="text-right">余额</th>
+                <th className="text-right">累计付款</th>
                 <th>推荐人</th>
+                <th>注册</th>
               </tr>
             </thead>
             <tbody>
-              {results.map((c) => (
-                <tr key={c.id} className="hover">
-                  <td>
-                    <Link href={`/admin/customers/${c.id}`} className="link link-primary">
-                      {c.email}
-                    </Link>
-                  </td>
-                  <td>{c.wechat ?? "-"}</td>
-                  <td>{formatDate(c.created_at)}</td>
-                  <td>{c.subs}</td>
-                  <td>{money(c.balance)}</td>
-                  <td>{money(c.paid)}</td>
-                  <td className="text-base-content/60">{c.referrer ?? "-"}</td>
-                </tr>
-              ))}
+              {results.map((c) => {
+                const names = c.sub_names ? c.sub_names.split(",") : [];
+                return (
+                  <tr key={c.id} className="hover">
+                    <td>
+                      <CustomerLink id={c.id} email={c.email} wechat={c.wechat} />
+                    </td>
+                    <td>
+                      {names.length === 0 ? (
+                        <span className="text-base-content/40">没有</span>
+                      ) : (
+                        <span className="flex flex-wrap gap-x-2">
+                          {names.slice(0, 3).map((n) => (
+                            <SubLink key={n} username={n} />
+                          ))}
+                          {names.length > 3 && <span className="text-base-content/50">等 {names.length} 个</span>}
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-right">{money(c.balance)}</td>
+                    <td className="text-right">{money(c.paid)}</td>
+                    <td>{c.referrer_id ? <CustomerLink id={c.referrer_id} email={c.referrer ?? ""} /> : <span className="text-base-content/40">-</span>}</td>
+                    <td className="whitespace-nowrap text-base-content/60">{formatDate(c.created_at)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-          {results.length === 100 && <p className="mt-2 text-sm text-base-content/60">只显示最近 100 个，用搜索找更早的。</p>}
         </div>
       )}
+      <Pager base="/admin/customers" params={params} page={page} pageSize={PAGE_SIZE} total={total?.n ?? 0} />
       {legacy.length > 0 && (
         <>
-          <h2 className="mt-10 mb-1 text-lg font-bold">Marzban 用户的微信号</h2>
-          <p className="mb-3 text-sm text-base-content/60">老客人的 Marzban 用户名一般是微信名，这里记着对应的微信号。</p>
-          <div className="overflow-x-auto">
+          <h2 className="mt-10 mb-1 text-lg font-bold">老订阅（portal 上线前开的）</h2>
+          <p className="mb-3 text-sm text-base-content/60">
+            按微信号就知道是谁的。客人注册网站账号后，如果填的微信号一样，这里会出现「绑定」按钮，点一下他就能在网站上看到、续费。不自动绑：微信号别人也能填，要你确认是本人。
+          </p>
+          <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
             <table className="table table-sm">
               <thead>
                 <tr>
-                  <th>Marzban 用户</th>
-                  <th>微信号</th>
-                  <th>绑在哪个客人名下</th>
+                  <th>客人（微信号）</th>
+                  <th>订阅</th>
+                  <th>网站账号</th>
                 </tr>
               </thead>
               <tbody>
                 {legacy.map((w) => (
-                  <tr key={w.marzban_username}>
-                    <td>{w.marzban_username}</td>
-                    <td>{w.wechat}</td>
+                  <tr key={w.marzban_username} data-testid="legacy-sub">
+                    <td className="font-medium">{w.wechat}</td>
+                    <td>
+                      <SubLink username={w.marzban_username} />
+                    </td>
                     <td>
                       {w.customer_id ? (
-                        <Link href={`/admin/customers/${w.customer_id}`} className="link">
-                          {w.email}
-                        </Link>
+                        <span className="flex items-center gap-2">
+                          <span className="badge badge-sm badge-success">已绑定</span>
+                          <CustomerLink id={w.customer_id} email={w.email ?? ""} wechat={w.customer_wechat} />
+                        </span>
+                      ) : w.match_id ? (
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm">同微信号的客人</span>
+                          <CustomerLink id={w.match_id} email={w.match_email ?? ""} />
+                          <BindButton customerId={w.match_id} username={w.marzban_username} who={w.match_email ?? ""} />
+                        </span>
                       ) : (
-                        <span className="text-base-content/60">还没注册</span>
+                        <span className="text-sm text-base-content/50">还没注册网站账号</span>
                       )}
                     </td>
                   </tr>

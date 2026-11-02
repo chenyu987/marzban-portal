@@ -38,7 +38,7 @@ export default async function Overview({ pending }: { pending: number }) {
     { label: "本月成交", value: `${site.currency}${formatMoney(sales?.sum ?? 0)}`, desc: `${sales?.n ?? 0} 单（北京时间本月）`, href: "/admin" },
     { label: "待处理订单", value: String(pending), desc: "待付款、开通中、待对账", href: "/admin", warn: pending > 0 },
     { label: "客人", value: String(people?.total ?? 0), desc: `本月新注册 ${people?.fresh ?? 0}`, href: "/admin/customers" },
-    { label: "在用 / 全部用户", value: users, desc: "Marzban 上的用户", href: "/admin/users" },
+    { label: "在用 / 全部订阅", value: users, desc: "Marzban 上的用户数", href: "/admin/users" },
     { label: "7 天内到期", value: expiring, desc: "提醒客人续费", href: "/admin/users?status=active&sort=expire", warn: expiring !== "-" && expiring !== "0" },
     { label: "出错的节点", value: badNodes, desc: "点进去重连", href: "/admin/nodes", warn: badNodes !== "-" && badNodes !== "0" },
   ];

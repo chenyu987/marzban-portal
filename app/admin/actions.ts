@@ -219,7 +219,7 @@ function fieldText(k: keyof UserFields, v: unknown): string {
 export async function adminCreateUser(_: FormState, form: FormData): Promise<FormState> {
   const admin = await requireAdmin();
   const username = String(form.get("username") ?? "").trim().toLowerCase();
-  if (!USERNAME_RE.test(username)) return { error: "用户名只能是 3–32 位小写字母、数字、下划线" };
+  if (!USERNAME_RE.test(username)) return { error: "订阅名只能是 3–32 位小写字母、数字、下划线" };
   const r = parseUserForm(formGetter(form), { now: nowSec() });
   if ("error" in r) return { error: r.error };
 
@@ -469,7 +469,7 @@ export async function adminPreviewExpired(_: FormState, form: FormData): Promise
   if (!days) return { error: "天数要写 1 到 3650 的整数" };
   try {
     const names = await expiredUsers(new Date(Date.now() - days * 86400_000));
-    return { ok: names.length ? `到期超过 ${days} 天的有 ${names.length} 个` : `没有到期超过 ${days} 天的用户`, names };
+    return { ok: names.length ? `到期超过 ${days} 天的有 ${names.length} 个` : `没有到期超过 ${days} 天的订阅`, names };
   } catch (e) {
     return { error: `查 Marzban 出错：${errText(e)}` };
   }
@@ -491,7 +491,7 @@ export async function adminDeleteExpired(_: FormState, form: FormData): Promise<
   }
   await logAdmin(admin, "users.delete_expired", `到期超过 ${days} 天`, names.length ? `${names.length} 个：${names.join("、")}` : "0 个");
   revalidatePath("/admin/users");
-  return { ok: `已删除 ${names.length} 个用户` };
+  return { ok: `已删除 ${names.length} 个订阅` };
 }
 
 export async function adminResetAllUsage(): Promise<FormState> {
@@ -501,7 +501,26 @@ export async function adminResetAllUsage(): Promise<FormState> {
   } catch (e) {
     return { error: `清零失败：${errText(e)}` };
   }
-  await logAdmin(admin, "users.reset_all_usage", "全部用户");
+  await logAdmin(admin, "users.reset_all_usage", "全部订阅");
   revalidatePath("/admin/users");
-  return { ok: "全部用户的已用流量已清零" };
+  return { ok: "全部订阅的已用流量已清零" };
+}
+
+// 在订阅页把订阅绑到客人（按邮箱或微信号找客人）
+export async function adminBindUser(_: FormState, form: FormData): Promise<FormState> {
+  await requireAdmin();
+  const who = String(form.get("who") ?? "").trim();
+  const c = await db()
+    .prepare("SELECT id FROM customers WHERE email = ?1 OR wechat = ?2 COLLATE NOCASE")
+    .bind(who.toLowerCase(), who)
+    .all<{ id: number }>();
+  if (c.results.length === 0) return { error: `没有邮箱或微信号是 ${who} 的客人` };
+  if (c.results.length > 1) return { error: `有 ${c.results.length} 个客人的微信号是 ${who}，请填邮箱` };
+  const f = new FormData();
+  f.set("customerId", String(c.results[0].id));
+  f.set("username", String(form.get("username") ?? ""));
+  // 复用客人页的绑定：查重、查 Marzban、记日志都在里面
+  const r = await adminBindSubscription(undefined, f);
+  if (r?.ok) revalidatePath(`/admin/users/${encodeURIComponent(String(form.get("username") ?? ""))}`);
+  return r;
 }

@@ -32,7 +32,7 @@ export default function BulkActions() {
             aria-label="天数"
             className="input input-xs w-16"
           />
-          天的用户
+          天的订阅
           <button
             type="button"
             className="btn btn-xs"
@@ -51,7 +51,7 @@ export default function BulkActions() {
               disabled={pending}
               onClick={() => {
                 const n = preview.names!.length;
-                if (prompt(`删除这 ${n} 个用户？客人就连不上了，也不能恢复。确定就输入数字 ${n}`) !== String(n)) return;
+                if (prompt(`删除这 ${n} 个订阅？客人就连不上了，也不能恢复。确定就输入数字 ${n}`) !== String(n)) return;
                 start(async () => {
                   setResult(await adminDeleteExpired(undefined, form()));
                   setPreview(undefined);
@@ -71,13 +71,13 @@ export default function BulkActions() {
         )}
         <div className="divider my-0" />
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span>所有用户的已用流量清零（比如每月统一重置）</span>
+          <span>所有订阅的已用流量清零（比如每月统一重置）</span>
           <button
             type="button"
             className="btn btn-xs btn-warning btn-outline"
             disabled={pending}
             onClick={() => {
-              if (prompt("所有用户的已用流量都会清零，不能撤销。确定就输入：全部清零") !== "全部清零") return;
+              if (prompt("所有订阅的已用流量都会清零，不能撤销。确定就输入：全部清零") !== "全部清零") return;
               start(async () => setResult(await adminResetAllUsage()));
             }}
           >

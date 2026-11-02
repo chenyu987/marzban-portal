@@ -9,6 +9,9 @@ import AdminHeader from "../../AdminHeader";
 import { adminEditUser } from "../../actions";
 import UserForm from "../UserForm";
 import UserActions from "./UserActions";
+import BindToCustomer from "./BindToCustomer";
+import BindButton from "../../BindButton";
+import { CustomerLink } from "../../Links";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +42,17 @@ export default async function UserPage({ params }: { params: Promise<{ username:
   const usage = await userUsage(username, monthStartBeijing(Date.now()), new Date())
     .then((r) => r.usages.filter((u) => u.used_traffic > 0).sort((a, b) => b.used_traffic - a.used_traffic))
     .catch(() => null);
+  // 没绑客人时：看它是不是老订阅（记着微信号），有没有同微信号的注册客人
+  const legacy = owner
+    ? null
+    : await db()
+        .prepare(
+          `SELECT w.wechat, m.id AS match_id, m.email AS match_email FROM marzban_wechat w
+           LEFT JOIN customers m ON m.id = (SELECT id FROM customers x WHERE x.wechat = w.wechat COLLATE NOCASE ORDER BY id LIMIT 1)
+           WHERE w.marzban_username = ?`,
+        )
+        .bind(username)
+        .first<{ wechat: string; match_id: number | null; match_email: string | null }>();
   const st = STATUS_LABEL[user.status] ?? { text: user.status, badge: "badge-neutral" };
   const left = timeLeft(user.expire);
 
@@ -46,23 +60,35 @@ export default async function UserPage({ params }: { params: Promise<{ username:
     <div className="mx-auto max-w-3xl px-4 pb-16">
       <AdminHeader email={admin.email} />
       <Link href="/admin/users" className="link link-hover text-sm text-base-content/60">
-        ← 用户列表
+        ← 订阅列表
       </Link>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <h1 className="text-2xl font-bold">{user.username}</h1>
         <span className={`badge ${st.badge}`}>{st.text}</span>
       </div>
-      <p className="mb-4 text-sm text-base-content/60">
-        客人{" "}
+      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm" data-testid="sub-owner">
+        <span className="text-base-content/60">属于客人</span>
         {owner ? (
-          <Link href={`/admin/customers/${owner.id}`} className="link">
-            {owner.wechat ? `${owner.wechat}（${owner.email}）` : owner.email}
-          </Link>
+          <CustomerLink id={owner.id} email={owner.email} wechat={owner.wechat} />
+        ) : legacy?.match_id ? (
+          <>
+            <span>
+              微信 <b>{legacy.wechat}</b>，同微信号的客人
+            </span>
+            <CustomerLink id={legacy.match_id} email={legacy.match_email ?? ""} />
+            <BindButton customerId={legacy.match_id} username={user.username} who={legacy.match_email ?? ""} />
+          </>
+        ) : legacy ? (
+          <span>
+            微信 <b>{legacy.wechat}</b>（还没注册网站账号）
+          </span>
         ) : (
-          "没绑（去客人详情页绑定）"
+          <span className="text-base-content/50">没绑</span>
         )}
-        ｜最后连接 {onlineText(user.online_at, Date.now())}
-      </p>
+        <span className="text-base-content/40">｜</span>
+        <span className="text-base-content/60">最后连接 {onlineText(user.online_at, Date.now())}</span>
+      </div>
+      {!owner && <BindToCustomer username={user.username} />}
 
       <div className="mb-4 grid grid-cols-2 gap-4 rounded-box bg-base-100 p-4 shadow-sm">
         <div>

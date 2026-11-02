@@ -65,7 +65,7 @@ export default function UserActions({ username, url }: { username: string; url: 
           disabled={pending}
           onClick={() => run(adminDeleteUser, () => prompt(`删除后客人马上连不上，也不能恢复。确定要删就输入用户名 ${username}`) === username)}
         >
-          删除用户
+          删除订阅
         </button>
         {pending && <span className="loading loading-spinner loading-sm self-center" />}
       </div>

@@ -298,7 +298,8 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
 
   // 兑换码：生成 2 个，作废一个，客人用另一个
   await admin.goto("/admin/codes");
-  await admin.locator('select[name="plan"]').selectOption("p1-month");
+  // 页面上还有筛选用的套餐下拉框，限定在「生成兑换码」的表单里
+  await admin.locator('form:has(input[name="count"]) select[name="plan"]').selectOption("p1-month");
   await admin.locator('input[name="count"]').fill("2");
   await admin.getByPlaceholder("备注，比如「微信转账 张三」").fill("e2e 测试");
   await admin.getByRole("button", { name: "生成" }).click();
@@ -315,11 +316,36 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await expect(admin.locator("tr", { hasText: codes[1] })).toContainText(customer);
   await expect(admin.locator("tr", { hasText: codes[0] })).toHaveCount(0);
 
-  // Marzban 用户：新建（绑到客人名下）、改流量和到期、清零流量、重置链接、删除，都直接改 Marzban
+  // 全部订单：按状态筛、按订单号搜，客人和订阅能点进去
+  await admin.goto("/admin?view=all&status=cancelled");
+  await expect(admin.getByTestId("orders-summary")).toContainText("筛出");
+  for (const row of await admin.getByTestId("order-row").all()) await expect(row).toContainText("已取消");
+  await admin.goto(`/admin?view=all&q=${second}`);
+  await expect(admin.getByTestId("order-row")).toHaveCount(1);
+  await admin.getByTestId("order-row").getByRole("link", { name: customer }).click();
+  await expect(admin.getByRole("heading", { name: customer })).toBeVisible();
+
+  // 老订阅：微信号和这个客人一样（大小写不同也算），客人页提示一键绑定
+  const legacyUser = `e2e_legacy_${stamp}`.slice(0, 32);
+  await mockMarzban("POST", "/user", { username: legacyUser, expire: Math.floor(Date.now() / 1000) + 30 * 86400 });
+  sql(`INSERT INTO marzban_wechat (marzban_username, wechat, created_at) VALUES ('${legacyUser}', 'E2E_WX_TEST', unixepoch())`);
+  await admin.reload();
+  const maybe = admin.getByTestId("maybe-subs");
+  await expect(maybe).toContainText(legacyUser);
+  await maybe.getByRole("button", { name: "绑定" }).click();
+  await expect(maybe.getByText("已绑定 ✓")).toBeVisible();
+  await admin.reload();
+  await expect(admin.getByTestId("customer-sub").filter({ hasText: legacyUser })).toBeVisible();
+  // 按老订阅名搜能找到客人；下面老订阅表里这一行也显示「已绑定」
+  await admin.goto(`/admin/customers?q=${legacyUser}&has=sub`);
+  await expect(admin.getByRole("link", { name: customer }).first()).toBeVisible();
+  await expect(admin.getByTestId("legacy-sub").filter({ hasText: legacyUser })).toContainText("已绑定");
+
+    // Marzban 用户：新建（绑到客人名下）、改流量和到期、清零流量、重置链接、删除，都直接改 Marzban
   const mzUser = `e2e_mz_${stamp}`.slice(0, 32);
   await admin.goto("/admin/users");
-  await expect(admin.getByText("在用 / 全部用户")).toBeVisible();
-  await admin.getByRole("link", { name: "新建用户" }).click();
+  await expect(admin.getByText("在用 / 全部订阅")).toBeVisible();
+  await admin.getByRole("link", { name: "新建订阅" }).click();
   await admin.locator('input[name="username"]').fill(mzUser);
   await admin.locator('input[name="customer"]').fill(customer);
   await admin.locator('input[name="dataGB"]').fill("50");
@@ -345,7 +371,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await admin.getByRole("link", { name: mzUser }).click();
   admin.removeAllListeners("dialog");
   admin.on("dialog", (d) => (d.type() === "prompt" ? d.accept(mzUser) : d.accept()));
-  await admin.getByRole("button", { name: "删除用户" }).click();
+  await admin.getByRole("button", { name: "删除订阅" }).click();
   await expect(admin).toHaveURL(/\/admin\/users$/);
   expect(query(`SELECT 1 FROM subscriptions WHERE marzban_username = '${mzUser}'`)).toHaveLength(0);
   admin.removeAllListeners("dialog");
@@ -408,9 +434,9 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   admin.removeAllListeners("dialog");
   admin.on("dialog", (d) => d.accept(d.message().includes("全部清零") ? "全部清零" : count));
   await delBtn.click();
-  await expect(admin.getByText(`已删除 ${count} 个用户`)).toBeVisible();
+  await expect(admin.getByText(`已删除 ${count} 个订阅`)).toBeVisible();
   await admin.getByRole("button", { name: "全部清零" }).click();
-  await expect(admin.getByText("全部用户的已用流量已清零")).toBeVisible();
+  await expect(admin.getByText("全部订阅的已用流量已清零")).toBeVisible();
   admin.removeAllListeners("dialog");
   admin.on("dialog", (d) => d.accept());
 
@@ -451,6 +477,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
     "subscription.bind",
     "codes.create",
     "code.void",
+    "subscription.bind",
     "user.create",
     "user.edit",
     "user.reset_usage",

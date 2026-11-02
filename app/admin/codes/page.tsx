@@ -6,6 +6,8 @@ import { findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
 import AdminHeader from "../AdminHeader";
 import { CreateCodes, VoidCode } from "./CodeForms";
+import { CustomerLink } from "../Links";
+import { FilterBar, Pager, pageOf, param } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -17,38 +19,93 @@ type Row = {
   used_at: number | null;
   order_id: number | null;
   email: string | null;
+  wechat: string | null;
   created_at: number;
 };
 
-// 兑换码：生成、看状态、作废没用过的。?unused=1 只看没用过的
-export default async function CodesPage({ searchParams }: { searchParams: Promise<{ unused?: string }> }) {
+const PAGE_SIZE = 50;
+const STATES: Record<string, { label: string; sql: string }> = {
+  unused: { label: "没用过", sql: "r.used_by IS NULL" },
+  used: { label: "已用", sql: "r.used_by IS NOT NULL AND r.order_id IS NOT NULL" },
+  stuck: { label: "卡住了，要核对", sql: "r.used_by IS NOT NULL AND r.order_id IS NULL" },
+};
+const GROUPS = [...new Set(site.plans.map((p) => p.group ?? p.name))];
+const like = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+// 兑换码：生成；按状态（没用过 / 已用 / 卡住）、套餐、码 / 备注 / 客人搜；作废没用过的
+export default async function CodesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = await requireAdmin();
-  const unused = (await searchParams).unused === "1";
-  const { results } = await db()
-    .prepare(
-      `SELECT r.code, r.plan_id, r.note, r.used_by, r.used_at, r.order_id, c.email, r.created_at
-       FROM redeem_codes r LEFT JOIN customers c ON c.id = r.used_by
-       ${unused ? "WHERE r.used_by IS NULL" : ""}
-       ORDER BY r.created_at DESC, r.code LIMIT 200`,
-    )
-    .all<Row>();
+  const sp = await searchParams;
+  // 兼容以前的 ?unused=1
+  const state = param(sp, "unused") === "1" ? "unused" : param(sp, "state") in STATES ? param(sp, "state") : "";
+  const group = GROUPS.includes(param(sp, "plan")) ? param(sp, "plan") : "";
+  const q = param(sp, "q");
+  const page = pageOf(sp);
+  const where: string[] = [];
+  const binds: (string | number)[] = [];
+  if (state) where.push(STATES[state].sql);
+  if (group) {
+    const ids = site.plans.filter((p) => (p.group ?? p.name) === group).map((p) => p.id);
+    where.push(`r.plan_id IN (${ids.map(() => "?").join(",")})`);
+    binds.push(...ids);
+  }
+  if (q) {
+    where.push("(r.code LIKE ? ESCAPE '\\' OR r.note LIKE ? ESCAPE '\\' OR c.email LIKE ? ESCAPE '\\' OR c.wechat LIKE ? ESCAPE '\\')");
+    const code = q.replace(/[^0-9a-z]/gi, "").toUpperCase();
+    binds.push(like(code || q), like(q), like(q), like(q));
+  }
+  const W = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const FROM = "FROM redeem_codes r LEFT JOIN customers c ON c.id = r.used_by";
+  const [count, { results }] = await Promise.all([
+    db().prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(r.used_by IS NULL), 0) AS unused ${FROM} ${W}`).bind(...binds).first<{ n: number; unused: number }>(),
+    db()
+      .prepare(`SELECT r.code, r.plan_id, r.note, r.used_by, r.used_at, r.order_id, c.email, c.wechat, r.created_at ${FROM} ${W} ORDER BY r.created_at DESC, r.code LIMIT ? OFFSET ?`)
+      .bind(...binds, PAGE_SIZE, (page - 1) * PAGE_SIZE)
+      .all<Row>(),
+  ]);
   const plans = site.plans.map((p) => ({ id: p.id, name: p.name, price: `${site.currency}${formatMoney(p.price)}` }));
+  const params = { state, plan: group, q };
 
   return (
-    <div className="mx-auto max-w-4xl px-4 pb-16">
+    <div className="mx-auto max-w-5xl px-4 pb-16">
       <AdminHeader email={admin.email} />
       <h1 className="mt-4 mb-4 text-2xl font-bold">兑换码</h1>
       <CreateCodes plans={plans} />
 
-      <div className="mt-8 mb-2 flex items-center justify-between">
-        <h2 className="text-lg font-bold">{unused ? "没用过的" : "最近的"}兑换码</h2>
-        <Link href={unused ? "/admin/codes" : "/admin/codes?unused=1"} className="link link-hover text-sm">
-          {unused ? "看全部" : "只看没用过的"}
-        </Link>
-      </div>
+      <h2 className="mt-8 mb-2 text-lg font-bold">
+        兑换码 <span className="text-sm font-normal text-base-content/60">（筛出 {count?.n ?? 0} 个，其中没用过 {count?.unused ?? 0} 个）</span>
+      </h2>
+      <FilterBar base="/admin/codes" active={!!(state || group || q)}>
+        <input name="q" defaultValue={q} placeholder="兑换码、备注、客人" className="input input-sm w-52" />
+        <select name="state" defaultValue={state} className="select select-sm w-40" aria-label="状态">
+          <option value="">全部状态</option>
+          {Object.entries(STATES).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v.label}
+            </option>
+          ))}
+        </select>
+        <select name="plan" defaultValue={group} className="select select-sm w-36" aria-label="套餐">
+          <option value="">全部套餐</option>
+          {GROUPS.map((g) => (
+            <option key={g} value={g}>
+              {g}
+            </option>
+          ))}
+        </select>
+      </FilterBar>
       {results.length === 0 && <p className="text-sm text-base-content/60">没有。</p>}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
         <table className="table table-sm">
+          <thead>
+            <tr>
+              <th>兑换码</th>
+              <th>套餐</th>
+              <th>备注</th>
+              <th>状态</th>
+              <th>生成</th>
+            </tr>
+          </thead>
           <tbody>
             {results.map((r) => {
               const label = formatRedeemCode(r.code);
@@ -67,18 +124,23 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
                       // 占住了但没记账：兑换时 Marzban 出了问题，要去核对（见 docs/portal-deploy.md「兑换码卡住了」）
                       <span className="badge badge-sm badge-error">卡住了，要核对</span>
                     ) : (
-                      <span className="text-sm">
-                        {r.email ?? `客人 ${r.used_by}`} {formatExpire(r.used_at)} 用的
+                      <span className="flex flex-wrap items-center gap-1 text-sm">
+                        {r.email ? <CustomerLink id={r.used_by} email={r.email} wechat={r.wechat} /> : `客人 ${r.used_by}`}
+                        <span className="text-base-content/60">{formatExpire(r.used_at)} 用的，</span>
+                        <Link href={`/admin?view=all&q=${r.order_id}`} className="link link-hover">
+                          订单 {r.order_id}
+                        </Link>
                       </span>
                     )}
                   </td>
-                  <td className="text-base-content/60">{formatExpire(r.created_at)} 生成</td>
+                  <td className="whitespace-nowrap text-base-content/60">{formatExpire(r.created_at)}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      <Pager base="/admin/codes" params={params} page={page} pageSize={PAGE_SIZE} total={count?.n ?? 0} />
     </div>
   );
 }

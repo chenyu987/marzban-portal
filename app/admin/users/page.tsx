@@ -5,6 +5,7 @@ import { getSystem, listUsers, type MarzbanUser, type SystemStats, type UserStat
 import { formatBytes, formatExpire, RESET_LABEL, STATUS_LABEL } from "@/lib/format";
 import { onlineText, SORTS, STATUS_FILTERS } from "@/lib/admin-users";
 import AdminHeader from "../AdminHeader";
+import { CustomerLink } from "../Links";
 import BulkActions from "./BulkActions";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   // 这一页的用户各绑在哪个客人名下
   const names = data?.users.map((u) => u.username) ?? [];
   const owners = new Map<string, { id: number; email: string; wechat: string | null }>();
+  const legacyWechat = new Map<string, string>();
   if (names.length) {
     const { results } = await db()
       .prepare(
@@ -45,6 +47,12 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       .bind(...names)
       .all<{ marzban_username: string; id: number; email: string; wechat: string | null }>();
     for (const r of results) owners.set(r.marzban_username, r);
+    // 没绑客人的老订阅：显示记着的微信号
+    const { results: old } = await db()
+      .prepare(`SELECT marzban_username, wechat FROM marzban_wechat WHERE marzban_username IN (${names.map(() => "?").join(",")})`)
+      .bind(...names)
+      .all<{ marzban_username: string; wechat: string }>();
+    for (const r of old) legacyWechat.set(r.marzban_username, r.wechat);
   }
 
   const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
@@ -63,16 +71,19 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     <div className="mx-auto max-w-6xl px-4 pb-16">
       <AdminHeader email={admin.email} />
       <div className="mt-4 mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold">用户</h1>
+        <div>
+          <h1 className="text-2xl font-bold">订阅</h1>
+          <p className="text-sm text-base-content/60">每个订阅就是 Marzban 上的一个用户，直接读写 Marzban；一个客人名下可以有好几个订阅</p>
+        </div>
         <Link href="/admin/users/new" className="btn btn-primary btn-sm">
-          新建用户
+          新建订阅
         </Link>
       </div>
 
       {system && (
         <div className="stats stats-vertical mb-4 w-full bg-base-100 shadow-sm sm:stats-horizontal">
           <div className="stat">
-            <div className="stat-title">在用 / 全部用户</div>
+            <div className="stat-title">在用 / 全部订阅</div>
             <div className="stat-value text-2xl">
               {system.users_active} / {system.total_user}
             </div>
@@ -94,7 +105,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       )}
 
       <form className="mb-4 flex flex-wrap gap-2">
-        <input name="q" defaultValue={q} placeholder="用户名或备注" className="input input-sm w-48" />
+        <input name="q" defaultValue={q} placeholder="订阅名或备注" className="input input-sm w-48" />
         <select name="status" defaultValue={status ?? ""} className="select select-sm w-36">
           <option value="">全部状态</option>
           {STATUS_FILTERS.map((s) => (
@@ -124,7 +135,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
           <table className="table table-sm">
             <thead>
               <tr>
-                <th>用户名</th>
+                <th>订阅（Marzban 用户名）</th>
                 <th>客人</th>
                 <th>状态</th>
                 <th>到期</th>
@@ -146,9 +157,11 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                     </td>
                     <td>
                       {owner ? (
-                        <Link href={`/admin/customers/${owner.id}`} className="link link-hover">
-                          {owner.wechat ?? owner.email}
-                        </Link>
+                        <CustomerLink id={owner.id} email={owner.email} wechat={owner.wechat} />
+                      ) : legacyWechat.has(u.username) ? (
+                        <span title="老订阅，客人还没绑网站账号">
+                          {legacyWechat.get(u.username)} <span className="text-xs text-base-content/50">未注册</span>
+                        </span>
                       ) : (
                         <span className="text-base-content/40">-</span>
                       )}
@@ -167,7 +180,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
               })}
             </tbody>
           </table>
-          {data.users.length === 0 && <p className="py-4 text-sm text-base-content/60">没有符合条件的用户。</p>}
+          {data.users.length === 0 && <p className="py-4 text-sm text-base-content/60">没有符合条件的订阅。</p>}
           <div className="mt-4 flex items-center justify-between text-sm">
             <span className="text-base-content/60">
               共 {data.total} 个，第 {page} / {pages} 页

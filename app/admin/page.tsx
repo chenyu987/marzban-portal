@@ -5,6 +5,9 @@ import { findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
 import AdminHeader from "./AdminHeader";
 import Overview from "./Overview";
+import OrdersTable from "./OrdersTable";
+import { Tabs } from "./ui";
+import { CustomerLink, SubLink } from "./Links";
 import OrderActions from "./OrderActions";
 import VerifyActions from "./VerifyActions";
 
@@ -12,6 +15,7 @@ export const dynamic = "force-dynamic";
 
 type Row = {
   id: number;
+  customer_id: number;
   email: string;
   wechat: string | null;
   amount: number;
@@ -30,12 +34,12 @@ type Row = {
 
 const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
 const planName = (id: string | null) => (id ? (findPlan(site.plans, id)?.name ?? `${id}（已下架）`) : "（没有套餐）");
-const target = (o: Row) => (o.marzban_username ? `续期 ${o.marzban_username}` : "新开订阅");
+const target = (o: Row) => (o.marzban_username ? `续期 ${o.marzban_username}` : "新开订阅"); // 确认框里用的纯文字
 // 客人实际要转的钱，抵扣了余额的写在后面
 const due = (o: Row) =>
   `${money(o.amount - o.balance_used)}${o.balance_used > 0 ? `（套餐价 ${money(o.amount)}，余额抵扣 ${money(o.balance_used)}）` : ""}`;
 
-const SELECT = `SELECT o.id, c.email, c.wechat, o.amount, o.balance_used, o.method, o.status, o.plan_id, o.marzban_username,
+const SELECT = `SELECT o.id, c.id AS customer_id, c.email, c.wechat, o.amount, o.balance_used, o.method, o.status, o.plan_id, o.marzban_username,
   o.claimed_at, o.pay_method, o.payer, o.new_sub, o.paid_at, o.created_at FROM orders o JOIN customers c ON c.id = o.customer_id`;
 
 // 客人点「我已付款」的时间精确到秒（北京时间），和账单里的到账时间对
@@ -43,12 +47,15 @@ const exact = (t: number | null) =>
   t === null
     ? "-"
     : new Date(t * 1000).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }).replace(/\//g, "-");
-const who = (o: Row) => `${o.email}${o.wechat ? `（微信 ${o.wechat}）` : ""}`;
+const who = (o: Row) => <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} />;
+const sub = (o: Row) => (o.marzban_username ? <SubLink username={o.marzban_username} /> : "新开订阅");
 
-export default async function AdminHome() {
+export default async function AdminHome({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = await requireAdmin();
+  const sp = await searchParams;
+  const view = sp.view === "all" ? "all" : "todo";
   // 开通中的（出过问题，要核对）排最前，然后是客人说已付的（按点的时间），最后是还没付的
-  const [{ results: open }, { results: unverified }, { results: recent }] = await Promise.all([
+  const [{ results: open }, { results: unverified }] = await Promise.all([
     db()
       .prepare(
         `${SELECT} WHERE o.method IN ('transfer', 'balance') AND o.status IN ('pending', 'processing')
@@ -59,25 +66,30 @@ export default async function AdminHome() {
     db()
       .prepare(`${SELECT} WHERE o.method = 'transfer' AND o.status = 'paid' AND o.verified_at IS NULL ORDER BY o.claimed_at, o.id`)
       .all<Row>(),
-    db()
-      .prepare(
-        `${SELECT} WHERE o.method IN ('transfer', 'balance') AND o.status IN ('paid', 'cancelled', 'revoked')
-         AND NOT (o.method = 'transfer' AND o.status = 'paid' AND o.verified_at IS NULL) ORDER BY o.id DESC LIMIT 10`,
-      )
-      .all<Row>(),
   ]);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 pb-16">
+    <div className="mx-auto max-w-6xl px-4 pb-16">
       <AdminHeader email={admin.email} />
       <Overview pending={open.length + unverified.length} />
 
-      <h1 className="mt-6 mb-1 text-2xl font-bold">已开通、待对账</h1>
+      <h1 className="mt-6 mb-2 text-2xl font-bold">订单</h1>
+      <Tabs
+        tabs={[
+          { href: "/admin", label: "待处理", count: open.length + unverified.length, active: view === "todo" },
+          { href: "/admin?view=all", label: "全部订单", active: view === "all" },
+        ]}
+      />
+      {view === "all" ? (
+        <OrdersTable sp={sp} />
+      ) : (
+        <>
+      <h2 className="mb-1 text-xl font-bold">已开通、待对账</h2>
       <p className="mb-4 text-sm text-base-content/60">
         客人付完款点「我已付款」就自动开通了。按点的时间、金额、付款方式和付款人去账单里找这笔钱：找到了点「确认到账」，找不到点「没收到钱」把订阅收回。
       </p>
       {unverified.length === 0 && <p className="text-base-content/60">没有要对账的单。</p>}
-      <div className="flex flex-col gap-3">
+      <div className="grid gap-3 lg:grid-cols-2">
         {unverified.map((o) => {
           const summary = `订单 ${o.id}｜${o.email}｜${planName(o.plan_id)}｜${o.marzban_username}｜应收 ${money(o.amount - o.balance_used)}｜${o.pay_method ?? "?"}`;
           return (
@@ -85,7 +97,9 @@ export default async function AdminHome() {
               <div className="card-body gap-2 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-bold">订单 {o.id}</span>
-                  <span className="badge badge-info">{o.new_sub ? "新开" : "续期"} {o.marzban_username}</span>
+                  <span className="badge badge-info gap-1">
+                    {o.new_sub ? "新开" : "续期"} {o.marzban_username && <SubLink username={o.marzban_username} />}
+                  </span>
                 </div>
                 <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
                   <span className="text-base-content/60">应收</span>
@@ -113,7 +127,7 @@ export default async function AdminHome() {
         客人点了「我已付款」但自动开通没成功的会留在这里，在账单里找到这笔钱再确认开通。没点「我已付款」的一般就是还没付。
       </p>
       {open.length === 0 && <p className="text-base-content/60">没有待处理的订单。</p>}
-      <div className="flex flex-col gap-3">
+      <div className="grid gap-3 lg:grid-cols-2">
         {open.map((o) => {
           const stuck = o.status === "processing";
           const summary = `订单 ${o.id}｜${o.email}｜${planName(o.plan_id)}｜${target(o)}｜应收 ${money(o.amount - o.balance_used)}`;
@@ -131,14 +145,15 @@ export default async function AdminHome() {
                   </span>
                 </div>
                 <div className="text-sm">
-                  {who(o)}｜{planName(o.plan_id)}｜{target(o)}
+                  {who(o)}｜{planName(o.plan_id)}｜{o.marzban_username ? <>续期 {sub(o)}</> : "新开订阅"}
                 </div>
                 <div className="text-sm">
                   应收 <b>{due(o)}</b>，{formatExpire(o.created_at)} 下单
                 </div>
                 {stuck ? (
                   <p className="text-sm text-error">
-                    上次开通出了问题，不确定 Marzban 改没改。去面板核对后用命令行处理：npm run orders -- confirm {o.id} --done 用户名 --remote（已经改好）或 --again（确实没改）
+                    上次开通出了问题，不确定 Marzban 改没改。{o.marzban_username ? <>先点 {sub(o)} 看它现在的到期和流量，</> : "先去「订阅」页按客人的微信号搜一下有没有新开出来，"}
+                    再用命令行处理：npm run orders -- confirm {o.id} --done 订阅名 --remote（已经改好）或 --again（确实没改）
                   </p>
                 ) : (
                   o.method === "transfer" && <OrderActions id={o.id} summary={summary} />
@@ -149,20 +164,8 @@ export default async function AdminHome() {
         })}
       </div>
 
-      <h2 className="mt-10 mb-3 text-lg font-bold">最近处理过的</h2>
-      <ul className="divide-y divide-base-200 text-sm">
-        {recent.map((o) => (
-          <li key={o.id} className="flex flex-wrap justify-between gap-2 py-2">
-            <span>
-              订单 {o.id}｜{o.email}｜{planName(o.plan_id)}｜{o.marzban_username ?? "-"}
-            </span>
-            <span className="text-base-content/60">
-              {o.status === "paid" ? `已付款 ${formatExpire(o.paid_at)}` : o.status === "revoked" ? "没收到钱，已收回" : "已取消"}
-              {o.method === "balance" ? "（余额付）" : ""}
-            </span>
-          </li>
-        ))}
-      </ul>
+        </>
+      )}
     </div>
   );
 }
