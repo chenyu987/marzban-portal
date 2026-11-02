@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { site } from "@/site.config";
+import Link from "next/link";
 import ContactSupport from "./ContactSupport";
 import "./globals.css";
 
@@ -16,11 +17,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="zh-CN">
       <body className="flex min-h-screen flex-col bg-base-200">
         <div className="flex-1">{children}</div>
-        {(site.contactEmail || site.supportWechat) && (
-          <footer className="py-6">
-            <ContactSupport className="justify-center" />
-          </footer>
-        )}
+        <footer className="flex flex-col items-center gap-3 border-t border-base-300/60 px-4 py-8 text-sm text-base-content/60">
+          <nav className="flex flex-wrap justify-center gap-x-5 gap-y-1">
+            <Link href="/" className="link link-hover">
+              首页
+            </Link>
+            <Link href="/#pricing" className="link link-hover">
+              套餐价格
+            </Link>
+            <Link href="/tutorial" className="link link-hover">
+              安装教程
+            </Link>
+            <Link href="/dashboard" className="link link-hover">
+              我的订阅
+            </Link>
+          </nav>
+          {(site.contactEmail || site.supportWechat) && <ContactSupport className="justify-center" />}
+          <p className="text-xs text-base-content/40">
+            © {new Date().getFullYear()} {site.brand}
+          </p>
+        </footer>
       </body>
     </html>
   );

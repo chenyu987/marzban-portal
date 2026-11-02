@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { adminLogout } from "./actions";
 import AdminNav from "./AdminNav";
+import { Logo } from "../Brand";
 
 export default function AdminHeader({ email }: { email: string }) {
   return (
     <header className="sticky top-0 z-10 -mx-4 mb-2 flex items-center gap-2 border-b border-base-300 bg-base-200/90 px-4 py-2 backdrop-blur">
-      <Link href="/admin" className="mr-1 shrink-0 text-lg font-bold">
+      <Link href="/admin" className="mr-1 flex shrink-0 items-center gap-2 text-lg font-bold">
+        <Logo size={26} />
         管理后台
       </Link>
       <AdminNav />

@@ -81,6 +81,16 @@ test("首页：卖点、节点、价格、常见问题，注册按钮带上推�
   expect((await page.request.get(manifest.icons[0].src)).ok()).toBe(true);
 });
 
+test("打错网址：带品牌的 404，能回首页", async ({ page }) => {
+  const res = await page.goto("/no-such-page");
+  expect(res?.status()).toBe(404);
+  await expect(page.getByRole("heading", { name: "这个页面不存在" })).toBeVisible();
+  await page.getByRole("link", { name: "回首页" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  // 每页底部有导航和版权
+  await expect(page.locator("footer")).toContainText("安装教程");
+});
+
 test("客人从注册到续费、忘记密码，管理员确认订单", async ({ page }) => {
   const email = `e2e-${Date.now()}@example.test`;
   const password = "E2eTest-1234";
