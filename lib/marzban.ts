@@ -127,3 +127,39 @@ export async function lookupSubscription(subToken: string): Promise<{ username: 
   if (!res.ok) throw new MarzbanError(res.status, `Marzban 订阅查询返回 ${res.status}`);
   return (await res.json()) as { username: string };
 }
+
+// ---- 节点和核心（后台「节点」页）----
+
+export type NodeStatus = "connected" | "connecting" | "error" | "disabled";
+export type MarzbanNode = {
+  id: number;
+  name: string;
+  address: string;
+  port: number;
+  api_port: number;
+  usage_coefficient: number;
+  xray_version: string | null;
+  status: NodeStatus;
+  message: string | null;
+};
+export type NodeFields = { name: string; address: string; port: number; api_port: number; usage_coefficient: number };
+
+export const listNodes = () => api<MarzbanNode[]>("GET", "/nodes");
+// add_as_new_host：Marzban 会照主节点的 Host 给新节点各加一份，客人订阅里马上多出这个节点
+export const addNode = (f: NodeFields) => api<MarzbanNode>("POST", "/node", { ...f, add_as_new_host: true });
+export const modifyNode = (id: number, body: Partial<NodeFields> & { status?: "disabled" | "connecting" }) => api<MarzbanNode>("PUT", `/node/${id}`, body);
+export const reconnectNode = (id: number) => api<unknown>("POST", `/node/${id}/reconnect`);
+export const deleteNode = (id: number) => api<unknown>("DELETE", `/node/${id}`);
+// 节点装 Marzban Node 时要用的证书
+export const nodeSettings = () => api<{ min_node_version: string; certificate: string }>("GET", "/node/settings");
+
+// 各节点在一段时间里的流量。node_id 是 null 的是面板本机（主节点）。时间是 UTC、不带时区
+export async function nodesUsage(start: Date, end: Date) {
+  const iso = (d: Date) => d.toISOString().slice(0, 19);
+  const qs = new URLSearchParams({ start: iso(start), end: iso(end) });
+  return api<{ usages: { node_id: number | null; node_name: string; uplink: number; downlink: number }[] }>("GET", `/nodes/usage?${qs}`);
+}
+
+export const coreStats = () => api<{ version: string; started: boolean; logs_websocket: string }>("GET", "/core");
+// 重启主节点的 Xray（会顺带把所有节点也重启一遍），所有人断开几秒
+export const restartCore = () => api<unknown>("POST", "/core/restart");

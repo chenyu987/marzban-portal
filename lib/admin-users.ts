@@ -103,3 +103,34 @@ export function describeChanges(before: Partial<UserFields>, after: UserFields, 
   const changed = keys.filter((k) => (before[k] ?? (k === "expire" || k === "data_limit" ? 0 : "")) !== after[k]);
   return changed.length ? changed.map((k) => `${fmt(k, before[k])} → ${fmt(k, after[k])}`).join("；") : "没改动";
 }
+
+// ---- 节点表单 ----
+export const NODE_STATUS_LABEL: Record<string, { text: string; badge: string }> = {
+  connected: { text: "在线", badge: "badge-success" },
+  connecting: { text: "连接中", badge: "badge-warning" },
+  error: { text: "出错", badge: "badge-error" },
+  disabled: { text: "已停用", badge: "badge-neutral" },
+};
+
+// 地址只能是域名或 IP，端口 1–65535，流量倍率 0–10（比如 0.5 表示这个节点的流量只算一半）
+export function parseNodeForm(get: (key: string) => string):
+  | { fields: { name: string; address: string; port: number; api_port: number; usage_coefficient: number } }
+  | { error: string } {
+  const name = get("name").trim();
+  if (!name || name.length > 64) return { error: "节点名必填，最多 64 个字" };
+  const address = get("address").trim();
+  if (!/^[a-zA-Z0-9.-]+$/.test(address) && !/^[0-9a-fA-F:]+$/.test(address)) return { error: "地址要写域名或 IP，不带 http://" };
+  const port = Number(get("port") || 62050);
+  const api_port = Number(get("apiPort") || 62051);
+  for (const p of [port, api_port]) if (!Number.isInteger(p) || p < 1 || p > 65535) return { error: "端口要是 1 到 65535 的整数" };
+  if (port === api_port) return { error: "服务端口和 API 端口不能一样" };
+  const usage_coefficient = Number(get("coefficient") || 1);
+  if (!Number.isFinite(usage_coefficient) || usage_coefficient <= 0 || usage_coefficient > 10) return { error: "流量倍率要大于 0、不超过 10" };
+  return { fields: { name, address, port, api_port, usage_coefficient } };
+}
+
+// 本月 1 号 0 点（北京时间）
+export function monthStartBeijing(nowMs: number): Date {
+  const bj = new Date(nowMs + 8 * 3600_000);
+  return new Date(Date.UTC(bj.getUTCFullYear(), bj.getUTCMonth(), 1) - 8 * 3600_000);
+}

@@ -9,8 +9,8 @@ import { verifyPassword } from "@/lib/password";
 import { createAdminSession, currentAdmin, destroyAdminSession, logAdmin, requireAccess, requireAdmin } from "@/lib/admin";
 import { cancelPendingOrder, confirmTransferOrder, revokeOrder, verifyOrder, type AdminResult } from "@/lib/admin-orders";
 import type { FormState } from "../actions";
-import { createUser, deleteUser, findUser, modifyUser, resetUsage, revokeSubscription } from "@/lib/marzban";
-import { createUserBody, describeChanges, parseUserForm, USERNAME_RE, type UserFields } from "@/lib/admin-users";
+import { addNode, createUser, deleteNode, deleteUser, findUser, listNodes, modifyNode, modifyUser, reconnectNode, resetUsage, restartCore, revokeSubscription } from "@/lib/marzban";
+import { createUserBody, describeChanges, parseNodeForm, parseUserForm, USERNAME_RE, type UserFields } from "@/lib/admin-users";
 import { formatBytes, formatExpire, RESET_LABEL } from "@/lib/format";
 import { findPlan } from "@/lib/plans";
 import { formatRedeemCode, newRedeemCode } from "@/lib/format";
@@ -326,4 +326,107 @@ export async function adminDeleteUser(_: FormState, form: FormData): Promise<For
   await db().prepare("DELETE FROM subscriptions WHERE marzban_username = ?").bind(username).run();
   await logAdmin(admin, "user.delete", username, owner ? `原来绑在 ${owner.email} 名下` : undefined);
   redirect("/admin/users");
+}
+
+// ---- 节点和核心（/admin/nodes）----
+
+async function nodeName(id: number): Promise<string> {
+  try {
+    return (await listNodes()).find((n) => n.id === id)?.name ?? `节点 ${id}`;
+  } catch {
+    return `节点 ${id}`;
+  }
+}
+
+function nodeId(form: FormData): number | null {
+  const id = Number(form.get("id"));
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+export async function adminAddNode(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const r = parseNodeForm(formGetter(form));
+  if ("error" in r) return { error: r.error };
+  try {
+    if ((await listNodes()).some((n) => n.name === r.fields.name)) return { error: `已经有叫 ${r.fields.name} 的节点了` };
+    await addNode(r.fields);
+  } catch (e) {
+    return { error: `加节点失败：${errText(e)}` };
+  }
+  await logAdmin(admin, "node.add", r.fields.name, `${r.fields.address}:${r.fields.port}，API ${r.fields.api_port}，倍率 ${r.fields.usage_coefficient}`);
+  revalidatePath("/admin/nodes");
+  return { ok: `已加节点 ${r.fields.name}，刷新页面看它连上没有` };
+}
+
+export async function adminEditNode(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const id = nodeId(form);
+  if (!id) return { error: "节点不对" };
+  const r = parseNodeForm(formGetter(form));
+  if ("error" in r) return { error: r.error };
+  try {
+    await modifyNode(id, r.fields);
+  } catch (e) {
+    return { error: `保存失败：${errText(e)}` };
+  }
+  await logAdmin(admin, "node.edit", r.fields.name, `${r.fields.address}:${r.fields.port}，API ${r.fields.api_port}，倍率 ${r.fields.usage_coefficient}`);
+  revalidatePath("/admin/nodes");
+  return { ok: "已保存" };
+}
+
+export async function adminToggleNode(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const id = nodeId(form);
+  if (!id) return { error: "节点不对" };
+  const enable = !!form.get("enable");
+  const name = await nodeName(id);
+  try {
+    await modifyNode(id, { status: enable ? "connecting" : "disabled" });
+  } catch (e) {
+    return { error: `${enable ? "启用" : "停用"}失败：${errText(e)}` };
+  }
+  await logAdmin(admin, enable ? "node.enable" : "node.disable", name);
+  revalidatePath("/admin/nodes");
+  return { ok: enable ? "已启用，正在连接" : "已停用" };
+}
+
+export async function adminReconnectNode(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const id = nodeId(form);
+  if (!id) return { error: "节点不对" };
+  try {
+    await reconnectNode(id);
+  } catch (e) {
+    return { error: `重连失败：${errText(e)}` };
+  }
+  await logAdmin(admin, "node.reconnect", await nodeName(id));
+  revalidatePath("/admin/nodes");
+  return { ok: "已发起重连，过几秒刷新看状态" };
+}
+
+export async function adminDeleteNode(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const id = nodeId(form);
+  if (!id) return { error: "节点不对" };
+  const name = await nodeName(id);
+  try {
+    await deleteNode(id);
+  } catch (e) {
+    return { error: `删除失败：${errText(e)}` };
+  }
+  await logAdmin(admin, "node.delete", name);
+  revalidatePath("/admin/nodes");
+  return { ok: `已删除节点 ${name}` };
+}
+
+export async function adminRestartCore(): Promise<FormState> {
+  const admin = await requireAdmin();
+  try {
+    await restartCore();
+  } catch (e) {
+    return { error: `重启失败：${errText(e)}` };
+  }
+  await logAdmin(admin, "core.restart", null);
+  revalidatePath("/admin/nodes");
+  return { ok: "Xray 已重启" };
 }

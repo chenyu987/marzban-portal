@@ -351,6 +351,46 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   admin.removeAllListeners("dialog");
   admin.on("dialog", (d) => d.accept());
 
+  // 节点：看状态、重连出错的节点、加一个、改倍率、停用、删除；重启 Xray
+  const nodeName = `e2e节点${stamp}`.slice(0, 32);
+  await admin.goto("/admin/nodes");
+  await expect(admin.getByText("Xray 运行中")).toBeVisible();
+  const osaka = admin.getByTestId("node").filter({ hasText: "大阪" });
+  await expect(osaka).toContainText("出错");
+  await osaka.getByRole("button", { name: "重连" }).click();
+  await expect(osaka.getByText("已发起重连")).toBeVisible();
+  await admin.reload();
+  await expect(admin.getByTestId("node").filter({ hasText: "大阪" })).toContainText("在线");
+
+  const addForm = admin.locator(".card", { has: admin.getByRole("button", { name: "加节点" }) });
+  await addForm.locator('input[name="name"]').fill(nodeName);
+  await addForm.locator('input[name="address"]').fill("http://bad");
+  await addForm.getByRole("button", { name: "加节点" }).click();
+  await expect(addForm.getByText("地址要写域名或 IP")).toBeVisible();
+  await addForm.locator('input[name="address"]').fill("new.example.test");
+  await addForm.getByRole("button", { name: "加节点" }).click();
+  await expect(addForm.getByText(`已加节点 ${nodeName}`)).toBeVisible();
+  await addForm.getByRole("button", { name: "加节点" }).click();
+  await expect(addForm.getByText(`已经有叫 ${nodeName} 的节点了`)).toBeVisible();
+
+  await admin.reload();
+  const mine = admin.getByTestId("node").filter({ hasText: nodeName });
+  await mine.getByRole("button", { name: "修改" }).click();
+  await mine.locator('input[name="coefficient"]').fill("0.5");
+  await mine.getByRole("button", { name: "保存" }).click();
+  await expect(mine.getByText("已保存")).toBeVisible();
+  await expect(mine).toContainText("倍率 0.5");
+  await mine.getByRole("button", { name: "停用" }).click();
+  await expect(mine).toContainText("已停用");
+  admin.removeAllListeners("dialog");
+  admin.on("dialog", (d) => (d.type() === "prompt" ? d.accept(nodeName) : d.accept()));
+  await mine.getByRole("button", { name: "删除" }).click();
+  await expect(admin.getByTestId("node").filter({ hasText: nodeName })).toHaveCount(0);
+  admin.removeAllListeners("dialog");
+  admin.on("dialog", (d) => d.accept());
+  await admin.getByRole("button", { name: "重启 Xray" }).click();
+  await expect(admin.getByText("Xray 已重启")).toBeVisible();
+
   // 日志页能按操作筛
   await admin.goto("/admin/logs?action=codes.create");
   await expect(admin.locator("tbody tr", { hasText: adminEmail })).toContainText("2 个：e2e 测试");
@@ -373,6 +413,12 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
     "user.reset_usage",
     "user.revoke_sub",
     "user.delete",
+    "node.reconnect",
+    "node.add",
+    "node.edit",
+    "node.disable",
+    "node.delete",
+    "core.restart",
   ]);
 
   // 退出后回到登录页

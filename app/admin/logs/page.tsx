@@ -24,6 +24,13 @@ const ACTIONS: Record<string, string> = {
   "user.reset_usage": "流量清零",
   "user.revoke_sub": "重置订阅链接",
   "user.delete": "删除用户",
+  "node.add": "加节点",
+  "node.edit": "修改节点",
+  "node.enable": "启用节点",
+  "node.disable": "停用节点",
+  "node.reconnect": "重连节点",
+  "node.delete": "删除节点",
+  "core.restart": "重启 Xray",
 };
 
 type Row = { id: number; admin_email: string; action: string; target: string | null; detail: string | null; ip: string | null; created_at: number };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createUserBody, describeChanges, fromBeijingInput, onlineText, parseUserForm, toBeijingInput } from "./admin-users";
+import { createUserBody, describeChanges, fromBeijingInput, monthStartBeijing, onlineText, parseNodeForm, parseUserForm, toBeijingInput } from "./admin-users";
 
 const GB = 1024 ** 3;
 const form = (o: Record<string, string>) => (k: string) => o[k] ?? "";
@@ -64,5 +64,32 @@ describe("其他", () => {
     const fmt = (k: string, v: unknown) => `${k}=${v ?? ""}`;
     expect(describeChanges({ ...after }, after, fmt)).toBe("没改动");
     expect(describeChanges({ ...after, expire: 50, data_limit: null as unknown as number }, after, fmt)).toBe("expire=50 → expire=100");
+  });
+});
+
+describe("parseNodeForm", () => {
+  it("默认端口 62050 / 62051、倍率 1", () => {
+    expect(parseNodeForm(form({ name: "东京", address: "tokyo.example.com" }))).toEqual({
+      fields: { name: "东京", address: "tokyo.example.com", port: 62050, api_port: 62051, usage_coefficient: 1 },
+    });
+  });
+  it("域名、IPv6、自定义端口和倍率", () => {
+    expect(parseNodeForm(form({ name: "a", address: "node.example.com", port: "1000", apiPort: "1001", coefficient: "0.5" }))).toHaveProperty("fields.usage_coefficient", 0.5);
+    expect(parseNodeForm(form({ name: "a", address: "2001:db8::1" }))).toHaveProperty("fields.address", "2001:db8::1");
+  });
+  it("填错给出原因", () => {
+    expect(parseNodeForm(form({ address: "tokyo.example.com" }))).toHaveProperty("error");
+    expect(parseNodeForm(form({ name: "a", address: "http://tokyo.example.com" }))).toHaveProperty("error");
+    expect(parseNodeForm(form({ name: "a", address: "tokyo.example.com", port: "70000" }))).toHaveProperty("error");
+    expect(parseNodeForm(form({ name: "a", address: "tokyo.example.com", port: "100", apiPort: "100" }))).toHaveProperty("error");
+    expect(parseNodeForm(form({ name: "a", address: "tokyo.example.com", coefficient: "0" }))).toHaveProperty("error");
+  });
+});
+
+describe("monthStartBeijing", () => {
+  it("北京时间的月初，跨 UTC 日界也对", () => {
+    // 北京时间 2026-12-01 03:00 = UTC 11-30 19:00，月初应是北京 12-01 00:00 = UTC 11-30 16:00
+    expect(monthStartBeijing(Date.parse("2026-11-30T19:00:00Z")).toISOString()).toBe("2026-11-30T16:00:00.000Z");
+    expect(monthStartBeijing(Date.parse("2026-11-15T00:00:00Z")).toISOString()).toBe("2026-10-31T16:00:00.000Z");
   });
 });

@@ -29,6 +29,18 @@ function createInbounds(body) {
   return out;
 }
 
+// 节点：种子一个在线、一个出错的
+const nodes = new Map();
+let nextNodeId = 1;
+const pickNode = ({ name, address, port = 62050, api_port = 62051, usage_coefficient = 1 }) => ({ name, address, port, api_port, usage_coefficient });
+for (const n of [
+  { name: "东京", address: "tokyo.example.test", status: "connected", xray_version: "26.6.27", message: null },
+  { name: "大阪", address: "osaka.example.test", status: "error", xray_version: null, message: "connection refused" },
+]) {
+  nodes.set(nextNodeId, { id: nextNodeId, ...pickNode(n), ...n });
+  nextNodeId++;
+}
+
 const adminTokens = new Set();
 const users = new Map(); // username -> user
 const subTokens = new Map(); // sub token -> username
@@ -204,6 +216,49 @@ const server = http.createServer(async (req, res) => {
       log(200);
       return send(res, 200, { users: list.slice(offset, offset + limit).map(toResponse), total: list.length });
     }
+
+    // ---- 节点和核心 ----
+    if (path === "/api/nodes" && req.method === "GET") return log(200), send(res, 200, [...nodes.values()]);
+    if (path === "/api/node/settings" && req.method === "GET") {
+      log(200);
+      return send(res, 200, { min_node_version: "v0.2.0", certificate: "-----BEGIN CERTIFICATE-----\nMOCK\n-----END CERTIFICATE-----" });
+    }
+    if (path === "/api/node" && req.method === "POST") {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      if ([...nodes.values()].some((n) => n.name === body.name)) return log(409), send(res, 409, { detail: `Node "${body.name}" already exists` });
+      const node = { id: nextNodeId++, ...pickNode(body), xray_version: null, status: "connecting", message: null };
+      nodes.set(node.id, node);
+      log(200);
+      return send(res, 200, node);
+    }
+    if ((m = /^\/api\/node\/(\d+)$/.exec(path))) {
+      const node = nodes.get(Number(m[1]));
+      if (!node) return log(404), send(res, 404, { detail: "Node not found" });
+      if (req.method === "PUT") {
+        const body = JSON.parse((await readBody(req)) || "{}");
+        Object.assign(node, pickNode({ ...node, ...body }));
+        if (body.status === "disabled") Object.assign(node, { status: "disabled", xray_version: null });
+        if (body.status === "connecting") Object.assign(node, { status: "connected", xray_version: "26.6.27" });
+        log(200);
+        return send(res, 200, node);
+      }
+      if (req.method === "DELETE") return nodes.delete(node.id), log(200), send(res, 200, {});
+    }
+    if ((m = /^\/api\/node\/(\d+)\/reconnect$/.exec(path)) && req.method === "POST") {
+      const node = nodes.get(Number(m[1]));
+      if (!node) return log(404), send(res, 404, { detail: "Node not found" });
+      Object.assign(node, { status: "connected", message: null, xray_version: "26.6.27" });
+      log(200);
+      return send(res, 200, {});
+    }
+    if (path === "/api/nodes/usage" && req.method === "GET") {
+      log(200);
+      return send(res, 200, {
+        usages: [{ node_id: null, node_name: "Master", uplink: 5 * GB, downlink: 45 * GB }, ...[...nodes.values()].map((n) => ({ node_id: n.id, node_name: n.name, uplink: GB, downlink: 9 * GB }))],
+      });
+    }
+    if (path === "/api/core" && req.method === "GET") return log(200), send(res, 200, { version: "26.6.27", started: true, logs_websocket: "/api/core/logs" });
+    if (path === "/api/core/restart" && req.method === "POST") return log(200), send(res, 200, {});
 
     if (path === "/api/system" && req.method === "GET") {
       const all = [...users.values()];
