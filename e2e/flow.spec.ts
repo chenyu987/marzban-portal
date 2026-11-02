@@ -1,6 +1,6 @@
-// 主流程：注册 → 下单 → 我已付款 → 管理员确认开通 → 快到期提醒 → 一键续费 → 忘记密码 → 管理员发重置链接 → 设新密码登录；
+// 主流程：注册 → 下单 → 我已付款（马上开通） → 快到期提醒 → 一键续费 → 忘记密码 → 管理员发重置链接 → 设新密码登录；
 // 另一条：余额付全款、余额抵扣一部分（取消后退回）、用兑换码续期；
-// 还有管理后台：登录、网页上确认 / 取消订单、客人管理（加减余额、重置链接、绑定订阅）、兑换码、操作日志。
+// 还有管理后台：登录、对账（确认到账 / 没收到钱收回）、取消订单、客人管理（加减余额、重置链接、绑定订阅）、兑换码、操作日志。
 // 每次用新邮箱注册，不依赖之前的数据；管理员那一步直接调命令行脚本（本地库 + 假 Marzban）
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
@@ -69,19 +69,14 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   const card = page.locator(".card.border").first();
   await expect(card).toContainText("等你付款");
   await expect(card.getByAltText("支付宝收款码")).toBeVisible();
-  const orderId = (await card.locator(".card-title").innerText()).match(/\d+/)![0];
 
-  // 我已付款：变成等管理员核对，不能再取消
+  // 我已付款：选付款方式、填付款人，马上开通，直接跳到订阅页（先开通后对账，不等管理员）
+  await card.getByLabel("支付宝", { exact: true }).check();
+  await card.getByLabel("付款人").fill("测试付款人");
   await card.getByRole("button", { name: "我已付款" }).click();
-  await expect(card).toContainText("等管理员核对");
-  await expect(card.getByRole("button", { name: "取消这张单" })).toHaveCount(0);
-
-  // 管理员确认：列表里能看到「说已付」，确认后开通
-  expect(run(["orders", "--", "list"])).toContain(`#${orderId}`);
-  expect(run(["orders", "--", "confirm", orderId], "yes\n")).toContain(`订单 #${orderId} 记成已付款`);
+  await expect(page).toHaveURL(/\/dashboard/);
 
   // 订阅页出现新订阅
-  await page.goto("/dashboard");
   const title = page.locator(".card-title").filter({ hasText: /^c\d+_\d+$/ }).first();
   await expect(title).toBeVisible();
   const username = await title.innerText();
@@ -193,16 +188,29 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   // 管理员只能用命令建
   run(["admin:create", "--", adminEmail], `${adminPassword}\n${adminPassword}\n`);
 
-  // 客人下两张单，第一张点「我已付款」
+  // 客人下三张单：第一张用支付宝付、第三张用微信付（都马上开通），第二张不付
+  const claim = async (method: string, payer: string) => {
+    const card = page.locator(".card.border").first();
+    const id = (await card.locator(".card-title").innerText()).match(/\d+/)![0];
+    await card.getByLabel(method, { exact: true }).check();
+    await card.getByLabel("付款人").fill(payer);
+    await card.getByRole("button", { name: "我已付款" }).click();
+    await expect(page).toHaveURL(/\/dashboard/);
+    return id;
+  };
   await register(page, customer, "E2eTest-1234");
   await page.goto("/plans");
   await page.locator('button[value="p1-month"]').click();
-  const first = (await page.locator(".card.border .card-title").first().innerText()).match(/\d+/)![0];
-  await page.locator(".card.border").first().getByRole("button", { name: "我已付款" }).click();
-  await expect(page.locator(".card.border").first()).toContainText("等管理员核对");
+  const first = await claim("支付宝", "付款人甲");
+  await page.goto("/plans");
   await page.locator('button[value="p1-quarter"]').click();
-  await expect(page.locator(".card.border")).toHaveCount(2);
+  await expect(page.locator(".card.border")).toHaveCount(1);
   const second = (await page.locator(".card.border .card-title").first().innerText()).match(/\d+/)![0];
+  await page.locator('form:has(button[name="plan"]) select[name="target"]').selectOption("new");
+  await page.locator('button[value="p1-month"]').click();
+  await expect(page.locator(".card.border")).toHaveCount(2);
+  const third = await claim("微信", "付款人乙");
+  await expect(page.locator(".card-title").filter({ hasText: /^c\d+_\d+$/ })).toHaveCount(2);
 
   // 客人的登录进不了后台：会被带到后台自己的登录页
   await page.goto("/admin");
@@ -221,18 +229,27 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await admin.getByRole("button", { name: "登录" }).click();
   await expect(admin).toHaveURL(/\/admin$/);
 
-  // 第一张：客人说已付，确认收款并开通
-  const firstCard = admin.locator(".card", { hasText: `订单 ${first}` });
-  await expect(firstCard).toContainText("说已付");
-  await firstCard.getByRole("button", { name: "确认收款并开通" }).click();
-  await expect(admin.getByText(`订单 ${first} 已确认`)).toBeVisible();
+  // 第一张：已开通、待对账，看得到付款方式和付款人，确认到账
+  const firstCard = admin.getByTestId("unverified-order").filter({ hasText: `订单 ${first}` });
+  await expect(firstCard).toContainText("支付宝");
+  await expect(firstCard).toContainText("付款人甲");
+  await firstCard.getByRole("button", { name: "确认到账" }).click();
+  await expect(admin.getByText(`订单 ${first} 已对账`)).toBeVisible();
+
+  // 第三张：没收到钱，收回：新开的订阅在 Marzban 停用
+  const thirdCard = admin.getByTestId("unverified-order").filter({ hasText: `订单 ${third}` });
+  await expect(thirdCard).toContainText("付款人乙");
+  const revokedUser = (await thirdCard.locator(".badge").innerText()).replace(/^新开\s*/, "");
+  await thirdCard.getByRole("button", { name: "没收到钱，收回" }).click();
+  await expect(admin.getByText(`订单 ${third} 已收回`)).toBeVisible();
+  expect(((await mockMarzban("GET", `/user/${revokedUser}`)) as { status?: string }).status).toBe("disabled");
 
   // 第二张：取消
   const secondCard = admin.locator(".card", { hasText: `订单 ${second}` });
   await secondCard.getByRole("button", { name: "取消" }).click();
   await expect(admin.getByText(`订单 ${second} 已取消`)).toBeVisible();
 
-  // 客人那边：订阅开通了，第二张单不见了
+  // 客人那边：第二张单不见了
   await page.goto("/dashboard");
   await expect(page.locator(".card-title").filter({ hasText: /^c\d+_\d+$/ }).first()).toBeVisible();
   await page.goto("/plans");
@@ -296,7 +313,8 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   expect(logs.map((l) => l.action)).toEqual([
     "login.fail",
     "login",
-    "order.confirm",
+    "order.verify",
+    "order.revoke",
     "order.cancel",
     "balance.adjust",
     "password.reset_link",

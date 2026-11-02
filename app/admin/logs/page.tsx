@@ -11,6 +11,8 @@ const ACTIONS: Record<string, string> = {
   "login.fail": "登录失败",
   logout: "退出",
   "order.confirm": "确认订单",
+  "order.verify": "对账：确认到账",
+  "order.revoke": "对账：没收到钱收回",
   "order.cancel": "取消订单",
   "balance.adjust": "加减余额",
   "password.reset_link": "生成重置链接",

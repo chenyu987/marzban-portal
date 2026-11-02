@@ -11,6 +11,7 @@ import { formatExpire, newReferralCode, normalizeRedeemCode, normalizeReferralCo
 import { findPlan } from "@/lib/plans";
 import { type ProvisionResult } from "@/lib/provision";
 import { provisionTarget } from "@/lib/orders";
+import { confirmTransferOrder } from "@/lib/admin-orders";
 import { site } from "@/site.config";
 import { BALANCE_SQL } from "@/lib/balance";
 import { canSendMail, sendMail } from "@/lib/mail";
@@ -317,18 +318,33 @@ export async function cancelOrder(form: FormData) {
   revalidatePath("/dashboard");
 }
 
-// 客人付完款点「我已付款」：记下时间，管理员按时间和金额去账单里核对。点过一次就不再改时间
-export async function claimPaid(form: FormData) {
+// 客人付完款点「我已付款」：记下时间、付款方式、付款人（管理员对账用），然后马上开通，不等管理员核对（先开通后对账）。
+// 点过一次就不再改时间。自动开通没成功的，单留在「客人说已付」，管理员在后台手动开通
+export async function claimPaid(_: FormState, form: FormData): Promise<FormState> {
   const customer = await requireCustomer();
   const id = Number(form.get("id"));
-  if (!Number.isInteger(id)) return;
-  await db()
+  if (!Number.isInteger(id)) return { error: "订单号不对，请刷新页面" };
+  const method = String(form.get("payMethod") ?? "");
+  if (!site.payments.some((p) => p.name === method)) return { error: "请选择你是用哪个付的款" };
+  const payer = String(form.get("payer") ?? "").trim().slice(0, 40) || null;
+  const r = await db()
     .prepare(
-      "UPDATE orders SET claimed_at = ? WHERE id = ? AND customer_id = ? AND status = 'pending' AND claimed_at IS NULL",
+      `UPDATE orders SET claimed_at = ?, pay_method = ?, payer = ?
+       WHERE id = ? AND customer_id = ? AND status = 'pending' AND claimed_at IS NULL`,
     )
-    .bind(nowSec(), id, customer.id)
+    .bind(nowSec(), method, payer, id, customer.id)
     .run();
+  if (r.meta.changes !== 1) return { error: "这张单已经处理过了，请刷新页面" };
+
+  const result = await confirmTransferOrder(id, { customerId: customer.id });
   revalidatePath("/plans");
+  revalidatePath("/dashboard");
+  if ("error" in result) {
+    console.error(`claimPaid: 自动开通失败 order=${id} customer=${customer.id} ${result.error}`);
+    return { error: "已经记下你付了款，但自动开通没成功。管理员会尽快帮你开通，不用重新下单" };
+  }
+  // 开通好了，直接去「我的订阅」拿订阅
+  redirect("/dashboard");
 }
 
 // 忘记密码：给这个邮箱发一封带重置链接的邮件。不管邮箱有没有注册过都给同样的提示，不让人试探哪些邮箱注册过
