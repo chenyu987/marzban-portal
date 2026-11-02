@@ -22,11 +22,11 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   if (!Number.isInteger(id)) notFound();
   const c = await db()
     .prepare(
-      `SELECT c.id, c.email, c.referral_code, c.created_at, r.id AS referrer_id, r.email AS referrer
+      `SELECT c.id, c.email, c.wechat, c.referral_code, c.created_at, r.id AS referrer_id, r.email AS referrer
        FROM customers c LEFT JOIN customers r ON r.id = c.referred_by WHERE c.id = ?`,
     )
     .bind(id)
-    .first<{ id: number; email: string; referral_code: string; created_at: number; referrer_id: number | null; referrer: string | null }>();
+    .first<{ id: number; email: string; wechat: string | null; referral_code: string; created_at: number; referrer_id: number | null; referrer: string | null }>();
   if (!c) notFound();
 
   const [subs, orders, entries, referred] = await Promise.all([
@@ -64,7 +64,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
       </Link>
       <h1 className="mt-2 text-2xl font-bold">{c.email}</h1>
       <p className="mb-4 text-sm text-base-content/60">
-        {formatDate(c.created_at)} 注册｜推荐码 {c.referral_code}｜推荐人{" "}
+        {formatDate(c.created_at)} 注册｜微信 {c.wechat ?? "未填"}｜推荐码 {c.referral_code}｜推荐人{" "}
         {c.referrer_id ? (
           <Link href={`/admin/customers/${c.referrer_id}`} className="link">
             {c.referrer}

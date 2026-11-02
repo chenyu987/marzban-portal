@@ -11,7 +11,7 @@ type Props = {
   action: (state: FormState, form: FormData) => Promise<FormState>;
   passwordAutoComplete: "current-password" | "new-password";
   footer: { text: string; href: string; link: string };
-  // 注册页才有推荐码输入框；值是推荐链接里带过来的 ?ref=
+  // 注册页才有微信号和推荐码输入框；推荐码的值是推荐链接里带过来的 ?ref=
   referral?: { defaultValue: string };
   // 登录页在密码下面显示「忘记密码？」
   forgotLink?: boolean;
@@ -53,6 +53,26 @@ export default function AuthForm({ title, submitLabel, action, passwordAutoCompl
             <Link href="/forgot" className="link link-hover -mt-2 self-end text-sm text-base-content/60">
               忘记密码？
             </Link>
+          )}
+          {referral && (
+            <div>
+              <label className="floating-label">
+                <span>微信号</span>
+                <input
+                  name="wechat"
+                  type="text"
+                  required
+                  maxLength={30}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  placeholder="微信号"
+                  defaultValue={state?.wechat}
+                  className="input w-full"
+                />
+              </label>
+              <p className="mt-1 text-xs text-base-content/60">为了方便客服联系你，提供必要的支持和更新</p>
+            </div>
           )}
           {referral && (
             <label className="floating-label">

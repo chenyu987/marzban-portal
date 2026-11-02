@@ -7,7 +7,7 @@ import AdminHeader from "../AdminHeader";
 
 export const dynamic = "force-dynamic";
 
-type Row = { id: number; email: string; created_at: number; referrer: string | null; subs: number; balance: number; paid: number };
+type Row = { id: number; email: string; wechat: string | null; created_at: number; referrer: string | null; subs: number; balance: number; paid: number };
 
 const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
 // LIKE 里 % 和 _ 是通配符，客人搜的字里有这两个要转义
@@ -20,12 +20,12 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const query = typeof q === "string" ? q.trim() : "";
   const { results } = await db()
     .prepare(
-      `SELECT c.id, c.email, c.created_at, r.email AS referrer,
+      `SELECT c.id, c.email, c.wechat, c.created_at, r.email AS referrer,
          (SELECT COUNT(*) FROM subscriptions s WHERE s.customer_id = c.id) AS subs,
          (SELECT COALESCE(SUM(amount), 0) FROM balance_entries b WHERE b.customer_id = c.id) AS balance,
          (SELECT COALESCE(SUM(amount), 0) FROM orders o WHERE o.customer_id = c.id AND o.status = 'paid') AS paid
        FROM customers c LEFT JOIN customers r ON r.id = c.referred_by
-       WHERE ?1 = '' OR c.email LIKE ?2 ESCAPE '\\' OR c.id IN (SELECT customer_id FROM subscriptions WHERE marzban_username LIKE ?2 ESCAPE '\\')
+       WHERE ?1 = '' OR c.email LIKE ?2 ESCAPE '\\' OR c.wechat LIKE ?2 ESCAPE '\\' OR c.id IN (SELECT customer_id FROM subscriptions WHERE marzban_username LIKE ?2 ESCAPE '\\')
        ORDER BY c.id DESC LIMIT 100`,
     )
     .bind(query, like(query))
@@ -36,7 +36,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       <AdminHeader email={admin.email} />
       <h1 className="mt-4 mb-4 text-2xl font-bold">客人</h1>
       <form className="mb-4 flex gap-2">
-        <input name="q" defaultValue={query} placeholder="邮箱或 Marzban 用户名" className="input w-full" />
+        <input name="q" defaultValue={query} placeholder="邮箱、微信号或 Marzban 用户名" className="input w-full" />
         <button className="btn">搜索</button>
       </form>
       {results.length === 0 ? (
@@ -47,6 +47,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             <thead>
               <tr>
                 <th>邮箱</th>
+                <th>微信</th>
                 <th>注册</th>
                 <th>订阅</th>
                 <th>余额</th>
@@ -62,6 +63,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                       {c.email}
                     </Link>
                   </td>
+                  <td>{c.wechat ?? "-"}</td>
                   <td>{formatDate(c.created_at)}</td>
                   <td>{c.subs}</td>
                   <td>{money(c.balance)}</td>

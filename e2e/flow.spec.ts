@@ -42,6 +42,7 @@ async function register(page: Page, email: string, password: string) {
   await page.goto("/register");
   await page.getByPlaceholder("邮箱").fill(email);
   await page.getByPlaceholder("密码（至少 8 位）").fill(password);
+  await page.getByPlaceholder("微信号").fill("e2e_wx_test");
   await page.getByRole("button", { name: "注册" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
 }

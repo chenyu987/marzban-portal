@@ -17,17 +17,22 @@ import { canSendMail, sendMail } from "@/lib/mail";
 import { hashResetToken, newResetToken, RESET_MAX_PER_HOUR, RESET_TTL_SELF, resetLink } from "@/lib/reset";
 
 // email：出错时带回去当输入框的默认值。React 19 提交后会重置表单，不带回去邮箱就被清空了
-export type FormState = { error?: string; ok?: string; email?: string; ref?: string } | undefined;
+export type FormState = { error?: string; ok?: string; email?: string; ref?: string; wechat?: string } | undefined;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// 微信号是 6–20 位字母、数字、下划线、减号；没设微信号的人会填绑定的手机号（11 位数字），也能搜到
+const WECHAT_RE = /^[A-Za-z0-9_-]{5,30}$/;
 
 export async function register(_: FormState, form: FormData): Promise<FormState> {
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
+  const wechat = String(form.get("wechat") ?? "").trim();
   const refInput = String(form.get("ref") ?? "").trim();
-  const back = { email, ref: refInput };
+  const back = { email, ref: refInput, wechat };
   if (!EMAIL_RE.test(email)) return { error: "邮箱格式不对", ...back };
   if (password.length < 8) return { error: "密码至少 8 位", ...back };
+  if (!wechat) return { error: "请填微信号，方便客服联系你", ...back };
+  if (!WECHAT_RE.test(wechat)) return { error: "微信号格式不对：只能是字母、数字、下划线或减号，也可以填微信绑定的手机号", ...back };
 
   // 推荐码可以不填；填了就必须是真的，免得客人以为填上了其实没记到
   const code = normalizeReferralCode(refInput);
@@ -44,10 +49,10 @@ export async function register(_: FormState, form: FormData): Promise<FormState>
 
   const row = await db()
     .prepare(
-      `INSERT INTO customers (email, password_hash, referral_code, referred_by, created_at)
-       VALUES (?, ?, ?, ?, ?) RETURNING id`,
+      `INSERT INTO customers (email, password_hash, wechat, referral_code, referred_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
     )
-    .bind(email, await hashPassword(password), newReferralCode(), referrer, nowSec())
+    .bind(email, await hashPassword(password), wechat, newReferralCode(), referrer, nowSec())
     .first<{ id: number }>();
   await createSession(row!.id);
   redirect("/dashboard");
