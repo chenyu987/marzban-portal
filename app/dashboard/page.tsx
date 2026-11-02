@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
 import { getUser, type MarzbanUser } from "@/lib/marzban";
-import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, needsRenewal, RESET_LABEL, STATUS_LABEL, timeLeft } from "@/lib/format";
+import { formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, needsRenewal, RESET_LABEL, STATUS_LABEL, timeLeft } from "@/lib/format";
 import { BALANCE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
 import { site } from "@/site.config";
 import { describePlan, findPlan } from "@/lib/plans";
@@ -11,15 +11,16 @@ import { logout } from "../actions";
 import BindForm from "./BindForm";
 import SubscriptionLink from "./SubscriptionLink";
 import ReferralCard from "./ReferralCard";
+import ContactSupport from "../ContactSupport";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const customer = await requireCustomer();
   const { results } = await db()
-    .prepare("SELECT marzban_username FROM subscriptions WHERE customer_id = ? ORDER BY id")
+    .prepare("SELECT marzban_username, code FROM subscriptions WHERE customer_id = ? ORDER BY id")
     .bind(customer.id)
-    .all<{ marzban_username: string }>();
+    .all<{ marzban_username: string; code: string | null }>();
   // 被推荐的人给推荐人看微信号（推荐人本来就认识）；没填微信号的老账号显示打码后的邮箱。
   // earned：这个朋友付的款一共给推荐人返了多少
   const { results: referred } = await db()
@@ -47,11 +48,11 @@ export default async function DashboardPage() {
 
   // 一个订阅查失败不影响其他订阅显示
   const subs = await Promise.all(
-    results.map(async ({ marzban_username }) => {
+    results.map(async ({ marzban_username, code }) => {
       try {
-        return { username: marzban_username, user: await getUser(marzban_username) };
+        return { username: marzban_username, code, user: await getUser(marzban_username) };
       } catch {
-        return { username: marzban_username, user: null };
+        return { username: marzban_username, code, user: null };
       }
     }),
   );
@@ -88,11 +89,11 @@ export default async function DashboardPage() {
             </div>
           </div>
         )}
-        {subs.map(({ username, user }) =>
+        {subs.map(({ username, code, user }) =>
           user ? (
-            <SubscriptionCard key={username} user={user} planId={planOf.get(username)} />
+            <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} />
           ) : (
-            <UnavailableCard key={username} username={username} />
+            <UnavailableCard key={username} code={code} />
           ),
         )}
         {subs.length === 0 && <BindForm />}
@@ -125,16 +126,16 @@ function planHeading(planId: string | undefined): { title: string; subtitle?: st
   return { title: group, subtitle: site.planGroups?.[group]?.lines?.at(-1) ?? describePlan(plan) };
 }
 
-// 用户名（Marzban 里的，比如 c4_1）客人看不懂，放在卡片角落当订阅编号，找客服时报这个
-function SubscriptionId({ username }: { username: string }) {
+// 订阅编号是随机的（7F3A-9C21），看不出是第几单；客人找客服时报这个，后台客人页能按它搜
+function SubscriptionId({ code }: { code: string | null }) {
   return (
     <p className="text-right text-xs text-base-content/50">
-      订阅编号 <span data-testid="sub-id">{username}</span>
+      订阅编号 <span data-testid="sub-id">{formatSubCode(code)}</span>
     </p>
   );
 }
 
-function SubscriptionCard({ user, planId }: { user: MarzbanUser; planId?: string }) {
+function SubscriptionCard({ user, code, planId }: { user: MarzbanUser; code: string | null; planId?: string }) {
   const { title, subtitle } = planHeading(planId);
   const status = STATUS_LABEL[user.status] ?? { text: user.status, badge: "badge-neutral" };
   const left = timeLeft(user.expire);
@@ -190,21 +191,22 @@ function SubscriptionCard({ user, planId }: { user: MarzbanUser; planId?: string
         )}
 
         <SubscriptionLink username={user.username} url={user.subscription_url} />
-        <SubscriptionId username={user.username} />
+        <SubscriptionId code={code} />
       </div>
     </div>
   );
 }
 
-function UnavailableCard({ username }: { username: string }) {
+function UnavailableCard({ code }: { code: string | null }) {
   return (
     <div className="card bg-base-100 shadow-sm">
       <div className="card-body">
         <h2 className="card-title">我的订阅</h2>
         <div role="alert" className="alert alert-warning alert-soft">
-          暂时查不到这个订阅的信息，请稍后刷新。一直这样的话请联系管理员。
+          暂时查不到这个订阅的信息，请稍后刷新。一直这样的话请联系客服，报上下面的订阅编号。
         </div>
-        <SubscriptionId username={username} />
+        <ContactSupport />
+        <SubscriptionId code={code} />
       </div>
     </div>
   );

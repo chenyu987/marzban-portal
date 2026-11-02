@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
-import { formatBytes, formatDate, formatExpire, formatMoney, STATUS_LABEL } from "@/lib/format";
+import { formatBytes, formatDate, formatExpire, formatMoney, STATUS_LABEL, formatSubCode } from "@/lib/format";
 import { getUser, type MarzbanUser } from "@/lib/marzban";
 import { findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
@@ -30,7 +30,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   if (!c) notFound();
 
   const [subs, orders, entries, referred] = await Promise.all([
-    db().prepare("SELECT marzban_username FROM subscriptions WHERE customer_id = ? ORDER BY id").bind(id).all<{ marzban_username: string }>(),
+    db().prepare("SELECT marzban_username, code FROM subscriptions WHERE customer_id = ? ORDER BY id").bind(id).all<{ marzban_username: string; code: string | null }>(),
     db()
       .prepare("SELECT id, amount, balance_used, method, status, plan_id, marzban_username, created_at, paid_at FROM orders WHERE customer_id = ? ORDER BY id DESC LIMIT 50")
       .bind(id)
@@ -47,11 +47,11 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
     .first<{ b: number }>();
   // 每个订阅现在的状态从 Marzban 查，查不到也不影响页面
   const users = await Promise.all(
-    subs.results.map(async ({ marzban_username }) => {
+    subs.results.map(async ({ marzban_username, code }) => {
       try {
-        return { username: marzban_username, user: (await getUser(marzban_username)) as MarzbanUser | null };
+        return { username: marzban_username, code, user: (await getUser(marzban_username)) as MarzbanUser | null };
       } catch {
-        return { username: marzban_username, user: null };
+        return { username: marzban_username, code, user: null };
       }
     }),
   );
@@ -80,9 +80,12 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
       <h2 className="mt-8 mb-2 text-lg font-bold">订阅（{users.length}）</h2>
       {users.length === 0 && <p className="text-sm text-base-content/60">没有订阅。</p>}
       <ul className="divide-y divide-base-200 text-sm">
-        {users.map(({ username, user }) => (
+        {users.map(({ username, code, user }) => (
           <li key={username} className="flex flex-wrap justify-between gap-2 py-2">
-            <span className="font-medium">{username}</span>
+            <span>
+              <span className="font-medium">{username}</span>
+              <span className="ml-2 text-xs text-base-content/50">编号 {formatSubCode(code)}</span>
+            </span>
             {user ? (
               <span className="flex flex-wrap items-center gap-2">
                 <span className={`badge badge-sm ${STATUS_LABEL[user.status]?.badge ?? "badge-neutral"}`}>{STATUS_LABEL[user.status]?.text ?? user.status}</span>

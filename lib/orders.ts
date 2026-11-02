@@ -29,7 +29,7 @@ export async function provisionTarget(
     return provisionNew(marzbanOps, username, plan, now);
   }
   const current = await findUser(target);
-  if (!current) return { error: "暂时查不到这个订阅，请稍后再试或联系管理员" };
+  if (!current) return { error: "暂时查不到这个订阅，请稍后再试或联系客服" };
   if (!current.expire) return { error: "这个订阅永不到期，不用续期。可以选「新开一个订阅」" };
   return provisionRenew(marzbanOps, current, plan, now);
 }

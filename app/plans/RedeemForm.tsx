@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { redeem } from "../actions";
+import ContactSupport from "../ContactSupport";
 
 export default function RedeemForm({
   note,
@@ -9,7 +10,7 @@ export default function RedeemForm({
   defaultTarget,
 }: {
   note: string;
-  subscriptions: string[];
+  subscriptions: { username: string; label: string }[];
   defaultTarget?: string;
 }) {
   const [state, action, pending] = useActionState(redeem, undefined);
@@ -26,10 +27,10 @@ export default function RedeemForm({
           className="input w-full font-mono uppercase"
         />
         {subscriptions.length > 0 && (
-          <select name="target" className="select w-full" defaultValue={defaultTarget ?? subscriptions[0]}>
-            {subscriptions.map((u) => (
-              <option key={u} value={u}>
-                给 {u} 续期
+          <select name="target" className="select w-full" defaultValue={defaultTarget ?? subscriptions[0].username}>
+            {subscriptions.map((s) => (
+              <option key={s.username} value={s.username}>
+                给订阅 {s.label} 续期
               </option>
             ))}
             <option value="new">新开一个订阅</option>
@@ -40,6 +41,7 @@ export default function RedeemForm({
           兑换
         </button>
         {state?.error && <div role="alert" className="alert alert-error alert-soft">{state.error}</div>}
+      {state?.error?.includes("联系客服") && <ContactSupport />}
         {state?.ok && <div role="alert" className="alert alert-success alert-soft">{state.ok}</div>}
       </div>
     </form>

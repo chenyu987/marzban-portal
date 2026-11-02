@@ -2,6 +2,7 @@
 
 import { Fragment, useActionState, useState } from "react";
 import { createOrder } from "../actions";
+import ContactSupport from "../ContactSupport";
 
 export type PlanGroup = {
   name: string;
@@ -31,7 +32,7 @@ export default function OrderForm({
   defaultTarget,
 }: {
   groups: PlanGroup[];
-  subscriptions: string[];
+  subscriptions: { username: string; label: string }[];
   canTransfer: boolean;
   balance: number;
   currency: string;
@@ -51,7 +52,7 @@ export default function OrderForm({
         if (!btn) return e.preventDefault();
         const fen = Number(btn.dataset.fen);
         const target = new FormData(e.currentTarget).get("target");
-        const what = !target || target === "new" ? "新开一个订阅" : `给 ${target} 续期`;
+        const what = !target || target === "new" ? "新开一个订阅" : `给订阅 ${subscriptions.find((s) => s.username === target)?.label ?? target} 续期`;
         const how =
           deduct >= fen
             ? "全部用余额付，马上开通"
@@ -78,10 +79,10 @@ export default function OrderForm({
       {canOrder && subscriptions.length > 0 && (
         <label className="flex flex-col gap-1">
           <span className="text-sm text-base-content/70">买给哪个订阅</span>
-          <select name="target" className="select w-full" defaultValue={defaultTarget ?? subscriptions[0]}>
-            {subscriptions.map((u) => (
-              <option key={u} value={u}>
-                给 {u} 续期
+          <select name="target" className="select w-full" defaultValue={defaultTarget ?? subscriptions[0].username}>
+            {subscriptions.map((s) => (
+              <option key={s.username} value={s.username}>
+                给订阅 {s.label} 续期
               </option>
             ))}
             <option value="new">新开一个订阅</option>
@@ -89,6 +90,7 @@ export default function OrderForm({
         </label>
       )}
       {state?.error && <div role="alert" className="alert alert-error alert-soft">{state.error}</div>}
+      {state?.error?.includes("联系客服") && <ContactSupport />}
       {state?.ok && <div role="alert" className="alert alert-success alert-soft">{state.ok}</div>}
 
       <div className="grid grid-cols-4 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 sm:grid-cols-[6rem_1.7fr_repeat(4,1fr)]">

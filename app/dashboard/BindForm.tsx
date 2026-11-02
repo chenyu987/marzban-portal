@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { bindSubscription } from "../actions";
+import ContactSupport from "../ContactSupport";
 
 // compact：已经有订阅时只在页面最下面放一个小链接，点开才出输入框
 export default function BindForm({ compact = false }: { compact?: boolean }) {
@@ -22,6 +23,7 @@ export default function BindForm({ compact = false }: { compact?: boolean }) {
         </button>
       </div>
       {state?.error && <div role="alert" className="alert alert-error alert-soft">{state.error}</div>}
+      {state?.error?.includes("联系客服") && <ContactSupport />}
       {state?.ok && <div role="alert" className="alert alert-success alert-soft">{state.ok}</div>}
     </form>
   );

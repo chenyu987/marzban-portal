@@ -38,6 +38,10 @@ const query = (command: string) =>
     }),
   )[0].results as Record<string, unknown>[];
 
+// 订阅页上只显示随机的订阅编号（7F3A-9C21），按编号从库里查回 Marzban 用户名
+const usernameOf = (code: string) =>
+  String(query(`SELECT marzban_username FROM subscriptions WHERE code = '${code.replace("-", "")}'`)[0].marzban_username);
+
 async function register(page: Page, email: string, password: string) {
   await page.goto("/register");
   await page.getByPlaceholder("邮箱").fill(email);
@@ -60,6 +64,8 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   page.on("dialog", (d) => d.accept());
 
   await register(page, email, password);
+  // 页面底部有「复制客服邮箱」，客人找客服不用另外去找联系方式
+  await expect(page.getByRole("button", { name: /复制客服邮箱/ })).toBeVisible();
   // 还没订阅：绑定框整张卡片显示
   await expect(page.getByRole("heading", { name: "绑定已有订阅" })).toBeVisible();
 
@@ -76,11 +82,10 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await card.getByRole("button", { name: "我已付款" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
 
-  // 订阅页出现新订阅：标题是套餐档位名，副标题是价目表上的说明，用户名放在角落当订阅编号
+  // 订阅页出现新订阅：标题是套餐档位名，副标题是价目表上的说明，角落是随机的订阅编号（看不出是第几单）
   const title = page.getByTestId("sub-id").first();
-  await expect(title).toBeVisible();
-  await expect(page.locator(".card-title").filter({ hasText: /^c\d+_\d+$/ })).toHaveCount(0);
-  const username = await title.innerText();
+  await expect(title).toHaveText(/^[0-9A-F]{4}-[0-9A-F]{4}$/);
+  const username = usernameOf(await title.innerText());
   // Marzban 用户名用注册时填的微信号；每次 e2e 都用同一个微信号，Marzban 里已经有了就往后加序号
   expect(username).toMatch(/^e2e_wx_test(_\d+)?$/);
 
@@ -151,7 +156,7 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   await page.goto("/dashboard");
   const title = page.getByTestId("sub-id").first();
   await expect(title).toBeVisible();
-  const username = await title.innerText();
+  const username = usernameOf(await title.innerText());
   // 卡片标题是套餐档位名（p1 是普通版），不是用户名
   await expect(page.locator(".card-title").filter({ hasText: "普通版" }).first()).toBeVisible();
   await expect(page.getByText("¥5.00")).toBeVisible();

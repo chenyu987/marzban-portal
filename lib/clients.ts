@@ -2,6 +2,8 @@
 import { site } from "@/site.config";
 
 export const BRAND = site.brand;
+// 客服联系方式，「复制客服微信」「复制客服邮箱」按钮用
+export const SUPPORT = { wechat: site.supportWechat, email: site.contactEmail };
 
 // Shadowrocket：shadowrocket://add/sub://<订阅链接的 base64>?remark=<名字>
 export function shadowrocketImport(url: string): string {

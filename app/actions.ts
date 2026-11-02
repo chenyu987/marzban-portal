@@ -111,14 +111,14 @@ export async function bindSubscription(_: FormState, form: FormData): Promise<Fo
   if (!token) return { error: "这不像订阅链接。完整的链接里应该有 /sub/" };
 
   const info = await lookupSubscription(token);
-  if (!info) return { error: "找不到这个订阅。链接可能已经重置过，请联系管理员要新的" };
+  if (!info) return { error: "找不到这个订阅。链接可能已经重置过，请联系客服要新的" };
 
   const owner = await db()
     .prepare("SELECT customer_id FROM subscriptions WHERE marzban_username = ?")
     .bind(info.username)
     .first<{ customer_id: number }>();
   if (owner?.customer_id === customer.id) return { ok: "这个订阅已经在你的账号下了" };
-  if (owner) return { error: "这个订阅已经绑定在别的账号上了，请联系管理员" };
+  if (owner) return { error: "这个订阅已经绑定在别的账号上了，请联系客服" };
 
   await db()
     .prepare("INSERT INTO subscriptions (customer_id, marzban_username, created_at) VALUES (?, ?, ?)")
@@ -158,7 +158,7 @@ export async function redeem(_: FormState, form: FormData): Promise<FormState> {
   if (!row) return { error: "没有这个兑换码，请检查有没有输错" };
   if (row.used_by !== null) return { error: "这个兑换码已经用过了" };
   const plan = findPlan(site.plans, row.plan_id);
-  if (!plan) return { error: "这个兑换码对应的套餐已经下架了，请联系管理员" };
+  if (!plan) return { error: "这个兑换码对应的套餐已经下架了，请联系客服" };
 
   const { results } = await db()
     .prepare("SELECT marzban_username FROM subscriptions WHERE customer_id = ? ORDER BY id")
@@ -189,13 +189,13 @@ export async function redeem(_: FormState, form: FormData): Promise<FormState> {
   } catch (e) {
     console.error("redeem: 写 Marzban 之前出错", e);
     await release();
-    return { error: "开通失败，兑换码没有被用掉，请稍后再试。一直失败的话请联系管理员" };
+    return { error: "开通失败，兑换码没有被用掉，请稍后再试。一直失败的话请联系客服" };
   }
 
   if (result.kind === "retry") {
     console.error(`redeem: ${result.reason}`);
     await release();
-    return { error: "开通失败，兑换码没有被用掉，请稍后再试。一直失败的话请联系管理员" };
+    return { error: "开通失败，兑换码没有被用掉，请稍后再试。一直失败的话请联系客服" };
   }
   if (result.kind === "stuck") {
     // 兑换码保持占用（used_by 有值、order_id 为空），管理员按日志去 Marzban 核对
@@ -351,7 +351,7 @@ export async function claimPaid(_: FormState, form: FormData): Promise<FormState
 export async function requestReset(_: FormState, form: FormData): Promise<FormState> {
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   if (!EMAIL_RE.test(email)) return { error: "邮箱格式不对", email };
-  if (!canSendMail()) return { error: "现在还不能自动发邮件，请联系管理员帮你重置密码", email };
+  if (!canSendMail()) return { error: "现在还不能自动发邮件，请联系客服帮你重置密码", email };
   const done = { ok: `如果 ${email} 注册过，重置链接已经发过去了，1 小时内有效。没收到的话看看垃圾邮件。` };
 
   const c = await db().prepare("SELECT id FROM customers WHERE email = ?").bind(email).first<{ id: number }>();
@@ -374,7 +374,7 @@ export async function requestReset(_: FormState, form: FormData): Promise<FormSt
     `${site.brand} 重置密码`,
     `你好，\n\n有人（希望是你）申请重置 ${site.brand} 账号 ${email} 的密码。打开下面的链接设置新密码，1 小时内有效，只能用一次：\n\n${resetLink(site.siteUrl, token)}\n\n如果不是你申请的，不用理会这封邮件，密码不会改变。`,
   );
-  if (!sent) return { error: "邮件没发出去，请稍后再试，或者联系管理员帮你重置", email };
+  if (!sent) return { error: "邮件没发出去，请稍后再试，或者联系客服帮你重置", email };
   return done;
 }
 
@@ -457,7 +457,7 @@ export async function buyWithBalance(_: FormState, form: FormData): Promise<Form
       db().prepare("DELETE FROM balance_entries WHERE order_id = ? AND kind = 'purchase'").bind(orderId),
       db().prepare("UPDATE orders SET status = 'cancelled', note = '开通失败，余额已退回' WHERE id = ?").bind(orderId),
     ]);
-  const failed = { error: "开通失败，余额已经退回，请稍后再试。一直失败的话请联系管理员" };
+  const failed = { error: "开通失败，余额已经退回，请稍后再试。一直失败的话请联系客服" };
 
   let result: ProvisionResult;
   try {

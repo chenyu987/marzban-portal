@@ -145,3 +145,13 @@ export function normalizeRedeemCode(input: string): string | null {
   const s = input.replace(/[\s-]/g, "").toUpperCase();
   return s.length === REDEEM_LEN && [...s].every((ch) => REFERRAL_ALPHABET.includes(ch)) ? s : null;
 }
+
+// 订阅编号 7F3A9C21 显示成 7F3A-9C21；客服搜的时候带不带横线、大小写都行
+export function formatSubCode(code: string | null | undefined): string {
+  if (!code) return "-";
+  return `${code.slice(0, 4)}-${code.slice(4)}`;
+}
+
+export function normalizeSubCode(input: string): string {
+  return input.replace(/[^0-9a-z]/gi, "").toUpperCase();
+}

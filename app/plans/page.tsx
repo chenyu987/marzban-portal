@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
-import { formatDate, formatExpire, formatMoney } from "@/lib/format";
+import { formatDate, formatExpire, formatMoney, formatSubCode } from "@/lib/format";
 import { describePlan, findPlan } from "@/lib/plans";
 import { BALANCE_SQL } from "@/lib/balance";
 import { BRAND } from "@/lib/clients";
@@ -21,9 +21,9 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
   const { renew } = await searchParams;
   const [{ results: subs }, { results: open }, balanceRow] = await Promise.all([
     db()
-      .prepare("SELECT marzban_username FROM subscriptions WHERE customer_id = ? ORDER BY id")
+      .prepare("SELECT marzban_username, code FROM subscriptions WHERE customer_id = ? ORDER BY id")
       .bind(customer.id)
-      .all<{ marzban_username: string }>(),
+      .all<{ marzban_username: string; code: string | null }>(),
     db()
       .prepare(
         `SELECT id, amount, balance_used, plan_id, marzban_username, status, claimed_at, created_at FROM orders
@@ -43,8 +43,10 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
     db().prepare(BALANCE_SQL).bind(customer.id).first<{ balance: number }>(),
   ]);
   const balance = balanceRow?.balance ?? 0;
-  const subscriptions = subs.map((r) => r.marzban_username);
-  const renewTarget = typeof renew === "string" && subscriptions.includes(renew) ? renew : undefined;
+  // 下拉框的值是 Marzban 用户名（后端用），给客人看的是订阅编号
+  const subscriptions = subs.map((r) => ({ username: r.marzban_username, label: formatSubCode(r.code) }));
+  const renewSub = typeof renew === "string" ? subscriptions.find((s) => s.username === renew) : undefined;
+  const renewTarget = renewSub?.username;
   const canTransfer = site.payments.length > 0;
 
   // 按 group 分组，保持配置里的顺序
@@ -98,7 +100,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
                 planName: findPlan(site.plans, o.plan_id)?.name ?? o.plan_id,
                 amount: price(o.amount - o.balance_used),
                 deducted: o.balance_used > 0 ? price(o.balance_used) : null,
-                target: o.marzban_username ? `给 ${o.marzban_username} 续期` : "新开订阅",
+                target: o.marzban_username ? `给订阅 ${subscriptions.find((s) => s.username === o.marzban_username)?.label ?? "-"} 续期` : "新开订阅",
                 createdAt: formatDate(o.created_at),
                 processing: o.status === "processing",
                 claimedAt: o.claimed_at === null ? null : formatExpire(o.claimed_at),
@@ -113,7 +115,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
       ) : (
         <>
           {canTransfer && <p className="mb-3 text-sm text-base-content/70">点价格下单，按提示扫码付款，付完点「我已付款」马上开通。有余额时可以直接抵扣。</p>}
-          {renewTarget && <p className="mb-3 font-medium">给 {renewTarget} 续期：选一个套餐，续上的天数从原来的到期时间往后加。</p>}
+          {renewSub && <p className="mb-3 font-medium">给订阅 {renewSub.label} 续期：选一个套餐，续上的天数从原来的到期时间往后加。</p>}
           <OrderForm
             groups={groups}
             subscriptions={subscriptions}

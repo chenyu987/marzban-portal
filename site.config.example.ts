@@ -31,6 +31,8 @@ export type SiteConfig = {
   tutorialShots?: boolean;
   // 每个页面底部「联系我们」的邮箱，不填就不显示
   contactEmail?: string;
+  // 客服微信号：页面底部和「请联系客服」的提示旁边放一个「复制客服微信」按钮，不填就只显示邮箱
+  supportWechat?: string;
   // 金额前面的币种符号，比如 ¥、$
   currency: string;
   // 套餐列表。空着表示还没定，记账脚本就不能开通订阅

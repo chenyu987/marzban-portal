@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { BRAND } from "@/lib/clients";
 import { requestReset } from "../actions";
+import ContactSupport from "../ContactSupport";
 
 // 还不能发邮件时（没配发信服务）不显示输入框，直接让客人找管理员
 export default function ForgotForm({ canSend }: { canSend: boolean }) {
@@ -30,6 +31,7 @@ export default function ForgotForm({ canSend }: { canSend: boolean }) {
                 />
               </label>
               {state?.error && <div role="alert" className="alert alert-error alert-soft">{state.error}</div>}
+      {state?.error?.includes("联系客服") && <ContactSupport />}
               {state?.ok && <div role="alert" className="alert alert-success alert-soft">{state.ok}</div>}
               <button className="btn btn-primary" disabled={pending}>
                 {pending && <span className="loading loading-spinner loading-sm" />}
@@ -37,7 +39,7 @@ export default function ForgotForm({ canSend }: { canSend: boolean }) {
               </button>
             </>
           ) : (
-            <p className="text-sm">请联系管理员，告诉他你注册用的邮箱，管理员会发给你一个重置密码的链接。</p>
+            <p className="text-sm">请联系客服，告诉客服你注册用的邮箱，客服会发给你一个重置密码的链接。</p>
           )}
           <p className="text-center text-sm text-base-content/70">
             想起来了？
