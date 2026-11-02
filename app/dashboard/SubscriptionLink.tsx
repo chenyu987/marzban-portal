@@ -31,15 +31,15 @@ export default function SubscriptionLink({ username, url }: { username: string; 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-2">
-        {/* 复制链接和二维码哪个客户端都能用，放最前面 */}
-        <button type="button" onClick={copy} className="btn btn-sm">
+        {/* 复制链接和二维码哪个客户端都能用，放最前面；复制链接是主按钮 */}
+        <button type="button" onClick={copy} className="btn btn-sm btn-primary">
           {copied ? "已复制 ✓" : "复制订阅链接"}
         </button>
         <button type="button" onClick={() => setShown(!shown)} className="btn btn-sm">
           {shown ? "收起二维码" : "显示二维码"}
         </button>
-        {IMPORTS.map((c, i) => (
-          <a key={c.label} href={c.href(url)} className={`btn btn-sm ${i === 0 ? "btn-primary" : ""}`}>
+        {IMPORTS.map((c) => (
+          <a key={c.label} href={c.href(url)} className="btn btn-sm">
             {c.label}
           </a>
         ))}
