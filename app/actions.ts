@@ -1,11 +1,11 @@
 "use server";
 
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db, nowSec } from "@/lib/env";
 import { hashPassword, verifyPassword } from "@/lib/password";
-import { createSession, destroyOtherSessions, destroySession, requireCustomer } from "@/lib/session";
+import { createSession, currentCustomer, destroyOtherSessions, destroySession, requireCustomer } from "@/lib/session";
 import { lookupSubscription, revokeSubscription } from "@/lib/marzban";
 import { formatExpire, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
 import { findPlan, forSale } from "@/lib/plans";
@@ -19,7 +19,7 @@ import { canSendMail, sendMail } from "@/lib/mail";
 import { hashResetToken, newResetToken, RESET_MAX_PER_HOUR, RESET_TTL_SELF, resetLink } from "@/lib/reset";
 import { getT } from "@/lib/lang";
 import { planName } from "@/lib/plan-text";
-import { makeT, pick, type Lang } from "@/lib/i18n";
+import { LANG_COOKIE, makeT, parseLang, pick, type Lang } from "@/lib/i18n";
 
 // email：出错时带回去当输入框的默认值。React 19 提交后会重置表单，不带回去邮箱就被清空了。
 // support：提示里让客人找客服，页面在提示下面放「复制客服微信 / 邮箱」按钮
@@ -639,4 +639,12 @@ export async function updatePrefs(_: FormState, form: FormData): Promise<FormSta
   await db().prepare("UPDATE customers SET notify_expiry = ? WHERE id = ?").bind(notify, customer.id).run();
   revalidatePath("/account");
   return { ok: t("已保存", "Saved") };
+}
+
+// 页面底部切换语言：记一年；登录着的顺便记到账号上，到期提醒邮件按它写
+export async function setLang(lang: string) {
+  const next = parseLang(lang);
+  (await cookies()).set(LANG_COOKIE, next, { path: "/", maxAge: 365 * 86400, sameSite: "lax" });
+  const customer = await currentCustomer();
+  if (customer) await db().prepare("UPDATE customers SET lang = ? WHERE id = ?").bind(next, customer.id).run();
 }

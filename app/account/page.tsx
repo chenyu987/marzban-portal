@@ -31,7 +31,13 @@ export default async function AccountPage() {
         >
           <PasswordForm />
         </Section>
-        <Section title={t("到期提醒", "Expiry reminders")}>
+        <Section
+          title={t("到期提醒", "Expiry reminders")}
+          desc={t(
+            "月付到期前 3 天和当天各发一封；季付、半年、一年到期前 7 天、3 天和当天各发一封；免费体验到期前 1 天和当天各发一封。",
+            "Monthly plans: 3 days before and on the day. Quarterly, 6-month and yearly plans: 7 days, 3 days before and on the day. Free trials: 1 day before and on the day.",
+          )}
+        >
           <PrefsForm notify={!!customer.notify_expiry} />
         </Section>
         <p className="text-sm text-base-content/50">

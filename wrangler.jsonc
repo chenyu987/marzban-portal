@@ -2,9 +2,11 @@
   // Cloudflare Workers 配置模板。复制成 wrangler.jsonc，按下面的注释改成自己的值
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "marzban-portal",
-  "main": ".open-next/worker.js",
+  "main": "custom-worker.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
+  // 每天 UTC 2 点（北京时间 10 点）发到期提醒邮件，见 custom-worker.ts
+  "triggers": { "crons": ["0 2 * * *"] },
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "marzban-portal" }],
   "d1_databases": [

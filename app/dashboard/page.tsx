@@ -190,7 +190,10 @@ function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; cod
   const pct = user.data_limit ? Math.min(100, (user.used_traffic / user.data_limit) * 100) : null;
   // 剩余天数和这期套餐的总天数（不知道套餐就按 30 天画环）
   const daysLeft = user.expire ? Math.max(0, Math.ceil((user.expire * 1000 - Date.now()) / 86400_000)) : null;
-  const period = (planId ? findPlan(site.plans, planId)?.days : undefined) ?? 30;
+  const plan = planId ? findPlan(site.plans, planId) : undefined;
+  const period = plan?.days ?? 30;
+  // 免费体验前几天不放续费按钮，最后 3 天的黄色提醒和到期后的红色提示照常
+  const trial = !!plan?.codeOnly && plan.price === 0;
   const daysPct = daysLeft === null ? 100 : Math.min(100, (daysLeft / period) * 100);
 
   return (
@@ -232,7 +235,8 @@ function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; cod
           </div>
         </div>
 
-        {/* 已到期：红色提示 + 续费；最后 3 天：黄色提醒 + 续费；7 天以内：只放一个续费按钮；其他时候放个「提前续费」小链接 */}
+        {/* 已到期：红色提示 + 续费；最后 3 天：黄色提醒 + 续费；7 天以内：只放一个续费按钮；其他时候放个「提前续费」小链接。
+            免费体验只有前两种 */}
         {expired ? (
           <div role="alert" className="alert alert-error flex-wrap justify-between">
             <span>{t("这个订阅已经到期了，续费后马上恢复。", "This subscription has expired. Renew to restore it right away.")}</span>
@@ -247,7 +251,7 @@ function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; cod
               {t("续费", "Renew")}
             </Link>
           </div>
-        ) : needsRenewal(user.expire) ? (
+        ) : trial ? null : needsRenewal(user.expire) ? (
           <Link href={`/plans?renew=${encodeURIComponent(user.username)}`} className="btn btn-warning btn-sm self-start">
             {t("续费", "Renew")}
           </Link>

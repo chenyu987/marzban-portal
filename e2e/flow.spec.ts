@@ -249,6 +249,12 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await setMockExpire(username, Math.floor(Date.now() / 1000) + 2 * 86400);
   await page.reload();
   await expect(page.getByText(/这个订阅还剩 .*到期，记得续费/)).toBeVisible();
+  // 每天的到期提醒：还剩 2 天发「3 天」那封；再跑一次不会重复发
+  const notices = () => query(`SELECT days FROM expiry_notices WHERE marzban_username = '${username}'`);
+  expect((await page.request.post("/api/cron/expiry")).ok()).toBe(true);
+  expect(notices()).toEqual([{ days: 3 }]);
+  await page.request.post("/api/cron/expiry");
+  expect(notices()).toHaveLength(1);
   await page.getByRole("link", { name: "续费", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/plans\\?renew=${username}`));
   await expect(page.locator(`input[name="target"][value="${username}"]`)).toBeChecked();
@@ -414,6 +420,9 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   await expect(page.getByText(/开通成功：高速版 7天体验/)).toBeVisible();
   await page.goto("/dashboard");
   await expect(page.getByRole("heading", { name: "高速版（体验）" })).toBeVisible();
+  // 免费体验前几天不放续费按钮和「提前续费」
+  const trialCard = page.locator(".card", { has: page.getByRole("heading", { name: "高速版（体验）" }) });
+  await expect(trialCard.getByRole("link", { name: /续费/ })).toHaveCount(0);
   // 在体验上续费普通版：套餐换成普通版，标题不再是体验
   // 免费体验不记订单（不算收入），只记这个订阅的套餐
   const trialUser = query(`SELECT marzban_username FROM subscription_plans WHERE plan_id = 'p3-trial' ORDER BY updated_at DESC LIMIT 1`)[0].marzban_username;
