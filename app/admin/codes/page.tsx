@@ -25,10 +25,13 @@ type Row = {
 };
 
 const PAGE_SIZE = 50;
+// 免费体验（0 元）兑换成功也不记订单（见 app/actions.ts 的 redeem），没有订单号不算卡住
+const FREE_IDS = site.plans.filter((p) => p.price === 0).map((p) => p.id);
+const FREE_SQL = FREE_IDS.length ? `r.plan_id IN (${FREE_IDS.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})` : "0";
 const STATES: Record<string, { label: string; sql: string }> = {
   unused: { label: "没用过", sql: "r.used_by IS NULL" },
-  used: { label: "已用", sql: "r.used_by IS NOT NULL AND r.order_id IS NOT NULL" },
-  stuck: { label: "卡住了，要核对", sql: "r.used_by IS NOT NULL AND r.order_id IS NULL" },
+  used: { label: "已用", sql: `r.used_by IS NOT NULL AND (r.order_id IS NOT NULL OR ${FREE_SQL})` },
+  stuck: { label: "卡住了，要核对", sql: `r.used_by IS NOT NULL AND r.order_id IS NULL AND NOT ${FREE_SQL}` },
 };
 const GROUPS = [...new Set(site.plans.map((p) => p.group ?? p.name))];
 const like = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -121,16 +124,23 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
                         <span className="badge badge-sm badge-success">没用过</span>
                         <VoidCode code={r.code} label={label} />
                       </span>
-                    ) : r.order_id === null ? (
+                    ) : r.order_id === null && !FREE_IDS.includes(r.plan_id) ? (
                       // 占住了但没记账：兑换时 Marzban 出了问题，要去核对（见 docs/portal-deploy.md「兑换码卡住了」）
                       <span className="badge badge-sm badge-error">卡住了，要核对</span>
                     ) : (
                       <span className="flex flex-wrap items-center gap-1 text-sm">
                         {r.email ? <CustomerLink id={r.used_by} email={r.email} wechat={r.wechat} /> : `客人 ${r.used_by}`}
-                        <span className="text-base-content/60">{formatExpire(r.used_at)} 用的，</span>
-                        <Link href={`/admin?view=all&q=${r.order_no ?? r.order_id}`} className="link link-hover">
-                          订单 {formatOrderNo(r.order_no)}
-                        </Link>
+                        <span className="text-base-content/60">{formatExpire(r.used_at)} 用的</span>
+                        {r.order_id === null ? (
+                          <span className="text-base-content/60">（免费体验，不记订单）</span>
+                        ) : (
+                          <>
+                            <span className="text-base-content/60">，</span>
+                            <Link href={`/admin?view=all&q=${r.order_no ?? r.order_id}`} className="link link-hover">
+                              订单 {formatOrderNo(r.order_no)}
+                            </Link>
+                          </>
+                        )}
                       </span>
                     )}
                   </td>

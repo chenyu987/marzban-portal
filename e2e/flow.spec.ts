@@ -562,6 +562,19 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await expect(admin.locator("tr", { hasText: codes[1] })).toContainText(customer);
   await expect(admin.locator("tr", { hasText: codes[0] })).toHaveCount(0);
 
+  // 免费体验兑换后不记订单，后台显示「已用」，不是「卡住了」
+  const freeCode = run(["codes:create", "--", "p3-trial"]).match(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}/)![0];
+  await page.goto("/plans");
+  await page.getByPlaceholder("XXXX-XXXX-XXXX-XXXX").fill(freeCode);
+  await page.locator('form:has(input[name="code"]) select[name="target"]').selectOption("new");
+  await page.getByRole("button", { name: "兑换" }).click();
+  await expect(page.getByText("开通成功")).toBeVisible();
+  await admin.goto(`/admin/codes?q=${freeCode}`);
+  await expect(admin.locator("tr", { hasText: freeCode })).toContainText("免费体验，不记订单");
+  await expect(admin.locator("tr", { hasText: freeCode })).not.toContainText("卡住了");
+  await admin.goto(`/admin/codes?state=stuck&q=${freeCode}`);
+  await expect(admin.locator("tr", { hasText: freeCode })).toHaveCount(0);
+
   // 试用：首次连上才开始计时（Marzban 的 on_hold），连上后有效 3 天；详情页能看到每个节点的连接链接
   const trialUser = `e2e_trial_${stamp}`.slice(0, 32);
   await admin.goto("/admin/users/new");
