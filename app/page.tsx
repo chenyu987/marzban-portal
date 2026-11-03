@@ -7,7 +7,7 @@ import Brand, { Logo } from "./Brand";
 
 export const dynamic = "force-dynamic";
 
-// 首页：卖点、节点地区、套餐价格、几步用上、常见问题。内容都在 site.config.ts 的 landing 里。
+// 首页：卖点、套餐价格、几步用上、常见问题。内容都在 site.config.ts 的 landing 里。
 // 带 ?ref=推荐码 来的，注册按钮把推荐码带过去；已经登录的，按钮换成「进入我的订阅」
 export default async function Home({ searchParams }: { searchParams: Promise<{ ref?: string | string[] }> }) {
   const me = await currentCustomer();
@@ -84,17 +84,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-base-content/70 sm:text-xl">{L?.sub ?? site.description}</p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">{cta}</div>
-          {L?.regions && (
-            <div className="mt-10 flex flex-wrap justify-center gap-2" data-testid="regions">
-              {L.regions.map((r) => (
-                <span key={r.name} className="badge badge-lg gap-1.5 border-base-300 bg-base-100 shadow-sm">
-                  <span className="h-2 w-2 rounded-full bg-success" aria-hidden />
-                  {r.name}
-                  <span className="text-base-content/50">{r.country}</span>
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       </section>
 

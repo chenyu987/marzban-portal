@@ -35,13 +35,11 @@ export type SiteConfig = {
   // 品牌主色（手机浏览器顶栏、主屏幕启动画面用），比如 #2F6BFF
   themeColor?: string;
   // 首页（/）的内容。不填就只有品牌名、介绍和套餐价格。
-  // highlights：卖点卡片；regions：节点所在地；steps：几步用上；faq：常见问题
+  // highlights：卖点卡片；steps：几步用上；faq：常见问题。不列节点在哪，免得被人按地址封
   landing?: {
     headline: string;
     sub: string;
     highlights?: { icon: string; title: string; desc: string }[];
-    // 国旗 emoji 在 Windows 上显示成字母，所以地区用文字：城市 + 国家
-    regions?: { name: string; country: string }[];
     steps?: { title: string; desc: string }[];
     faq?: { q: string; a: string }[];
   };

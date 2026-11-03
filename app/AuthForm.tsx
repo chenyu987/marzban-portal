@@ -44,7 +44,6 @@ export default function AuthForm({ title, submitLabel, action, passwordAutoCompl
             </ul>
           )}
         </div>
-        <p className="text-sm text-white/70">节点：{site.landing?.regions?.map((r) => r.name).join(" · ")}</p>
       </aside>
 
       {/* 右边：表单 */}

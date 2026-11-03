@@ -62,10 +62,11 @@ async function logout(page: Page) {
   await expect(page).toHaveURL(/\/login/);
 }
 
-test("首页：卖点、节点、价格、常见问题，注册按钮带上推荐码", async ({ page }) => {
+test("首页：卖点、价格、常见问题，注册按钮带上推荐码", async ({ page }) => {
   await page.goto("/?ref=ABCD2345");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await expect(page.getByTestId("regions")).toContainText("东京");
+  // 不暴露节点在哪：首页和登录页都不出现城市名
+  await expect(page.locator("body")).not.toContainText("东京");
   // 每个档位一张价格卡，标月付价
   await expect(page.getByTestId("pricing").locator("h3").first()).toBeVisible();
   await expect(page.getByTestId("pricing")).toContainText("/月");
@@ -73,6 +74,7 @@ test("首页：卖点、节点、价格、常见问题，注册按钮带上推�
   // 推荐链接带来的，注册页自动填好推荐码
   await page.getByRole("link", { name: "免费注册" }).first().click();
   await expect(page).toHaveURL(/\/register\?ref=ABCD2345/);
+  await expect(page.locator("body")).not.toContainText("东京");
   await expect(page.getByPlaceholder("推荐码（选填）")).toHaveValue("ABCD2345");
   // 浏览器标签和主屏幕图标、manifest 都在
   const manifest = await (await page.request.get("/manifest.webmanifest")).json();
