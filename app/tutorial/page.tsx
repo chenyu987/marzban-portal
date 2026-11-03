@@ -6,6 +6,7 @@ import { site } from "@/site.config";
 import CopyRules from "./CopyRules";
 import Brand from "../Brand";
 import CustomerNav from "../CustomerNav";
+import ContactSupport from "../ContactSupport";
 import { currentCustomer } from "@/lib/session";
 
 // iPhone 用 Shadowrocket，Mac 用 Clash Verge，Windows 和安卓用 Hiddify。
@@ -53,7 +54,8 @@ const TABS: { id: Platform; label: string; content: React.ReactNode }[] = [
         <Steps>
           <li>
             <b>安装</b>：Shadowrocket 在国区 App Store 搜不到，要用<b>美区 Apple ID</b> 登录 App Store
-            再搜索安装，一次性付费约 $3。
+            再搜索安装，一次性付费约 $3。如果没有美区 Apple ID，请联系客服。
+            <ContactSupport className="mt-2" />
           </li>
           <li>
             <b>导入订阅</b>，三种方法任选一种：

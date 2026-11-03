@@ -69,7 +69,14 @@ test("首页：卖点、价格、常见问题，注册按钮带上推荐码", as
   await expect(page.locator("body")).not.toContainText("东京");
   // 每个档位一张价格卡，标月付价
   await expect(page.getByTestId("pricing").locator("h3").first()).toBeVisible();
-  await expect(page.getByTestId("pricing")).toContainText("/月");
+  // 价格卡默认看季付，能切到月付、半年付、年付
+  await expect(page.getByRole("tab", { name: "季付", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("pricing")).toContainText("/季");
+  await expect(page.getByTestId("pricing")).toContainText("比按月买省");
+  for (const [tab, per] of [["月付", "/月"], ["半年付", "/半年"], ["年付", "/年"]]) {
+    await page.getByRole("tab", { name: tab, exact: true }).click();
+    await expect(page.getByTestId("pricing")).toContainText(per);
+  }
   await expect(page.getByText("常见问题").first()).toBeVisible();
   // 推荐链接带来的，注册页自动填好推荐码
   await page.getByRole("link", { name: "免费注册" }).first().click();
@@ -89,6 +96,13 @@ test("首页：卖点、价格、常见问题，注册按钮带上推荐码", as
   expect(manifest.start_url).toBe("/dashboard");
   expect(manifest.icons.length).toBeGreaterThan(0);
   expect((await page.request.get(manifest.icons[0].src)).ok()).toBe(true);
+});
+
+test("安装教程：没有美区 Apple ID 的可以直接复制客服联系方式", async ({ page }) => {
+  await page.goto("/tutorial");
+  await page.getByRole("tab", { name: "iPhone" }).check();
+  const step = page.getByRole("listitem").filter({ hasText: "如果没有美区 Apple ID，请联系客服" });
+  await expect(step.getByRole("button", { name: /复制客服/ }).first()).toBeVisible();
 });
 
 test("打错网址：带品牌的 404，能回首页", async ({ page }) => {
