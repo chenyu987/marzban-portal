@@ -2,7 +2,7 @@
 // 另一条：余额付全款、余额抵扣一部分（取消后退回）、用兑换码续期；
 // 还有管理后台：登录、对账（确认到账 / 没收到钱收回）、取消订单、客人管理（加减余额、重置链接、绑定订阅）、兑换码、操作日志。
 // 还有老客人：注册时微信号对上，管理员之前开的订阅自动出现在「我的订阅」，改微信号也跟着走。
-// 还有手机：底部标签栏、买了还没用的订阅顶上引导看安装教程。
+// 还有手机：右上角菜单、买了还没用的订阅顶上引导看安装教程。
 // 还有兜底：网站刚更新、旧页面点按钮出错时自动刷新一次；微信内置浏览器提示换浏览器打开。
 // 每次用新邮箱注册，不依赖之前的数据；管理员那一步直接调命令行脚本（本地库 + 假 Marzban）
 import { execFileSync } from "node:child_process";
@@ -228,7 +228,7 @@ test("老客人注册：微信号对上的订阅自动绑过来，改微信号�
   await ctx.close();
 });
 
-test("手机上：底部标签栏四个页面都看得到；买了还没连过的订阅顶上有「看安装教程」，连上过就不显示", async ({ browser }) => {
+test("手机上：右上角菜单能切页面、能退出；买了还没连过的订阅顶上有「看安装教程」，连上过就不显示", async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 402, height: 874 }, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();
   const stamp = Date.now();
@@ -242,22 +242,33 @@ test("手机上：底部标签栏四个页面都看得到；买了还没连过�
   await page.getByRole("button", { name: "注册" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
 
-  const tabs = page.getByTestId("tab-bar");
-  for (const name of ["我的订阅", "购买/续费", "安装教程", "账户"]) await expect(tabs.getByRole("link", { name })).toBeVisible();
-  await expect(tabs.getByRole("link", { name: "我的订阅" })).toHaveAttribute("aria-current", "page");
-
   const next = page.getByTestId("next-step");
   await expect(next).toBeVisible();
   await next.getByRole("link", { name: "看安装教程" }).click();
   await expect(page).toHaveURL(/\/tutorial/);
-  await expect(tabs.getByRole("link", { name: "安装教程" })).toHaveAttribute("aria-current", "page");
 
   // 连上过一次：引导不再显示
   await mockMarzban("PUT", `/user/${wechat}`, { online_at: new Date().toISOString().slice(0, 19) });
-  // 直接打开，不点底部标签：开发模式下 Next.js 的调试角标在屏幕底部，会挡住标签栏的点击（线上没有这个角标）
   await page.goto("/dashboard");
   await expect(page.getByTestId("sub-id")).toBeVisible();
   await expect(page.getByTestId("next-step")).toHaveCount(0);
+
+  // 右上角菜单：收着时不显示；点开四个页面和退出都在，当前页高亮；× 关掉；点页面过去后菜单自己收起
+  const menu = page.getByRole("dialog", { name: "菜单" });
+  await expect(menu).toHaveCount(0);
+  await page.getByRole("button", { name: "打开菜单" }).click();
+  for (const name of ["我的订阅", "购买/续费", "安装教程", "账户"]) await expect(menu.getByRole("link", { name })).toBeVisible();
+  await expect(menu.getByRole("link", { name: "我的订阅" })).toHaveAttribute("aria-current", "page");
+  await menu.getByRole("button", { name: "关闭菜单" }).click();
+  await expect(menu).toHaveCount(0);
+  await page.getByRole("button", { name: "打开菜单" }).click();
+  await menu.getByRole("link", { name: "账户" }).click();
+  await expect(page).toHaveURL(/\/account/);
+  await expect(menu).toHaveCount(0);
+  // 菜单最下面是退出
+  await page.getByRole("button", { name: "打开菜单" }).click();
+  await menu.getByRole("button", { name: "退出" }).click();
+  await expect(page).toHaveURL(/\/login/);
   await ctx.close();
 });
 

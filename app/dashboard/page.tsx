@@ -212,10 +212,6 @@ function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; cod
         {neverUsed && (
           <div className="flex flex-col gap-3 rounded-box border border-primary/30 bg-primary/5 p-4" data-testid="next-step">
             <b>{t("下一步：装好 App，把这个订阅导进去", "Next: install an app and import this subscription")}</b>
-            <ol className="list-decimal space-y-1 pl-5 text-sm text-base-content/70">
-              <li>{t("按你的设备装 App（iPhone 用 Shadowrocket），教程每一步都有截图", "Install the app for your device (Shadowrocket on iPhone); every step in the guide has a screenshot")}</li>
-              <li>{t("装好后回到这里，点下面的「导入」按钮", "Then come back here and tap an Import button below")}</li>
-            </ol>
             <Link href="/tutorial" className="btn btn-primary">
               {t("看安装教程", "Open the setup guide")}
             </Link>
