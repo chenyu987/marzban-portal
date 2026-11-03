@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { AUTO_GROUP, CLASH_RULES, IMPORT_NAME, clashVergeImport, hiddifyImport, detectPlatform, shadowrocketImport } from "./clients";
+import { AUTO_GROUP, CLASH_RULES, clashVergeImport, hiddifyImport, detectPlatform, shadowrocketImport } from "./clients";
 
 describe("客户端", () => {
   it("Shadowrocket 导入链接里是订阅链接的 base64", () => {
     const url = "https://sub.example.com:8000/sub/abc";
-    expect(shadowrocketImport(url)).toBe(`shadowrocket://add/sub://${btoa(url)}?remark=${encodeURIComponent(IMPORT_NAME)}`);
+    expect(shadowrocketImport(url, "例子.com")).toBe(`shadowrocket://add/sub://${btoa(url)}?remark=${encodeURIComponent("例子.com")}`);
   });
 
-  it("三个客户端导入后订阅都叫 importName（没配就用品牌名）", () => {
+  it("三个客户端导入后订阅都叫传进来的名字", () => {
     const url = "https://sub.example.com:8000/sub/abc";
-    expect(IMPORT_NAME).toBeTruthy();
-    for (const link of [shadowrocketImport(url), clashVergeImport(url), hiddifyImport(url)]) expect(link).toContain(encodeURIComponent(IMPORT_NAME));
+    for (const link of [shadowrocketImport(url, "例子.com"), clashVergeImport(url, "例子.com"), hiddifyImport(url, "例子.com")]) expect(link).toContain(encodeURIComponent("例子.com"));
   });
 
   it("Clash 规则的组名和 Marzban 默认模板一致（♻ 后面带 U+FE0F）", () => {

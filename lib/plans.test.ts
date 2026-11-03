@@ -101,3 +101,31 @@ describe("changePlanBody", () => {
     expect(changePlanBody({}, limited)).not.toHaveProperty("expire");
   });
 });
+
+describe("免费体验套餐", () => {
+  it("每个档位都有一个 7 天、免费、只能用兑换码开的体验；客人能买的套餐里没有它", async () => {
+    const { site } = await import("../site.config");
+    const { forSale } = await import("./plans");
+    const groups = [...new Set(site.plans.map((p) => p.group ?? p.name))];
+    for (const g of groups) {
+      const trial = site.plans.find((p) => (p.group ?? p.name) === g && p.codeOnly);
+      expect(trial, `${g} 没有体验套餐`).toBeDefined();
+      expect(trial).toMatchObject({ price: 0, days: 7 });
+    }
+    expect(forSale(site.plans).some((p) => p.codeOnly)).toBe(false);
+    expect(forSale(site.plans).length).toBe(site.plans.length - groups.length);
+  });
+
+  it("在体验上续费：流量、设备数换成续费的套餐，到期时间接着体验往后加", async () => {
+    const { site } = await import("../site.config");
+    const { renewUserBody } = await import("./plans");
+    const trial = site.plans.find((p) => p.id.endsWith("-trial") && p.dataGB === 20)!;
+    const paid = site.plans.find((p) => !p.codeOnly && p.dataGB === null && p.days === 30)!;
+    const now = 1_000_000;
+    const body = renewUserBody({ expire: now + 3 * 86400, note: `ip=${trial.ip}` }, paid, now);
+    expect(body.data_limit).toBe(0);
+    expect(body.expire).toBe(now + 3 * 86400 + 30 * 86400);
+    expect(body.note).toContain(`ip=${paid.ip}`);
+  });
+});
+

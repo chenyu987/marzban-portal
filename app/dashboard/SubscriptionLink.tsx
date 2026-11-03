@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { clashVergeImport, hiddifyImport, shadowrocketImport } from "@/lib/clients";
+import { useSite } from "../SiteContext";
 import { resetSubscriptionLink } from "../actions";
 import { confirmSubmit } from "../ConfirmDialog";
 
 // 大部分客人用 iPhone，Shadowrocket 固定放导入按钮的第一个
-const IMPORTS: { id: string; label: string; href: (url: string) => string }[] = [
+const IMPORTS: { id: string; label: string; href: (url: string, name: string) => string }[] = [
   { id: "shadowrocket", label: "导入 Shadowrocket", href: shadowrocketImport },
   { id: "clash", label: "导入 Clash Verge", href: clashVergeImport },
   { id: "hiddify", label: "导入 Hiddify", href: hiddifyImport },
@@ -15,6 +16,7 @@ const IMPORTS: { id: string; label: string; href: (url: string) => string }[] = 
 
 // 订阅链接等于密码：默认收起，二维码在浏览器里本地生成，不交给任何第三方服务
 export default function SubscriptionLink({ username, url }: { username: string; url: string }) {
+  const { importName } = useSite();
   const [shown, setShown] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -40,7 +42,7 @@ export default function SubscriptionLink({ username, url }: { username: string; 
           {shown ? "收起二维码" : "显示二维码"}
         </button>
         {IMPORTS.map((c) => (
-          <a key={c.label} href={c.href(url)} className="btn btn-sm">
+          <a key={c.label} href={c.href(url, importName)} className="btn btn-sm">
             {c.label}
           </a>
         ))}

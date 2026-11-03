@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { site } from "@/site.config";
 import Brand from "./Brand";
 import type { FormState } from "./actions";
+import type { AuthAside } from "@/lib/public-site";
 
 type Props = {
   title: string;
@@ -16,12 +16,11 @@ type Props = {
   referral?: { defaultValue: string };
   // 登录页在密码下面显示「忘记密码？」
   forgotLink?: boolean;
+  // 左边的标题、介绍、卖点，由页面（服务器）从 site.config 算好传进来
+  aside: AuthAside;
 };
 
-// landingPublic: false 时左边只放品牌名和介绍，不放卖点
-const L = site.landingPublic === false ? undefined : site.landing;
-
-export default function AuthForm({ title, submitLabel, action, passwordAutoComplete, footer, referral, forgotLink }: Props) {
+export default function AuthForm({ title, submitLabel, action, passwordAutoComplete, footer, referral, forgotLink, aside }: Props) {
   const [state, formAction, pending] = useActionState(action, undefined);
   return (
     <main className="grid min-h-screen lg:grid-cols-2">
@@ -29,11 +28,11 @@ export default function AuthForm({ title, submitLabel, action, passwordAutoCompl
       <aside className="brand-gradient relative hidden items-center justify-center overflow-hidden p-12 text-white lg:flex">
         <Brand size={40} className="absolute top-12 left-12 text-2xl text-white" />
         <div className="w-full max-w-md" data-testid="auth-aside">
-          <h2 className="text-4xl leading-tight font-extrabold">{L?.headline ?? site.brand}</h2>
-          <p className="mt-4 text-lg text-white/85">{L?.sub ?? site.description}</p>
-          {L?.highlights && (
+          <h2 className="text-4xl leading-tight font-extrabold">{aside.headline}</h2>
+          <p className="mt-4 text-lg text-white/85">{aside.sub}</p>
+          {aside.highlights && (
             <ul className="mt-8 grid gap-3">
-              {L.highlights.slice(0, 4).map((h) => (
+              {aside.highlights.map((h) => (
                 <li key={h.title} className="flex items-start gap-3 rounded-box bg-white/10 p-3 backdrop-blur">
                   <span className="text-2xl" aria-hidden>
                     {h.icon}

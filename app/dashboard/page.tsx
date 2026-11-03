@@ -140,7 +140,8 @@ function planHeading(planId: string | undefined): { title: string; subtitle?: st
   const plan = planId ? findPlan(site.plans, planId) : undefined;
   if (!plan) return { title: "我的订阅" };
   const group = plan.group ?? plan.name;
-  return { title: group, subtitle: site.planGroups?.[group]?.lines?.at(-1) ?? describePlan(plan) };
+  // 免费体验在档位名后面标「（体验）」；在它上面续费后套餐就换成续费的那个，标题跟着变
+  return { title: plan.codeOnly && plan.price === 0 ? `${group}（体验）` : group, subtitle: site.planGroups?.[group]?.lines?.at(-1) ?? describePlan(plan) };
 }
 
 // 订阅编号是随机的（7F3A-9C21），看不出是第几单；客人找客服时报这个，后台客人页能按它搜

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { currentCustomer } from "@/lib/session";
 import { formatMoney } from "@/lib/format";
-import { describePlan } from "@/lib/plans";
+import { describePlan, forSale } from "@/lib/plans";
 import { site } from "@/site.config";
 import Brand, { Logo } from "./Brand";
 import PricingCards, { type PricingGroup } from "./PricingCards";
@@ -13,6 +14,8 @@ export const dynamic = "force-dynamic";
 // 没配 landing 或 landingPublic: false 时首页只有品牌名和登录、注册按钮，已经登录的直接去「我的订阅」。
 // 带 ?ref=推荐码 来的，注册按钮把推荐码带过去；已经登录的，按钮换成「进入我的订阅」
 export default async function Home({ searchParams }: { searchParams: Promise<{ ref?: string | string[] }> }) {
+  // 后台域名前面挡着 Cloudflare Access，过了 Access 的请求会带这个头：打开后台域名的根目录直接进后台
+  if ((await headers()).get("cf-access-jwt-assertion")) redirect("/admin");
   const me = await currentCustomer();
   const { ref } = await searchParams;
   const register = typeof ref === "string" && ref ? `/register?ref=${encodeURIComponent(ref.slice(0, 32))}` : "/register";
@@ -38,9 +41,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
 
   // 每个档位一张价格卡，上面切周期（默认季付）；说明取价目表上那行
   const money = (fen: number) => `${site.currency}${formatMoney(fen).replace(/\.00$/, "")}`;
-  const names = [...new Set(site.plans.map((p) => p.group ?? p.name))];
+  const sale = forSale(site.plans);
+  const names = [...new Set(sale.map((p) => p.group ?? p.name))];
   const groups: PricingGroup[] = names.map((g) => {
-    const plans = site.plans.filter((p) => (p.group ?? p.name) === g);
+    const plans = sale.filter((p) => (p.group ?? p.name) === g);
     const month = plans.find((p) => p.days <= 31) ?? plans[0];
     const show = site.planGroups?.[g];
     return {
@@ -62,7 +66,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
     };
   });
   const periods = groups[0]?.plans.map((p) => p.label) ?? [];
-  const firstPlans = site.plans.filter((p) => (p.group ?? p.name) === names[0]);
+  const firstPlans = sale.filter((p) => (p.group ?? p.name) === names[0]);
   const defaultPeriod = Math.max(0, firstPlans.findIndex((p) => p.days >= 85 && p.days <= 95));
 
   const cta = me ? (

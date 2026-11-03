@@ -1,28 +1,23 @@
-// 各客户端的一键导入链接，前后端都能用。格式都还没在真机上验证过
-import { site } from "@/site.config";
-
-export const BRAND = site.brand;
-// 一键导入后客户端里订阅的名字
-export const IMPORT_NAME = site.importName ?? site.brand;
-// 客服联系方式，「复制客服微信」「复制客服邮箱」按钮用
-export const SUPPORT = { wechat: site.supportWechat, email: site.contactEmail };
+// 各客户端的一键导入链接，前后端都能用。格式都还没在真机上验证过。
+// 这个文件会进浏览器的 JS，不要 import site.config（会把整个配置打包进去）；要用站点信息就当参数传进来。
+// name：导入后客户端里这条订阅叫什么（site.importName，没配就用品牌名）
 
 // Shadowrocket：shadowrocket://add/sub://<订阅链接的 base64>?remark=<名字>
-export function shadowrocketImport(url: string): string {
-  return `shadowrocket://add/sub://${btoa(url)}?remark=${encodeURIComponent(IMPORT_NAME)}`;
+export function shadowrocketImport(url: string, name: string): string {
+  return `shadowrocket://add/sub://${btoa(url)}?remark=${encodeURIComponent(name)}`;
 }
 
 // 续期后订阅链接不变，节点照样能连；客户端里显示的到期时间要刷新订阅才更新，之前过期连不上的也是刷新一下就好
 export const RENEW_REFRESH_HINT = "已经导入过的不用重新导入，打开客户端刷新（更新）一下订阅，到期时间就会更新";
 
 // Clash Verge Rev 注册了 clash:// 协议
-export function clashVergeImport(url: string): string {
-  return `clash://install-config?url=${encodeURIComponent(url)}&name=${encodeURIComponent(IMPORT_NAME)}`;
+export function clashVergeImport(url: string, name: string): string {
+  return `clash://install-config?url=${encodeURIComponent(url)}&name=${encodeURIComponent(name)}`;
 }
 
 // Hiddify：hiddify://import/<订阅链接>#<名字>
-export function hiddifyImport(url: string): string {
-  return `hiddify://import/${url}#${encodeURIComponent(IMPORT_NAME)}`;
+export function hiddifyImport(url: string, name: string): string {
+  return `hiddify://import/${url}#${encodeURIComponent(name)}`;
 }
 
 // Clash Verge「扩展覆写配置」里填的分流规则：OpenAI、Claude 和国外流量走自动选节点，局域网和国内直连。
@@ -47,7 +42,6 @@ export const CLASH_RULES = `rules:
   - MATCH,${AUTO_GROUP}
 `;
 
-export const DOWNLOADS = site.downloads;
 
 export type Platform = "ios" | "mac" | "windows" | "android";
 

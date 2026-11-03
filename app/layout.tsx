@@ -3,6 +3,8 @@ import { site } from "@/site.config";
 import Link from "next/link";
 import ContactSupport from "./ContactSupport";
 import ConfirmHost from "./ConfirmDialog";
+import { SiteProvider } from "./SiteContext";
+import { publicSite } from "@/lib/public-site";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="zh-CN">
       <body className="flex min-h-screen flex-col bg-base-200">
+        <SiteProvider value={publicSite}>
         <div className="flex-1">{children}</div>
         <footer className="flex flex-col items-center gap-3 border-t border-base-300/60 px-4 py-8 text-sm text-base-content/60">
           <nav className="flex flex-wrap justify-center gap-x-5 gap-y-1">
@@ -40,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </p>
         </footer>
         <ConfirmHost />
+        </SiteProvider>
       </body>
     </html>
   );

@@ -1,8 +1,11 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
-import { DOWNLOADS, IMPORT_NAME, detectPlatform, type Platform } from "@/lib/clients";
+import { detectPlatform, type Platform } from "@/lib/clients";
 import { site } from "@/site.config";
+
+const DOWNLOADS = site.downloads;
+const IMPORT_NAME = site.importName ?? site.brand;
 import CopyRules from "./CopyRules";
 import Brand from "../Brand";
 import CustomerNav from "../CustomerNav";

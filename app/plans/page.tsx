@@ -1,7 +1,7 @@
 import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
 import { formatDate, formatExpire, formatMoney, formatSubCode, formatOrderNo } from "@/lib/format";
-import { describePlan, findPlan } from "@/lib/plans";
+import { describePlan, findPlan, forSale } from "@/lib/plans";
 import { BALANCE_SQL } from "@/lib/balance";
 import { site } from "@/site.config";
 import type { Plan } from "@/site.config.example";
@@ -52,7 +52,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
 
   // 按 group 分组，保持配置里的顺序
   const byGroup = new Map<string, Plan[]>();
-  for (const p of site.plans) {
+  for (const p of forSale(site.plans)) {
     const g = p.group ?? p.name;
     byGroup.set(g, [...(byGroup.get(g) ?? []), p]);
   }

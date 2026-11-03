@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { SUPPORT } from "@/lib/clients";
+import { useSite } from "./SiteContext";
 
 // 「复制客服微信」「复制客服邮箱」按钮。页面底部一直有；提示里说「请联系客服」的地方也放一组，客人不用另找
 export default function ContactSupport({ className = "" }: { className?: string }) {
   const [copied, setCopied] = useState<"wechat" | "email" | null>(null);
+  const SUPPORT = useSite().support;
   if (!SUPPORT.wechat && !SUPPORT.email) return null;
 
   async function copy(what: "wechat" | "email", text: string) {

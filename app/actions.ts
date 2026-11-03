@@ -8,7 +8,7 @@ import { hashPassword, verifyPassword } from "@/lib/password";
 import { createSession, destroyOtherSessions, destroySession, requireCustomer } from "@/lib/session";
 import { lookupSubscription, revokeSubscription } from "@/lib/marzban";
 import { formatExpire, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
-import { findPlan } from "@/lib/plans";
+import { findPlan, forSale } from "@/lib/plans";
 import { type ProvisionResult } from "@/lib/provision";
 import { provisionTarget } from "@/lib/orders";
 import { confirmTransferOrder, orderLabel } from "@/lib/admin-orders";
@@ -218,13 +218,26 @@ export async function redeem(_: FormState, form: FormData): Promise<FormState> {
               .bind(customer.id, username, now),
           ]
         : []),
-      db()
-        .prepare(
-          `INSERT INTO orders (customer_id, amount, method, status, plan_id, marzban_username, paid_at, created_at)
+      // 免费体验（0 元）不记订单（订单金额必须大于 0，也不该算进收入），直接记这个订阅现在是什么套餐；
+      // 谁用了哪个码，兑换码表里的 used_by / used_at 已经记着
+      ...(plan.price > 0
+        ? [
+            db()
+              .prepare(
+                `INSERT INTO orders (customer_id, amount, method, status, plan_id, marzban_username, paid_at, created_at)
          VALUES (?, ?, 'redeem_code', 'paid', ?, ?, ?, ?)`,
-        )
-        .bind(customer.id, plan.price, plan.id, username, now, now),
-      db().prepare("UPDATE redeem_codes SET order_id = last_insert_rowid() WHERE code = ?").bind(code),
+              )
+              .bind(customer.id, plan.price, plan.id, username, now, now),
+            db().prepare("UPDATE redeem_codes SET order_id = last_insert_rowid() WHERE code = ?").bind(code),
+          ]
+        : [
+            db()
+              .prepare(
+                `INSERT INTO subscription_plans (marzban_username, plan_id, updated_at) VALUES (?, ?, ?)
+                 ON CONFLICT (marzban_username) DO UPDATE SET plan_id = excluded.plan_id, updated_at = excluded.updated_at`,
+              )
+              .bind(username, plan.id, now),
+          ]),
     ]);
   } catch (e) {
     // Marzban 已经开好了，兑换码也占住了，只差记账：让管理员按日志补
@@ -249,7 +262,7 @@ const MAX_OPEN_ORDERS = 3;
 // useBalance=1：用余额抵扣。余额够付全款就直接扣余额开通（buyWithBalance），不够就抵扣一部分、剩下的转账
 export async function createOrder(prev: FormState, form: FormData): Promise<FormState> {
   const customer = await requireCustomer();
-  const plan = findPlan(site.plans, String(form.get("plan") ?? ""));
+  const plan = findPlan(forSale(site.plans), String(form.get("plan") ?? ""));
   if (!plan) return { error: "这个套餐已经下架了，请刷新页面再选" };
   const balanceRow = await db().prepare(BALANCE_SQL).bind(customer.id).first<{ balance: number }>();
   const balance = form.get("useBalance") === "1" ? Math.max(0, balanceRow?.balance ?? 0) : 0;
@@ -419,7 +432,7 @@ export async function resetPassword(_: FormState, form: FormData): Promise<FormS
 // Marzban 确认没改就退回余额；可能改了就不退，单停在「开通中」，管理员用 npm run orders -- confirm 核对
 export async function buyWithBalance(_: FormState, form: FormData): Promise<FormState> {
   const customer = await requireCustomer();
-  const plan = findPlan(site.plans, String(form.get("plan") ?? ""));
+  const plan = findPlan(forSale(site.plans), String(form.get("plan") ?? ""));
   if (!plan) return { error: "这个套餐已经下架了，请刷新页面再选" };
   const target = String(form.get("target") ?? "new");
   const { results } = await db()

@@ -9,6 +9,11 @@ export function findPlan(plans: Plan[], id: string): Plan | undefined {
   return plans.find((p) => p.id === id);
 }
 
+// 客人能自己买的套餐：去掉只能用兑换码开的（免费体验之类）
+export function forSale(plans: Plan[]): Plan[] {
+  return plans.filter((p) => !p.codeOnly);
+}
+
 // 一句话说清流量，套餐页和订阅卡片共用
 export function describePlan(p: Plan): string {
   return p.dataGB === null ? "不限流量" : `${p.dataGB} GB${p.dataReset === "month" ? "/月" : ""}`;

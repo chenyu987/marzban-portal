@@ -4,6 +4,7 @@
 // 每次用新邮箱注册，不依赖之前的数据；管理员那一步直接调命令行脚本（本地库 + 假 Marzban）
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
+import { site } from "../site.config";
 
 const run = (args: string[], input = "") =>
   execFileSync("npm", ["run", "-s", ...args], { input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
@@ -99,6 +100,27 @@ test("首页不公开介绍：只有登录和注册，注册按钮带上推荐�
   expect(manifest.start_url).toBe("/dashboard");
   expect(manifest.icons.length).toBeGreaterThan(0);
   expect((await page.request.get(manifest.icons[0].src)).ok()).toBe(true);
+});
+
+test("没登录能打开的页面，浏览器拿到的 JS 里没有站点配置（管理员邮箱、收款码、套餐、客户端名字）", async ({ request }) => {
+  const secrets = [...(site.admin?.emails ?? []), ...site.payments.map((p) => p.qr), ...site.plans.map((p) => p.name), "Shadowrocket", "openai.com"];
+  for (const path of ["/", "/login", "/register", "/forgot"]) {
+    const html = await (await request.get(path)).text();
+    const scripts = [...new Set(html.match(/\/_next\/static\/[^"\\]+\.js/g) ?? [])];
+    expect(scripts.length).toBeGreaterThan(0);
+    const bodies = [html, ...(await Promise.all(scripts.map(async (src) => (await request.get(src)).text())))];
+    for (const secret of secrets) {
+      expect(bodies.some((b) => b.includes(secret)), `${path} 里出现了 ${secret}`).toBe(false);
+    }
+  }
+});
+
+test("后台域名的根目录直接进后台（带 Cloudflare Access 的头），客人域名不受影响", async ({ request }) => {
+  const admin = await request.get("/", { headers: { "cf-access-jwt-assertion": "x" }, maxRedirects: 0 });
+  expect(admin.status()).toBe(307);
+  expect(admin.headers().location).toMatch(/\/admin$/);
+  const guest = await request.get("/", { maxRedirects: 0 });
+  expect(guest.status()).toBe(200);
 });
 
 test("不让搜索引擎收录：页面带 noindex，robots.txt 禁止抓取", async ({ page, request }) => {
@@ -359,6 +381,28 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   await page.getByRole("button", { name: "兑换" }).click();
   await expect(page.getByText("续期成功")).toBeVisible();
   await expect(page.getByText(/刷新（更新）一下订阅/)).toBeVisible();
+
+  // 免费体验：价目表上没有，只能用兑换码开；开出来的订阅标「（体验）」
+  await expect(page.locator('button[value="p3-trial"]')).toHaveCount(0);
+  const trial = run(["codes:create", "--", "p3-trial"]).match(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}/)![0];
+  await page.getByPlaceholder("XXXX-XXXX-XXXX-XXXX").fill(trial);
+  await page.locator('form:has(input[name="code"]) select[name="target"]').selectOption("new");
+  await page.getByRole("button", { name: "兑换" }).click();
+  await expect(page.getByText(/开通成功：高速版 7天体验/)).toBeVisible();
+  await page.goto("/dashboard");
+  await expect(page.getByRole("heading", { name: "高速版（体验）" })).toBeVisible();
+  // 在体验上续费普通版：套餐换成普通版，标题不再是体验
+  // 免费体验不记订单（不算收入），只记这个订阅的套餐
+  const trialUser = query(`SELECT marzban_username FROM subscription_plans WHERE plan_id = 'p3-trial' ORDER BY updated_at DESC LIMIT 1`)[0].marzban_username;
+  expect(query(`SELECT COUNT(*) AS n FROM orders WHERE plan_id = 'p3-trial'`)[0].n).toBe(0);
+  await page.goto("/plans");
+  const upgrade = run(["codes:create", "--", "p1-month"]).match(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}/)![0];
+  await page.getByPlaceholder("XXXX-XXXX-XXXX-XXXX").fill(upgrade);
+  await page.locator('form:has(input[name="code"]) select[name="target"]').selectOption(String(trialUser));
+  await page.getByRole("button", { name: "兑换" }).click();
+  await expect(page.getByText("续期成功")).toBeVisible();
+  await page.goto("/dashboard");
+  await expect(page.getByRole("heading", { name: "高速版（体验）" })).toHaveCount(0);
 });
 
 test("管理后台：登录、确认和取消订单、客人管理、兑换码、日志", async ({ page, browser }) => {

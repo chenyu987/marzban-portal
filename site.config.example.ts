@@ -12,6 +12,8 @@ export type Plan = {
   // 流量多久清零一次：不写就是整个有效期一共 dataGB；month 表示每月 dataGB（Marzban 每 30 天自动清零）
   dataReset?: "month";
   ip: number; // 同时在用的 IP 数，写进 Marzban 备注 ip=N；0 表示不限
+  // true：只能用兑换码开（比如免费体验），不在价目表和首页价格卡上，客人不能自己下单
+  codeOnly?: boolean;
 };
 
 export type SiteConfig = {
