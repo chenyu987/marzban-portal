@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   description: site.landing?.sub ?? site.description,
   icons: site.logo ? { icon: site.logo.svg, apple: site.logo.appleTouch } : undefined,
   appleWebApp: { title: site.brand, capable: true, statusBarStyle: "default" },
+  robots: site.noindex ? { index: false, follow: false } : undefined,
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: site.themeColor };
 

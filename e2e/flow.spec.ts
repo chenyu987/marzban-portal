@@ -98,6 +98,16 @@ test("首页：卖点、价格、常见问题，注册按钮带上推荐码", as
   expect((await page.request.get(manifest.icons[0].src)).ok()).toBe(true);
 });
 
+test("不让搜索引擎收录：页面带 noindex，robots.txt 禁止抓取", async ({ page, request }) => {
+  await page.goto("/");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+  const robots = await (await request.get("/robots.txt")).text();
+  expect(robots).toMatch(/Disallow: \/\s*$/m);
+  // 首页口径低调：不提视频网站
+  await expect(page.locator("body")).not.toContainText("YouTube");
+  await expect(page.locator("body")).not.toContainText("Netflix");
+});
+
 test("安装教程：没有美区 Apple ID 的可以直接复制客服联系方式", async ({ page }) => {
   await page.goto("/tutorial");
   await page.getByRole("tab", { name: "iPhone" }).check();
@@ -184,7 +194,7 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await page.getByRole("link", { name: "续费", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/plans\\?renew=${username}`));
   await expect(page.locator(`input[name="target"][value="${username}"]`)).toBeChecked();
-  // 续期付款：开通后回到订阅页，提醒客人在 VPN 软件里刷新订阅
+  // 续期付款：开通后回到订阅页，提醒客人在客户端里刷新订阅
   await page.locator('button[value="p1-month"]').click();
   const renewCard = page.locator(".card.border").first();
   await renewCard.getByLabel("支付宝", { exact: true }).check();
