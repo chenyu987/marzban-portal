@@ -1,11 +1,10 @@
 import { requireCustomer } from "@/lib/session";
-import { CLIENTS } from "@/lib/account";
 import { EmailForm, PasswordForm, PrefsForm, WechatForm } from "./AccountForms";
 import CustomerNav from "../CustomerNav";
 
 export const dynamic = "force-dynamic";
 
-// 客人自己的账户：改微信号、登录邮箱、密码，常用客户端和到期提醒
+// 客人自己的账户：改微信号、登录邮箱、密码，到期提醒
 export default async function AccountPage() {
   const customer = await requireCustomer();
   return (
@@ -25,8 +24,8 @@ export default async function AccountPage() {
         <Section title="密码" desc="改完以后，别的设备上的登录会自动退出，这台不用重新登录。">
           <PasswordForm />
         </Section>
-        <Section title="偏好">
-          <PrefsForm client={customer.pref_client ?? ""} notify={!!customer.notify_expiry} clients={CLIENTS} />
+        <Section title="到期提醒">
+          <PrefsForm notify={!!customer.notify_expiry} />
         </Section>
         <p className="text-sm text-base-content/50">要注销账号请联系客服：账号连着余额和订阅，注销前客服会和你确认怎么处理。</p>
       </div>

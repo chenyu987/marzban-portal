@@ -2,22 +2,24 @@
 import { site } from "@/site.config";
 
 export const BRAND = site.brand;
+// 一键导入后客户端里订阅的名字
+export const IMPORT_NAME = site.importName ?? site.brand;
 // 客服联系方式，「复制客服微信」「复制客服邮箱」按钮用
 export const SUPPORT = { wechat: site.supportWechat, email: site.contactEmail };
 
 // Shadowrocket：shadowrocket://add/sub://<订阅链接的 base64>?remark=<名字>
 export function shadowrocketImport(url: string): string {
-  return `shadowrocket://add/sub://${btoa(url)}?remark=${encodeURIComponent(BRAND)}`;
+  return `shadowrocket://add/sub://${btoa(url)}?remark=${encodeURIComponent(IMPORT_NAME)}`;
 }
 
 // Clash Verge Rev 注册了 clash:// 协议
 export function clashVergeImport(url: string): string {
-  return `clash://install-config?url=${encodeURIComponent(url)}&name=${encodeURIComponent(BRAND)}`;
+  return `clash://install-config?url=${encodeURIComponent(url)}&name=${encodeURIComponent(IMPORT_NAME)}`;
 }
 
 // Hiddify：hiddify://import/<订阅链接>#<名字>
 export function hiddifyImport(url: string): string {
-  return `hiddify://import/${url}#${encodeURIComponent(BRAND)}`;
+  return `hiddify://import/${url}#${encodeURIComponent(IMPORT_NAME)}`;
 }
 
 // Clash Verge「扩展覆写配置」里填的分流规则：OpenAI、Claude 和国外流量走自动选节点，局域网和国内直连。

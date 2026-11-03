@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emailError, orderClients, passwordError, wechatError } from "./account";
+import { emailError, passwordError, wechatError } from "./account";
 
 describe("账号校验", () => {
   it("邮箱", () => {
@@ -17,14 +17,5 @@ describe("账号校验", () => {
   it("密码至少 8 位", () => {
     expect(passwordError("1234567")).not.toBeNull();
     expect(passwordError("12345678")).toBeNull();
-  });
-});
-
-describe("常用客户端排最前", () => {
-  const list = [{ id: "shadowrocket" as const }, { id: "clash" as const }, { id: "hiddify" as const }];
-  it("选了的排最前，其余顺序不变；没选或乱填按原顺序", () => {
-    expect(orderClients(list, "hiddify").map((c) => c.id)).toEqual(["hiddify", "shadowrocket", "clash"]);
-    expect(orderClients(list, null).map((c) => c.id)).toEqual(["shadowrocket", "clash", "hiddify"]);
-    expect(orderClients(list, "evil").map((c) => c.id)).toEqual(["shadowrocket", "clash", "hiddify"]);
   });
 });

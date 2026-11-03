@@ -102,12 +102,13 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await expect(page.getByRole("button", { name: /复制客服邮箱/ })).toBeVisible();
   // 新客人：三步上手的引导，第一步能直接去选套餐
   await expect(page.getByTestId("onboarding")).toContainText("选套餐付款");
-  // 套餐页：卡片默认月付；切到年付能看到折合每月多少、比按月买省多少；原版价目表收在「看完整价目表」里
+  // 还没订阅：打个招呼
+  await expect(page.getByText(/^你好，/)).toBeVisible();
+  // 套餐页：直接在价目表里选，每个价格格子都能点；鼠标移上去浮出「下单」
   await page.goto("/plans");
-  await page.getByRole("tab", { name: /^年付/ }).click();
-  await expect(page.getByTestId("plan-cards")).toContainText("比按月买省");
-  await expect(page.getByTestId("plan-cards")).toContainText("折合");
-  await page.getByRole("tab", { name: /^月付/ }).click();
+  await expect(page.getByTestId("plan-table").locator('button[name="plan"]').first()).toBeVisible();
+  await page.locator('button[value="p1-year"]').hover();
+  await expect(page.locator('button[value="p1-year"]')).toContainText("下单");
   await page.goto("/dashboard");
 
   // 还没订阅：绑定框整张卡片显示
@@ -130,6 +131,8 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   const title = page.getByTestId("sub-id").first();
   await expect(title).toHaveText(/^[0-9A-F]{4}-[0-9A-F]{4}$/);
   const username = usernameOf(await title.innerText());
+  // 有订阅了就不再打招呼
+  await expect(page.getByText(/^你好，/)).toHaveCount(0);
   // Marzban 用户名用注册时填的微信号；每次 e2e 都用同一个微信号，Marzban 里已经有了就往后加序号
   expect(username).toMatch(/^e2e_wx_test(_\d+)?$/);
 
@@ -150,7 +153,7 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await expect(page.getByText("记得续费")).toBeVisible();
   await page.getByRole("link", { name: "续费", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/plans\\?renew=${username}`));
-  await expect(page.locator('select[name="target"]').first()).toHaveValue(username);
+  await expect(page.locator(`input[name="target"][value="${username}"]`)).toBeChecked();
 
   // 忘记密码页面能提交（本地只打印邮件）
   await logout(page);
@@ -179,7 +182,7 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await page.getByRole("button", { name: "登录" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
 
-  // 账户页：客人自己改微信号、偏好、邮箱、密码
+  // 账户页：客人自己改微信号、到期提醒、邮箱、密码
   // 先在另一个浏览器里也登录一次，后面验证改密码会把它踢掉
   const other = await page.context().browser()!.newContext();
   const otherPage = await other.newPage();
@@ -199,12 +202,11 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await expect(page.getByText("微信号已更新")).toBeVisible();
   expect(query(`SELECT wechat FROM customers WHERE email = '${email}'`)[0].wechat).toBe("e2e_wx_new");
 
-  // 常用客户端选 Hiddify：订阅页上 Hiddify 的导入按钮排到导入按钮的最前面
-  await page.getByLabel("常用客户端").selectOption("hiddify");
-  await page.getByRole("button", { name: "保存偏好" }).click();
+  // 到期提醒：关掉后存进库里
+  await page.getByLabel("订阅快到期时发邮件提醒我").uncheck();
+  await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByText("已保存")).toBeVisible();
-  await page.goto("/dashboard");
-  await expect(page.getByRole("link", { name: /^导入 / }).first()).toHaveText("导入 Hiddify");
+  expect(query(`SELECT notify_expiry FROM customers WHERE email = '${email}'`)[0].notify_expiry).toBe(0);
 
   // 改邮箱：密码错了不让改；别人用过的邮箱不让改；对了就改，之后用新邮箱登录
   const newEmail = email.replace("e2e-", "e2e-new-");
@@ -319,13 +321,10 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await page.locator('button[value="p1-month"]').click();
   const first = await claim("支付宝", "付款人甲");
   await page.goto("/plans");
-  // 卡片按周期显示：先切到季付
-  await page.getByRole("tab", { name: /^季付/ }).click();
   await page.locator('button[value="p1-quarter"]').click();
   await expect(page.locator(".card.border")).toHaveCount(1);
   const second = (await page.locator(".card.border .card-title").first().innerText()).match(/\d{6}-\d{5}/)![0];
-  await page.locator('form:has(button[name="plan"]) select[name="target"]').selectOption("new");
-  await page.getByRole("tab", { name: /^月付/ }).click();
+  await page.getByRole("radio", { name: /新开一个订阅/ }).check();
   await page.locator('button[value="p1-month"]').click();
   await expect(page.locator(".card.border")).toHaveCount(2);
   const third = await claim("微信", "付款人乙");

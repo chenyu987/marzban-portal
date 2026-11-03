@@ -20,7 +20,7 @@ const per = (label: string) => (label.endsWith("付") ? `/${label.slice(0, -1)}`
 // 价目表照 Canva 上的原版：一行一档，名字、说明、四个价格各占一格，格子之间有线。
 // 手机上放不下六列，名字和说明占一行，四个价格排在下一行
 
-// 套餐价目表。能买时每个价格都是一个按钮，点了先确认再下单。
+// 套餐价目表。能买时每个价格格子都是一个按钮：鼠标移上去变色、浮出「下单」，点了先确认再下单。
 // 有余额时默认勾选「用余额抵扣」：余额够付全款就马上开通；不够就抵扣一部分，剩下的转账。
 // 没配收款码时只能靠余额付全款；既没收款码也没余额时只是价目表
 export default function OrderForm({
@@ -43,22 +43,6 @@ export default function OrderForm({
   const deduct = useBalance ? balance : 0;
   const canOrder = canTransfer || balance > 0;
   const money = (fen: number) => `${currency}${(fen / 100).toFixed(2).replace(/\.00$/, "")}`;
-  // 周期按第一档的顺序（月付、季付、半年付、年付）；默认月付
-  const periods = groups[0]?.plans.map((p) => p.label) ?? [];
-  const [period, setPeriod] = useState(0);
-  // 每个周期最多能省百分之几（按各档比按月买省得最多的算），写在周期按钮上
-  const bestSave = periods.map((_, i) =>
-    Math.max(
-      0,
-      ...groups.map((g) => {
-        const p = g.plans[i];
-        const m = g.plans[0];
-        if (!p || !m) return 0;
-        const months = Math.max(1, Math.round(p.days / 30));
-        return 1 - p.fen / (m.fen * months);
-      }),
-    ),
-  );
 
   return (
     <form
@@ -92,7 +76,30 @@ export default function OrderForm({
           <span>用余额抵扣（剩 {money(balance)}）</span>
         </label>
       )}
-      {canOrder && subscriptions.length > 0 && (
+      {/* 续期还是新开：只有一个订阅时两个选项左右并排，一眼看到；订阅多了再收进下拉框 */}
+      {canOrder && subscriptions.length === 1 && (
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-2 text-sm text-base-content/70">买给哪个订阅</legend>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { value: subscriptions[0].username, title: `给订阅 ${subscriptions[0].label} 续期`, desc: "时长接着加，链接不变" },
+              { value: "new", title: "新开一个订阅", desc: "多一条订阅链接，给家人或别的设备用" },
+            ].map((o) => (
+              <label
+                key={o.value}
+                className="flex cursor-pointer items-start gap-3 rounded-box border border-base-300 bg-base-100 p-3 transition hover:border-primary/60 has-checked:border-primary has-checked:bg-primary/5 has-checked:ring-1 has-checked:ring-primary"
+              >
+                <input type="radio" name="target" value={o.value} defaultChecked={o.value === (defaultTarget ?? subscriptions[0].username)} className="radio radio-primary radio-sm mt-0.5" />
+                <span className="flex flex-col">
+                  <span className="font-semibold">{o.title}</span>
+                  <span className="text-xs text-base-content/60">{o.desc}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
+      {canOrder && subscriptions.length > 1 && (
         <label className="flex flex-col gap-1">
           <span className="text-sm text-base-content/70">买给哪个订阅</span>
           <select name="target" className="select w-full" defaultValue={defaultTarget ?? subscriptions[0].username}>
@@ -109,66 +116,8 @@ export default function OrderForm({
       {state?.error?.includes("联系客服") && <ContactSupport />}
       {state?.ok && <div role="alert" className="alert alert-success alert-soft">{state.ok}</div>}
 
-      {/* 周期切换：同一档的月付、季付……按周期看，旁边写比按月买省多少 */}
-      <div role="tablist" className="tabs tabs-box self-center">
-        {periods.map((label, i) => (
-          <button key={label} type="button" role="tab" className={`tab ${i === period ? "tab-active" : ""}`} onClick={() => setPeriod(i)}>
-            {label}
-            {bestSave[i] > 0 && <span className="ml-1 text-xs text-success">省{Math.round(bestSave[i] * 100)}%</span>}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="plan-cards">
-        {groups.map((g) => {
-          const p = g.plans[period] ?? g.plans[0];
-          const month = g.plans[0];
-          const months = Math.max(1, Math.round(p.days / 30));
-          const save = month.fen * months - p.fen;
-          const hot = g.highlight === "hot";
-          const top = g.highlight === "top";
-          return (
-            <div
-              key={g.name}
-              className={`relative flex flex-col rounded-box bg-base-100 p-5 shadow-sm ${hot ? "ring-2 ring-primary" : "border border-base-300/70"}`}
-            >
-              {(hot || top) && <span className={`badge absolute -top-3 left-5 ${hot ? "badge-primary" : "badge-accent"}`}>{hot ? "最受欢迎" : "旗舰"}</span>}
-              <h3 className="text-lg font-bold">{g.name}</h3>
-              <p className="text-sm text-base-content/60">{g.lines.at(-1)}</p>
-              <div className="mt-3 flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold">{money(p.fen)}</span>
-                <span className="text-base-content/60">{per(p.label)}</span>
-              </div>
-              <div className="min-h-5 text-sm">
-                {months > 1 && <span className="text-base-content/60">折合 {money(Math.round(p.fen / months))}/月</span>}
-                {save > 0 && <span className="ml-2 text-success">比按月买省 {money(save)}</span>}
-              </div>
-              {p.tag && <span className="mt-1 text-xs text-error">{p.tag}</span>}
-              <div className="flex-1" />
-              {canOrder ? (
-                <button
-                  name="plan"
-                  value={p.id}
-                  data-name={p.name}
-                  data-price={p.price}
-                  data-fen={p.fen}
-                  disabled={pending || (!canTransfer && deduct < p.fen)}
-                  className={`btn mt-4 ${hot ? "btn-primary" : "btn-outline"}`}
-                >
-                  {pending && <span className="loading loading-spinner loading-xs" />}
-                  {deduct >= p.fen ? "用余额买，马上开通" : "下单"}
-                </button>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* 原版价目表（照 Canva 上的排法）：只看，下单在上面的卡片上点 */}
-      <details className="text-sm">
-        <summary className="cursor-pointer text-base-content/60">看完整价目表</summary>
-        <div className="mt-2">
-      <div className="grid grid-cols-4 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 sm:grid-cols-[6rem_1.7fr_repeat(4,1fr)]">
+      {canOrder && <p className="text-center text-sm text-base-content/60 sm:hidden">点价格就能下单</p>}
+      <div data-testid="plan-table" className="grid grid-cols-4 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 sm:grid-cols-[6rem_1.7fr_repeat(4,1fr)]">
         {groups.map((g) => {
           const hot = g.highlight === "hot";
           const top = g.highlight === "top";
@@ -199,18 +148,37 @@ export default function OrderForm({
                   </>
                 );
                 const cell = "flex min-h-14 flex-col items-center justify-center bg-base-100 px-1 py-2 text-center";
+                if (!canOrder)
+                  return (
+                    <div key={p.id} className={cell}>
+                      {inner}
+                    </div>
+                  );
                 return (
-                  <div key={p.id} className={cell}>
-                    {inner}
-                  </div>
+                  <button
+                    key={p.id}
+                    name="plan"
+                    value={p.id}
+                    data-name={p.name}
+                    data-price={p.price}
+                    data-fen={p.fen}
+                    disabled={pending || (!canTransfer && deduct < p.fen)}
+                    title={`${p.name} ${p.price}，点击下单`}
+                    className={`group ${cell} cursor-pointer transition-colors duration-200 hover:bg-primary hover:text-primary-content focus-visible:bg-primary focus-visible:text-primary-content focus-visible:outline-none active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-base-100 disabled:hover:text-inherit`}
+                  >
+                    <span className="flex flex-col items-center transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-110 group-focus-visible:scale-110 group-disabled:transform-none group-hover:[&_*]:text-inherit group-focus-visible:[&_*]:text-inherit">
+                      {inner}
+                    </span>
+                    <span className="max-h-0 overflow-hidden text-xs font-semibold opacity-0 transition-all duration-200 group-hover:mt-0.5 group-hover:max-h-4 group-hover:opacity-100 group-focus-visible:max-h-4 group-focus-visible:opacity-100 group-disabled:hidden">
+                      {deduct >= p.fen ? "余额付 →" : "下单 →"}
+                    </span>
+                  </button>
                 );
               })}
             </Fragment>
           );
         })}
       </div>
-        </div>
-      </details>
     </form>
   );
 }

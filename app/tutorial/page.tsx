@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
-import { BRAND, DOWNLOADS, detectPlatform, type Platform } from "@/lib/clients";
+import { DOWNLOADS, IMPORT_NAME, detectPlatform, type Platform } from "@/lib/clients";
 import { site } from "@/site.config";
 import CopyRules from "./CopyRules";
 import Brand from "../Brand";
@@ -66,7 +66,7 @@ const TABS: { id: Platform; label: string; content: React.ReactNode }[] = [
                 <Shot name="ios-scan" alt="Shadowrocket 首页左上角的扫码按钮" />
               </li>
               <li>
-                手动添加：点首页右上角「+」→「类型」选 <b>Subscribe</b> →「URL」粘贴订阅链接 →「备注」填 {BRAND} →
+                手动添加：点首页右上角「+」→「类型」选 <b>Subscribe</b> →「URL」粘贴订阅链接 →「备注」填 {IMPORT_NAME} →
                 点右上角「完成」。
               </li>
             </ul>

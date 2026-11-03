@@ -20,7 +20,7 @@ import { hashResetToken, newResetToken, RESET_MAX_PER_HOUR, RESET_TTL_SELF, rese
 // email：出错时带回去当输入框的默认值。React 19 提交后会重置表单，不带回去邮箱就被清空了
 export type FormState = { error?: string; ok?: string; email?: string; ref?: string; wechat?: string } | undefined;
 
-import { emailError, isClient, passwordError, wechatError } from "@/lib/account";
+import { emailError, passwordError, wechatError } from "@/lib/account";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function register(_: FormState, form: FormData): Promise<FormState> {
@@ -556,16 +556,11 @@ export async function updatePassword(_: FormState, form: FormData): Promise<Form
   return { ok: out > 0 ? "密码已修改，其他地方的登录都已退出" : "密码已修改" };
 }
 
-// 偏好：常用客户端、到期提醒
+// 到期提醒邮件要不要发
 export async function updatePrefs(_: FormState, form: FormData): Promise<FormState> {
   const customer = await requireCustomer();
-  const client = String(form.get("client") ?? "");
   const notify = form.get("notify") ? 1 : 0;
-  await db()
-    .prepare("UPDATE customers SET pref_client = ?, notify_expiry = ? WHERE id = ?")
-    .bind(isClient(client) ? client : null, notify, customer.id)
-    .run();
+  await db().prepare("UPDATE customers SET notify_expiry = ? WHERE id = ?").bind(notify, customer.id).run();
   revalidatePath("/account");
-  revalidatePath("/dashboard");
   return { ok: "已保存" };
 }

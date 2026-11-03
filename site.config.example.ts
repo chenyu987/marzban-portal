@@ -15,8 +15,10 @@ export type Plan = {
 };
 
 export type SiteConfig = {
-  // 显示在页面左上角、浏览器标签页、客户端里订阅名字的品牌名
+  // 显示在页面左上角、浏览器标签页的品牌名
   brand: string;
+  // 一键导入后客户端里这条订阅叫什么（比如写网址，客人一看就知道去哪续费）。不填用 brand
+  importName?: string;
   // portal 的网址，重置密码的链接用它来拼（不用请求里的 Host，防止被伪造）。换域名时记得改
   siteUrl: string;
   description: string;

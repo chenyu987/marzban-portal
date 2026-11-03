@@ -61,8 +61,9 @@ export default async function DashboardPage() {
     <div className="mx-auto max-w-2xl px-4 pb-16">
       <CustomerNav />
 
+      {/* 还没订阅的新客人打个招呼；有订阅了就直接看订阅 */}
       <div className="mt-4 mb-4">
-        <p className="text-sm text-base-content/60">你好，{customer.wechat ?? customer.email.split("@")[0]}</p>
+        {subs.length === 0 && <p className="text-sm text-base-content/60">你好，{customer.wechat ?? customer.email.split("@")[0]}</p>}
         <h1 className="text-2xl font-bold">我的订阅</h1>
       </div>
 
@@ -95,7 +96,7 @@ export default async function DashboardPage() {
         )}
         {subs.map(({ username, code, user }) =>
           user ? (
-            <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} preferred={customer.pref_client} />
+            <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} />
           ) : (
             <UnavailableCard key={username} code={code} />
           ),
@@ -139,7 +140,7 @@ function SubscriptionId({ code }: { code: string | null }) {
   );
 }
 
-function SubscriptionCard({ user, code, planId, preferred }: { user: MarzbanUser; code: string | null; planId?: string; preferred: string | null }) {
+function SubscriptionCard({ user, code, planId }: { user: MarzbanUser; code: string | null; planId?: string }) {
   const { title, subtitle } = planHeading(planId);
   const status = STATUS_LABEL[user.status] ?? { text: user.status, badge: "badge-neutral" };
   const left = timeLeft(user.expire);
@@ -204,7 +205,7 @@ function SubscriptionCard({ user, code, planId, preferred }: { user: MarzbanUser
           )
         )}
 
-        <SubscriptionLink username={user.username} url={user.subscription_url} preferred={preferred} />
+        <SubscriptionLink username={user.username} url={user.subscription_url} />
         <SubscriptionId code={code} />
       </div>
     </div>

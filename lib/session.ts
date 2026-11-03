@@ -5,7 +5,7 @@ import { db, nowSec } from "./env";
 const COOKIE = "sid";
 const TTL = 30 * 86400;
 
-export type Customer = { id: number; email: string; referral_code: string; wechat: string | null; pref_client: string | null; notify_expiry: number };
+export type Customer = { id: number; email: string; referral_code: string; wechat: string | null; notify_expiry: number };
 
 async function sha256(s: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
@@ -33,7 +33,7 @@ export async function currentCustomer(): Promise<Customer | null> {
   if (!token) return null;
   return db()
     .prepare(
-      `SELECT c.id, c.email, c.referral_code, c.wechat, c.pref_client, c.notify_expiry FROM sessions s JOIN customers c ON c.id = s.customer_id
+      `SELECT c.id, c.email, c.referral_code, c.wechat, c.notify_expiry FROM sessions s JOIN customers c ON c.id = s.customer_id
        WHERE s.id = ? AND s.expires_at > ?`,
     )
     .bind(await sha256(token), nowSec())

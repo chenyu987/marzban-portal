@@ -54,26 +54,15 @@ export function PasswordForm() {
   );
 }
 
-export function PrefsForm({ client, notify, clients }: { client: string; notify: boolean; clients: Record<string, string> }) {
+export function PrefsForm({ notify }: { notify: boolean }) {
   const [state, action, pending] = useActionState(updatePrefs, undefined);
   return (
     <form action={action} className="flex flex-col gap-3">
-      <label className="flex flex-col gap-1">
-        <span className="text-sm text-base-content/70">常用客户端（订阅页上它的「导入」按钮排最前）</span>
-        <select name="client" defaultValue={client} aria-label="常用客户端" className="select select-sm w-full sm:w-64">
-          <option value="">不指定</option>
-          {Object.entries(clients).map(([id, name]) => (
-            <option key={id} value={id}>
-              {name}
-            </option>
-          ))}
-        </select>
-      </label>
       <label className="label cursor-pointer justify-start gap-2">
         <input name="notify" type="checkbox" defaultChecked={notify} className="toggle toggle-sm toggle-primary" />
         <span className="text-sm">订阅快到期时发邮件提醒我</span>
       </label>
-      <Submit pending={pending} label="保存偏好" />
+      <Submit pending={pending} label="保存" />
       <Result state={state} />
     </form>
   );

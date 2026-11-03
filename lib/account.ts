@@ -4,10 +4,6 @@ export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const WECHAT_RE = /^[A-Za-z0-9_-]{5,30}$/;
 export const PASSWORD_MIN = 8;
 
-// 常用客户端：订阅页上它的导入按钮排最前
-export const CLIENTS = { shadowrocket: "Shadowrocket", clash: "Clash Verge", hiddify: "Hiddify" } as const;
-export type ClientId = keyof typeof CLIENTS;
-
 export function emailError(email: string): string | null {
   return EMAIL_RE.test(email) ? null : "邮箱格式不对";
 }
@@ -20,14 +16,4 @@ export function wechatError(wechat: string): string | null {
 
 export function passwordError(password: string): string | null {
   return password.length < PASSWORD_MIN ? `密码至少 ${PASSWORD_MIN} 位` : null;
-}
-
-export function isClient(v: string): v is ClientId {
-  return v in CLIENTS;
-}
-
-// 按常用客户端把导入按钮排一下：选了的排最前，其余保持原来的顺序
-export function orderClients<T extends { id: ClientId }>(list: T[], preferred: string | null | undefined): T[] {
-  if (!preferred || !isClient(preferred)) return list;
-  return [...list.filter((c) => c.id === preferred), ...list.filter((c) => c.id !== preferred)];
 }

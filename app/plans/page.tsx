@@ -109,7 +109,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
         <p className="text-base-content/70">套餐还在准备中。</p>
       ) : (
         <>
-          {canTransfer && <p className="mb-3 text-sm text-base-content/70">选好套餐点「下单」，按提示扫码付款，付完点「我已付款」马上开通。有余额时可以直接抵扣。</p>}
+          {canTransfer && <p className="mb-3 text-sm text-base-content/70">在价目表里点想买的价格，按提示扫码付款，付完点「我已付款」马上开通。有余额时可以直接抵扣。</p>}
           {renewSub && <p className="mb-3 font-medium">给订阅 {renewSub.label} 续期：选一个套餐，续上的天数从原来的到期时间往后加。</p>}
           <OrderForm
             groups={groups}
