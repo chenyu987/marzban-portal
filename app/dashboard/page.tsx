@@ -69,7 +69,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
       {/* 还没订阅的新客人打个招呼；有订阅了就直接看订阅 */}
       <div className="mt-4 mb-4">
-        {subs.length === 0 && <p className="text-sm text-base-content/60">{t("你好，", "Hi, ")}{customer.wechat ?? customer.email.split("@")[0]}</p>}
+        {subs.length === 0 && <p className="mb-2 text-sm text-base-content/60">{t("你好，", "Hi, ")}{customer.wechat ?? customer.email.split("@")[0]}</p>}
         <h1 className="text-2xl font-bold">{t("我的订阅", "My subscription")}</h1>
       </div>
 
