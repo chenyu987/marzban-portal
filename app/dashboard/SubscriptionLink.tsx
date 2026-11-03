@@ -64,12 +64,6 @@ export default function SubscriptionLink({ username, url }: { username: string; 
         </Link>
         {t("，每一步都有截图。", " — every step has a screenshot.")}
       </p>
-      <p className="text-xs text-base-content/60">
-        {t(
-          "Clash 配置文件已经带好分流规则，适合 FlClash、ClashX 这类要手动导入文件的客户端。文件不会自动更新，节点有变化要重新下载；能一键导入的客户端优先用导入。",
-          "The Clash config file already includes routing rules, for Clash apps that import a file (FlClash, ClashX). It won't update itself, so download it again when servers change; if your app supports one-tap import, use that instead.",
-        )}
-      </p>
 
       {shown && (
         <div className="flex flex-col items-center gap-2 rounded-box bg-base-200 p-4">
