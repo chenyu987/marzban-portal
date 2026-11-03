@@ -156,6 +156,21 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, toSubInfo(users.get(username)));
   }
 
+  // Clash 配置：照 Marzban 0.8.4 默认模板（app/templates/clash/default.yml）的样子，全局模式、只有一个自动选择组
+  if ((m = /^\/sub\/([^/]+)\/clash-meta$/.exec(path)) && req.method === "GET") {
+    const username = subTokens.get(m[1]);
+    if (!username) return log(404), send(res, 404, { detail: "Not Found" });
+    const u = users.get(username);
+    const names = INBOUNDS.vless.map((tag) => `${tag} ${username}`);
+    const proxies = names
+      .map((n) => `- name: ${n}\n  type: vless\n  server: 127.0.0.1\n  port: 443\n  uuid: ${u.proxies.vless.id}\n  network: tcp\n  tls: true\n  flow: xtls-rprx-vision`)
+      .join("\n");
+    const yaml = `mode: Global\nport: 7890\nproxies:\n${proxies}\nrules: []\n\nproxy-groups:\n- name: ♻️ Automatic\n  type: url-test\n  url: http://www.gstatic.com/generate_204\n  interval: 300\n  proxies:\n${names.map((n) => `  - ${n}`).join("\n")}\n`;
+    log(200);
+    res.writeHead(200, { "content-type": "text/yaml; charset=utf-8", "content-disposition": `attachment; filename="${username}"` });
+    return res.end(yaml);
+  }
+
   if (path.startsWith("/api/")) {
     if (!isAdmin(req)) return log(401), send(res, 401, { detail: "Not authenticated" });
 

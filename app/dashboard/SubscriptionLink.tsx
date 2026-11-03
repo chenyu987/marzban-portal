@@ -35,20 +35,32 @@ export default function SubscriptionLink({ username, url }: { username: string; 
 
   return (
     <div className="flex flex-col gap-3">
+      {/* 第一行：哪个客户端都能用的（复制链接是主按钮）；第二行：各客户端的一键导入 */}
       <div className="flex flex-wrap gap-2">
-        {/* 复制链接和二维码哪个客户端都能用，放最前面；复制链接是主按钮 */}
         <button type="button" onClick={copy} className="btn btn-sm btn-primary">
           {copied ? t("已复制 ✓", "Copied ✓") : t("复制订阅链接", "Copy subscription link")}
         </button>
         <button type="button" onClick={() => setShown(!shown)} className="btn btn-sm">
           {shown ? t("收起二维码", "Hide QR code") : t("显示二维码", "Show QR code")}
         </button>
+        {/* 给要手动导入文件的 Clash 客户端用，已经带好分流规则 */}
+        <a href={`/dashboard/clash/${encodeURIComponent(username)}`} download className="btn btn-sm">
+          {t("下载 Clash 配置文件", "Download Clash config")}
+        </a>
+      </div>
+      <div className="flex flex-wrap gap-2">
         {IMPORTS.map((c) => (
           <a key={c.id} href={c.href(url, importName)} className="btn btn-sm">
             {t(`导入 ${c.app}`, `Import to ${c.app}`)}
           </a>
         ))}
       </div>
+      <p className="text-xs text-base-content/60">
+        {t(
+          "Clash 配置文件已经带好分流规则，适合 FlClash、ClashX 这类要手动导入文件的客户端。文件不会自动更新，节点有变化要重新下载；能一键导入的客户端优先用导入。",
+          "The Clash config file already includes routing rules, for Clash apps that import a file (FlClash, ClashX). It won't update itself, so download it again when servers change; if your app supports one-tap import, use that instead.",
+        )}
+      </p>
 
       {shown && (
         <div className="flex flex-col items-center gap-2 rounded-box bg-base-200 p-4">

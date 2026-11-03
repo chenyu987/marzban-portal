@@ -15,7 +15,7 @@ import { getT } from "@/lib/lang";
 import { makeT, type Lang } from "@/lib/i18n";
 
 // iPhone 用 Shadowrocket，Mac 用 Clash Verge，Windows 和安卓用 Hiddify。
-// 不推荐 ClashX Meta 那种手动拖 yaml 文件的做法：那不是订阅，节点变了不会自动更新
+// 手动导入 yaml 文件（「我的订阅」里的「下载 Clash 配置文件」）只当备选：那不是订阅，节点变了不会自动更新
 
 function Steps({ children }: { children: React.ReactNode }) {
   return <ol className="list-decimal space-y-3 pl-5">{children}</ol>;
@@ -205,6 +205,19 @@ function tabs(lang: Lang): { id: Platform; label: string; content: React.ReactNo
               </div>
               <div className="text-sm text-base-content/70">
                 {t("保存后到左边「规则」页看一眼，能看到这些规则就说明生效了。", "After saving, check the Rules page on the left. If you see these rules, they're active.")}
+              </div>
+              <div className="mt-1 text-sm text-base-content/70">
+                {zh ? (
+                  <>
+                    复制规则总出错、或者用的是只能导入文件的 Clash 客户端：在 <MySubs /> 点「下载 Clash 配置文件」，里面已经带好这些规则，
+                    直接导入就行。这个文件不会自动更新，节点有变化要重新下载。
+                  </>
+                ) : (
+                  <>
+                    If pasting the rules keeps failing, or your Clash app only imports files: click &quot;Download Clash config&quot; in <MySubs />. The
+                    file already includes these rules. It won&apos;t update itself, so download it again when servers change.
+                  </>
+                )}
               </div>
               <Shot name="mac-rules" alt={t("规则页里能看到这些规则", "The rules appear on the Rules page")} />
             </li>

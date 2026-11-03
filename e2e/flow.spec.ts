@@ -5,6 +5,7 @@
 // 还有兜底：网站刚更新、旧页面点按钮出错时自动刷新一次；微信内置浏览器提示换浏览器打开。
 // 每次用新邮箱注册，不依赖之前的数据；管理员那一步直接调命令行脚本（本地库 + 假 Marzban）
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { site } from "../site.config";
 
@@ -329,6 +330,14 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await expect(page.getByPlaceholder("https://.../sub/...")).toBeHidden();
   await page.getByText("还有别的订阅链接？绑定到这个账号").click();
   await expect(page.getByPlaceholder("https://.../sub/...")).toBeVisible();
+
+  // 下载 Clash 配置文件：规则模式、带分流规则、存成 .yaml；别人的订阅下载不了
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "下载 Clash 配置文件" }).click()]);
+  expect(download.suggestedFilename()).toMatch(new RegExp(`-${username}\\.yaml$`));
+  const clash = readFileSync(await download.path(), "utf8");
+  expect(clash).toMatch(/^mode: rule$/m);
+  expect(clash).toContain("GEOIP,CN,DIRECT");
+  expect((await page.request.get("/dashboard/clash/alice")).status()).toBe(404);
 
   // 开出来的用户：所有 VLESS 入站都勾上，没有 Shadowsocks；备注就是 ip=N（IP 监控按这个读）
   const created = await mockMarzban("GET", `/user/${username}`);
