@@ -74,6 +74,14 @@ test("首页：卖点、价格、常见问题，注册按钮带上推荐码", as
   // 推荐链接带来的，注册页自动填好推荐码
   await page.getByRole("link", { name: "免费注册" }).first().click();
   await expect(page).toHaveURL(/\/register\?ref=ABCD2345/);
+  // 大屏左边的卖点在那半边正中间
+  const aside = await page.locator("aside").boundingBox();
+  const content = await page.getByTestId("auth-aside").boundingBox();
+  const center = (b: { x: number; y: number; width: number; height: number } | null) => [(b?.x ?? 0) + (b?.width ?? 0) / 2, (b?.y ?? 0) + (b?.height ?? 0) / 2];
+  const [ax, ay] = center(aside);
+  const [cx, cy] = center(content);
+  expect(Math.abs(ax - cx)).toBeLessThan(4);
+  expect(Math.abs(ay - cy)).toBeLessThan(4);
   await expect(page.locator("body")).not.toContainText("东京");
   await expect(page.getByPlaceholder("推荐码（选填）")).toHaveValue("ABCD2345");
   // 浏览器标签和主屏幕图标、manifest 都在

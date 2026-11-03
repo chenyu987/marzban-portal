@@ -22,14 +22,14 @@ export default function AuthForm({ title, submitLabel, action, passwordAutoCompl
   const [state, formAction, pending] = useActionState(action, undefined);
   return (
     <main className="grid min-h-screen lg:grid-cols-2">
-      {/* 左边：品牌和卖点（大屏才有） */}
-      <aside className="brand-gradient relative hidden flex-col justify-between overflow-hidden p-12 text-white lg:flex">
-        <Brand size={40} className="text-2xl text-white" />
-        <div>
+      {/* 左边：品牌和卖点（大屏才有）。品牌在左上角，卖点在这半边正中间 */}
+      <aside className="brand-gradient relative hidden items-center justify-center overflow-hidden p-12 text-white lg:flex">
+        <Brand size={40} className="absolute top-12 left-12 text-2xl text-white" />
+        <div className="w-full max-w-md" data-testid="auth-aside">
           <h2 className="text-4xl leading-tight font-extrabold">{site.landing?.headline ?? site.brand}</h2>
-          <p className="mt-4 max-w-md text-lg text-white/85">{site.landing?.sub ?? site.description}</p>
+          <p className="mt-4 text-lg text-white/85">{site.landing?.sub ?? site.description}</p>
           {site.landing?.highlights && (
-            <ul className="mt-8 grid max-w-md gap-3">
+            <ul className="mt-8 grid gap-3">
               {site.landing.highlights.slice(0, 4).map((h) => (
                 <li key={h.title} className="flex items-start gap-3 rounded-box bg-white/10 p-3 backdrop-blur">
                   <span className="text-2xl" aria-hidden>
