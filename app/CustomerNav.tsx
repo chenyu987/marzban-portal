@@ -69,47 +69,68 @@ export default function CustomerNav({ loggedIn = true }: { loggedIn?: boolean })
               aria-expanded={open}
               className="btn btn-ghost btn-square btn-sm -mr-1 sm:hidden"
             >
-              <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden>
-                <path d="M4 8h16M4 16h16" />
-              </svg>
+              <MenuIcon cross={false} />
             </button>
           </>
         )}
       </header>
 
-      {/* 整屏菜单放在 header 外面：header 有 backdrop-blur，里面的 fixed 元素会被限制在 header 里 */}
-      {loggedIn && open && (
+      {/* 整屏菜单放在 header 外面：header 有 backdrop-blur，里面的 fixed 元素会被限制在 header 里。
+          学 Apple 官网的动画：一直挂在页面上、收着时看不见；点开时白底从上往下展开，「≡」两道线转成「×」，
+          几个链接从上面一点依次淡入；关上时反过来、不等。系统设了「减少动态效果」就不动 */}
+      {loggedIn && (
         <div
           role="dialog"
           aria-modal="true"
           aria-label={t("菜单", "Menu")}
-          className="fixed inset-0 z-30 flex flex-col overflow-y-auto bg-base-100 px-6 pt-2 pb-10 sm:hidden"
+          aria-hidden={!open}
+          inert={!open}
+          className={`fixed inset-0 z-30 flex flex-col overflow-y-auto bg-base-100 pb-10 transition-[clip-path,visibility] duration-400 ease-[cubic-bezier(0.4,0,0.6,1)] motion-reduce:transition-none sm:hidden ${
+            open ? "visible [clip-path:inset(0_0_0_0)]" : "invisible [clip-path:inset(0_0_100%_0)]"
+          }`}
         >
-          <div className="flex justify-end">
-            <button type="button" onClick={() => setOpen(false)} aria-label={t("关闭菜单", "Close menu")} className="btn btn-ghost btn-square">
-              <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden>
-                <path d="M6 6l12 12M18 6 6 18" />
-              </svg>
+          {/* 和 header 同样的高度和边距，「×」正好落在「≡」的位置上 */}
+          <div className="flex justify-end px-4 py-2">
+            <button type="button" onClick={() => setOpen(false)} aria-label={t("关闭菜单", "Close menu")} className="btn btn-ghost btn-square btn-sm -mr-1">
+              <MenuIcon cross={open} />
             </button>
           </div>
-          <nav className="mt-4 flex flex-col">
-            {LINKS.map((l) => (
+          <nav className="mt-4 flex flex-col px-6">
+            {LINKS.map((l, i) => (
               <Link
                 key={l.href}
                 href={l.href}
                 onClick={() => setOpen(false)}
                 aria-current={path === l.href ? "page" : undefined}
-                className={`py-3 text-3xl font-semibold ${path === l.href ? "text-primary" : ""}`}
+                style={{ transitionDelay: open ? `${120 + i * 40}ms` : "0ms" }}
+                className={`py-3 text-3xl font-semibold transition-[opacity,translate] duration-300 ease-out motion-reduce:transition-none ${path === l.href ? "text-primary" : ""} ${
+                  open ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"
+                }`}
               >
                 {l.label}
               </Link>
             ))}
           </nav>
-          <form action={logout} className="mt-8">
-            <button className="py-3 text-lg text-error">{t("退出", "Log out")}</button>
+          <form
+            action={logout}
+            style={{ transitionDelay: open ? `${120 + LINKS.length * 40}ms` : "0ms" }}
+            className={`mt-8 px-6 transition-[opacity,translate] duration-300 ease-out motion-reduce:transition-none ${open ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"}`}
+          >
+            <button className="py-3 text-lg">{t("退出", "Log out")}</button>
           </form>
         </div>
       )}
     </>
+  );
+}
+
+// 两道横线；cross 为 true 时各自转 45° 叠成「×」（带过渡，就是菜单打开时那个变形）
+function MenuIcon({ cross }: { cross: boolean }) {
+  const line = "absolute left-1 h-[1.5px] w-5 rounded-full bg-current transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.6,1)] motion-reduce:transition-none";
+  return (
+    <span className="relative block h-6 w-7" aria-hidden>
+      <span className={`${line} top-[7.5px] ${cross ? "translate-y-[4px] rotate-45" : ""}`} />
+      <span className={`${line} top-[15.5px] ${cross ? "-translate-y-[4px] -rotate-45" : ""}`} />
+    </span>
   );
 }

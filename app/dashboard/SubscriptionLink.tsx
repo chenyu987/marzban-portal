@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { clashVergeImport, hiddifyImport, shadowrocketImport, shadowrocketQr } from "@/lib/clients";
@@ -60,14 +59,6 @@ export default function SubscriptionLink({ username, url }: { username: string; 
           </a>
         ))}
       </div>
-      {/* 新手最容易卡在「还没装 App」，导入按钮旁边就给教程入口 */}
-      <p className="text-sm text-base-content/60">
-        {t("还没装 App？", "Haven't installed an app yet? ")}
-        <Link href="/tutorial" className="link link-primary">
-          {t("看安装教程", "Open the setup guide")}
-        </Link>
-        {t("，每一步都有截图。", " — every step has a screenshot.")}
-      </p>
 
       {shown && (
         <div className="flex flex-col items-center gap-2 rounded-box bg-base-200 p-4">

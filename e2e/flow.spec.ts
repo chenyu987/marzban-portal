@@ -2,7 +2,7 @@
 // 另一条：余额付全款、余额抵扣一部分（取消后退回）、用兑换码续期；
 // 还有管理后台：登录、对账（确认到账 / 没收到钱收回）、取消订单、客人管理（加减余额、重置链接、绑定订阅）、兑换码、操作日志。
 // 还有老客人：注册时微信号对上，管理员之前开的订阅自动出现在「我的订阅」，改微信号也跟着走。
-// 还有手机：右上角菜单、买了还没用的订阅顶上引导看安装教程。
+// 还有手机：右上角菜单、下单后弹出付款窗、买了还没用的订阅顶上引导看安装教程。
 // 还有兜底：网站刚更新、旧页面点按钮出错时自动刷新一次；微信内置浏览器提示换浏览器打开。
 // 每次用新邮箱注册，不依赖之前的数据；管理员那一步直接调命令行脚本（本地库 + 假 Marzban）
 import { execFileSync } from "node:child_process";
@@ -269,6 +269,46 @@ test("手机上：右上角菜单能切页面、能退出；买了还没连过�
   await page.getByRole("button", { name: "打开菜单" }).click();
   await menu.getByRole("button", { name: "退出" }).click();
   await expect(page).toHaveURL(/\/login/);
+  await ctx.close();
+});
+
+test("手机上下单：付款窗从底部弹出来，能关掉、刷新不再弹，在弹窗里点我已付款就开通", async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 402, height: 874 }, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  const stamp = Date.now();
+  await page.goto("/register");
+  await page.getByPlaceholder("邮箱").fill(`e2e-mobile-order-${stamp}@example.test`);
+  await page.getByPlaceholder("密码（至少 8 位）").fill("E2eTest-1234");
+  await page.getByPlaceholder("微信号").fill(`e2e_mo_${stamp}`);
+  await page.getByRole("button", { name: "注册" }).click();
+  await expect(page).toHaveURL(/\/dashboard/);
+
+  const sheet = page.getByRole("dialog", { name: "付款" });
+  await page.goto("/plans");
+  await page.locator('button[value="p1-month"]').click();
+  await confirmOk(page);
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toContainText("下单成功，请付款");
+  await expect(sheet.getByAltText("支付宝收款码")).toBeVisible();
+  // 关掉：单子还在页面上；刷新也不会再弹
+  await sheet.getByRole("button", { name: "关闭" }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(page.locator(".card.border")).toContainText("等你付款");
+  await page.reload();
+  await expect(page.locator(".card.border")).toContainText("等你付款");
+  await expect(sheet).toHaveCount(0);
+  await page.locator(".card.border").getByRole("button", { name: "取消这张单" }).click();
+  await confirmOk(page);
+  await expect(page.locator(".card.border")).toHaveCount(0);
+
+  // 再下一单，直接在弹窗里付
+  await page.locator('button[value="p1-month"]').click();
+  await confirmOk(page);
+  await expect(sheet).toBeVisible();
+  await sheet.getByLabel("支付宝", { exact: true }).check();
+  await sheet.getByRole("button", { name: "我已付款" }).click();
+  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page.getByTestId("sub-id")).toBeVisible();
   await ctx.close();
 });
 

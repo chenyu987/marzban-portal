@@ -23,7 +23,7 @@ import { LANG_COOKIE, makeT, parseLang, pick, type Lang } from "@/lib/i18n";
 
 // email：出错时带回去当输入框的默认值。React 19 提交后会重置表单，不带回去邮箱就被清空了。
 // support：提示里让客人找客服，页面在提示下面放「复制客服微信 / 邮箱」按钮
-export type FormState = { error?: string; ok?: string; email?: string; ref?: string; wechat?: string; support?: boolean } | undefined;
+export type FormState = { error?: string; ok?: string; email?: string; ref?: string; wechat?: string; support?: boolean; orderId?: number } | undefined;
 
 import { emailError, passwordError, wechatError } from "@/lib/account";
 import { claimByWechat, followWechatChange } from "@/lib/claim";
@@ -322,7 +322,8 @@ export async function createOrder(prev: FormState, form: FormData): Promise<Form
   }
   revalidatePath("/plans");
   revalidatePath("/dashboard");
-  return { ok: t("下单成功，请按上面的说明付款", "Order placed. Please pay as described above") };
+  // orderId：手机上下单后弹出这张单的付款窗（订单卡片在价目表上面，不弹的话客人看不到）
+  return { ok: t("下单成功，请按上面的说明付款", "Order placed. Please pay as described above"), orderId: order!.id };
 }
 
 // 客人取消自己还没付款的单，下单时抵扣的余额退回。点过「我已付款」的、管理员已经在开通的（processing）都不能取消，免得付了钱又把单取消掉

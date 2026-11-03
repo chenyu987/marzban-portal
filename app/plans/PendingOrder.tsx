@@ -21,6 +21,19 @@ export type OpenOrder = {
   claimedAt: string | null;
 };
 
+// 刚下的单：订单卡片出现在价目表上面，手机上客人还停在价目表那里看不到，所以弹出来。
+// 下单的表单和这张卡片是两个组件，谁先挂上不一定：先记进 sessionStorage，再发个事件，卡片两头都看
+const NEW_ORDER_KEY = "new-order";
+const NEW_ORDER_EVENT = "new-order";
+export function announceNewOrder(id: number) {
+  try {
+    sessionStorage.setItem(NEW_ORDER_KEY, String(id));
+  } catch {
+    // 存不了也没关系，下面的事件照样发
+  }
+  window.dispatchEvent(new CustomEvent(NEW_ORDER_EVENT, { detail: id }));
+}
+
 // 一张没处理完的单：告诉客人付多少、备注写什么，附上收款码。付完点「我已付款」（选用哪个付的、填付款人）马上开通，
 // 管理员之后按这个时间、金额和付款人去账单里对账。收款码在浏览器里本地生成。
 // payments：value 是提交给后端的付款方式（中文名，后台对账看），name 是显示给客人的
@@ -29,6 +42,36 @@ export default function PendingOrder({ order, payments }: { order: OpenOrder; pa
   const [qrs, setQrs] = useState<string[]>([]);
   const [state, claimAction, claiming] = useActionState(claimPaid, undefined);
   const claimed = order.claimedAt !== null;
+  const [popup, setPopup] = useState(false);
+
+  // 这张单是刚下的：手机上弹出付款窗（宽屏一眼就看得到，不用弹）
+  useEffect(() => {
+    const show = () => {
+      try {
+        sessionStorage.removeItem(NEW_ORDER_KEY);
+      } catch {}
+      if (window.matchMedia("(max-width: 639px)").matches) setPopup(true);
+    };
+    try {
+      if (sessionStorage.getItem(NEW_ORDER_KEY) === String(order.id)) show();
+    } catch {}
+    const onNew = (e: Event) => (e as CustomEvent<number>).detail === order.id && show();
+    window.addEventListener(NEW_ORDER_EVENT, onNew);
+    return () => window.removeEventListener(NEW_ORDER_EVENT, onNew);
+  }, [order.id]);
+
+  // 弹窗开着时后面的页面不跟着滚，Esc 关掉
+  useEffect(() => {
+    if (!popup) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPopup(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [popup]);
 
   useEffect(() => {
     if (!order.processing && !claimed) {
@@ -42,8 +85,8 @@ export default function PendingOrder({ order, payments }: { order: OpenOrder; pa
       ? { text: t("等管理员开通", "Waiting for support"), cls: "badge-info" }
       : { text: t("等你付款", "Awaiting payment"), cls: "badge-warning" };
 
-  return (
-    <div className="card border border-warning/40 bg-base-100 shadow-sm">
+  const card = (
+    <div className={`card bg-base-100 ${popup ? "" : "border border-warning/40 shadow-sm"}`}>
       <div className="card-body gap-3">
         <div className="flex items-center justify-between">
           <h2 className="card-title text-base">{t("订单", "Order")} {order.no}</h2>
@@ -149,6 +192,29 @@ export default function PendingOrder({ order, payments }: { order: OpenOrder; pa
             </form>
           </>
         )}
+      </div>
+    </div>
+  );
+
+  if (!popup) return card;
+  // 手机上的付款窗：从底部滑上来，点右上角 × 或背景收起来，单子还在页面上
+  return (
+    <div className="fixed inset-0 z-40 flex items-end bg-black/40" onClick={(e) => e.target === e.currentTarget && setPopup(false)}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("付款", "Payment")}
+        className="sheet-up max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-base-100 pb-[env(safe-area-inset-bottom)]"
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between bg-base-100 px-4 pt-3">
+          <b>{t("下单成功，请付款", "Order placed. Please pay")}</b>
+          <button type="button" onClick={() => setPopup(false)} aria-label={t("关闭", "Close")} className="btn btn-ghost btn-square btn-sm -mr-1">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden>
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+        {card}
       </div>
     </div>
   );

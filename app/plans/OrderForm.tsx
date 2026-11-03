@@ -1,10 +1,11 @@
 "use client";
 
-import { Fragment, useActionState, useState } from "react";
+import { Fragment, useActionState, useEffect, useState } from "react";
 import { createOrder } from "../actions";
 import ContactSupport from "../ContactSupport";
 import { confirmSubmit } from "../ConfirmDialog";
 import { useT } from "../LangContext";
+import { announceNewOrder } from "./PendingOrder";
 
 export type PlanGroup = {
   name: string;
@@ -43,6 +44,10 @@ export default function OrderForm({
   const renewText = (label: string) => t(`给订阅 ${label} 续期`, `Renew subscription ${label}`);
   const deduct = useBalance ? balance : 0;
   const canOrder = canTransfer || balance > 0;
+  // 刚下的单交给 PendingOrder：手机上弹出付款窗
+  useEffect(() => {
+    if (state?.orderId) announceNewOrder(state.orderId);
+  }, [state]);
   const money = (fen: number) => `${currency}${(fen / 100).toFixed(2).replace(/\.00$/, "")}`;
 
   return (
@@ -123,11 +128,14 @@ export default function OrderForm({
 
       {canOrder && <p className="text-center text-sm text-base-content/60 sm:hidden">{t("点价格就能下单", "Tap a price to order")}</p>}
       <div data-testid="plan-table" className="grid grid-cols-4 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 sm:grid-cols-[6rem_1.7fr_repeat(4,1fr)]">
-        {groups.map((g) => {
+        {groups.map((g, gi) => {
           const hot = g.highlight === "hot";
           const top = g.highlight === "top";
           return (
             <Fragment key={g.name}>
+              {/* 手机上套餐之间的线深一点：一个套餐占两行（名字一行、四个价格一行），线都一样的话分不清哪行价格是哪个套餐的。
+                  -my-px 让它盖住上下两道格子缝，看起来就是一道 2px 的深色线；宽屏一个套餐一行，不需要 */}
+              {gi > 0 && <div aria-hidden className="col-span-full -my-px h-0.5 bg-base-content/45 sm:hidden" />}
               <div
                 className={`flex flex-col items-center justify-center p-2 text-center font-bold ${hot ? "bg-error text-error-content" : "bg-base-100"} ${top ? "text-error" : ""}`}
               >
