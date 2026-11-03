@@ -3,8 +3,8 @@
 import { useActionState, useState } from "react";
 import { adminCreateCodes, adminVoidCode } from "../actions";
 
-// 生成兑换码：生成后把码列在文本框里，一键复制
-export function CreateCodes({ plans }: { plans: { id: string; name: string; price: string }[] }) {
+// 生成兑换码：生成后把码列在文本框里，一键复制。下拉框里免费体验排最前面，最常发
+export function CreateCodes({ plans }: { plans: { id: string; name: string; price: string; free: boolean }[] }) {
   const [state, action, pending] = useActionState(adminCreateCodes, undefined);
   const [copied, setCopied] = useState(false);
   return (
@@ -16,11 +16,21 @@ export function CreateCodes({ plans }: { plans: { id: string; name: string; pric
             <option value="" disabled>
               选套餐
             </option>
-            {plans.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}（{p.price}）
-              </option>
-            ))}
+            {[
+              { label: "免费体验", list: plans.filter((p) => p.free) },
+              { label: "付费套餐", list: plans.filter((p) => !p.free) },
+            ].map(
+              (g) =>
+                g.list.length > 0 && (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.list.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}（{p.price}）
+                      </option>
+                    ))}
+                  </optgroup>
+                ),
+            )}
           </select>
           <input name="count" type="number" min={1} max={100} defaultValue={1} required className="input input-sm w-full" />
           <input name="note" maxLength={100} placeholder="备注，比如「微信转账 张三」" className="input input-sm w-full" />

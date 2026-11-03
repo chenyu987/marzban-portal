@@ -518,7 +518,11 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   // 兑换码：生成 2 个，作废一个，客人用另一个
   await admin.goto("/admin/codes");
   // 页面上还有筛选用的套餐下拉框，限定在「生成兑换码」的表单里
-  await admin.locator('form:has(input[name="count"]) select[name="plan"]').selectOption("p1-month");
+  const planSelect = admin.locator('form:has(input[name="count"]) select[name="plan"]');
+  // 免费体验排在最前面，最常发
+  await expect(planSelect.locator("optgroup").first()).toHaveAttribute("label", "免费体验");
+  await expect(planSelect.locator("option:not([disabled])").first()).toHaveText(/7天体验/);
+  await planSelect.selectOption("p1-month");
   await admin.locator('input[name="count"]').fill("2");
   await admin.getByPlaceholder("备注，比如「微信转账 张三」").fill("e2e 测试");
   await admin.getByRole("button", { name: "生成" }).click();

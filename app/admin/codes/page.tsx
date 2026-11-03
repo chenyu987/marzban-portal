@@ -64,7 +64,7 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
       .bind(...binds, PAGE_SIZE, (page - 1) * PAGE_SIZE)
       .all<Row>(),
   ]);
-  const plans = site.plans.map((p) => ({ id: p.id, name: p.name, price: `${site.currency}${formatMoney(p.price)}` }));
+  const plans = site.plans.map((p) => ({ id: p.id, name: p.name, price: `${site.currency}${formatMoney(p.price)}`, free: p.price === 0 }));
   const params = { state, plan: group, q };
 
   return (
