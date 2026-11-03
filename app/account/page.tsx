@@ -1,14 +1,13 @@
-import { requireCustomer, countSessions } from "@/lib/session";
+import { requireCustomer } from "@/lib/session";
 import { CLIENTS } from "@/lib/account";
-import { EmailForm, LogoutOthers, PasswordForm, PrefsForm, WechatForm } from "./AccountForms";
+import { EmailForm, PasswordForm, PrefsForm, WechatForm } from "./AccountForms";
 import CustomerNav from "../CustomerNav";
 
 export const dynamic = "force-dynamic";
 
-// 客人自己的账户：改微信号、登录邮箱、密码，常用客户端和到期提醒，退出其他设备
+// 客人自己的账户：改微信号、登录邮箱、密码，常用客户端和到期提醒
 export default async function AccountPage() {
   const customer = await requireCustomer();
-  const sessions = await countSessions(customer.id);
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16">
       <CustomerNav />
@@ -28,9 +27,6 @@ export default async function AccountPage() {
         </Section>
         <Section title="偏好">
           <PrefsForm client={customer.pref_client ?? ""} notify={!!customer.notify_expiry} clients={CLIENTS} />
-        </Section>
-        <Section title="登录的设备" desc={`现在有 ${sessions} 台设备登录着这个账号。手机丢了、在别人电脑上登过，可以把其他设备都退出。`}>
-          <LogoutOthers />
         </Section>
         <p className="text-sm text-base-content/50">要注销账号请联系客服：账号连着余额和订阅，注销前客服会和你确认怎么处理。</p>
       </div>

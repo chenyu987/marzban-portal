@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useTransition, useState } from "react";
-import { logoutOthers, updateEmail, updatePassword, updatePrefs, updateWechat, type FormState } from "../actions";
+import { useActionState } from "react";
+import { updateEmail, updatePassword, updatePrefs, updateWechat, type FormState } from "../actions";
 
 function Result({ state }: { state: FormState }) {
   if (state?.error) return <div role="alert" className="alert alert-error alert-soft text-sm">{state.error}</div>;
@@ -76,25 +76,5 @@ export function PrefsForm({ client, notify, clients }: { client: string; notify:
       <Submit pending={pending} label="保存偏好" />
       <Result state={state} />
     </form>
-  );
-}
-
-export function LogoutOthers() {
-  const [state, setState] = useState<FormState>();
-  const [pending, start] = useTransition();
-  return (
-    <div className="flex flex-col gap-2">
-      <button
-        type="button"
-        className="btn btn-sm self-start"
-        disabled={pending}
-        onClick={() => {
-          if (confirm("退出这个账号在其他所有设备上的登录？这台不受影响。")) start(async () => setState(await logoutOthers()));
-        }}
-      >
-        退出其他设备
-      </button>
-      <Result state={state} />
-    </div>
   );
 }

@@ -553,7 +553,7 @@ export async function updatePassword(_: FormState, form: FormData): Promise<Form
   await db().prepare("UPDATE customers SET password_hash = ? WHERE id = ?").bind(await hashPassword(next), customer.id).run();
   const out = await destroyOtherSessions(customer.id);
   revalidatePath("/account");
-  return { ok: out > 0 ? `密码已修改，其他 ${out} 台设备已退出登录` : "密码已修改" };
+  return { ok: out > 0 ? "密码已修改，其他地方的登录都已退出" : "密码已修改" };
 }
 
 // 偏好：常用客户端、到期提醒
@@ -568,12 +568,4 @@ export async function updatePrefs(_: FormState, form: FormData): Promise<FormSta
   revalidatePath("/account");
   revalidatePath("/dashboard");
   return { ok: "已保存" };
-}
-
-// 退出其他设备（手机丢了、在别人电脑上登过）
-export async function logoutOthers(): Promise<FormState> {
-  const customer = await requireCustomer();
-  const out = await destroyOtherSessions(customer.id);
-  revalidatePath("/account");
-  return { ok: out > 0 ? `已退出其他 ${out} 台设备` : "没有别的设备登录着" };
 }

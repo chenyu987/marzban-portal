@@ -179,8 +179,8 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await page.getByRole("button", { name: "登录" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
 
-  // 账户页：客人自己改微信号、偏好、邮箱、密码，退出其他设备
-  // 先在另一个浏览器里也登录一次，后面验证「改密码 / 退出其他设备」会把它踢掉
+  // 账户页：客人自己改微信号、偏好、邮箱、密码
+  // 先在另一个浏览器里也登录一次，后面验证改密码会把它踢掉
   const other = await page.context().browser()!.newContext();
   const otherPage = await other.newPage();
   await otherPage.goto("/login");
@@ -190,7 +190,7 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await expect(otherPage).toHaveURL(/\/dashboard/);
 
   await page.getByRole("link", { name: "账户" }).click();
-  await expect(page.getByText("现在有 2 台设备登录着")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "登录的设备" })).toHaveCount(0);
   await page.getByLabel("微信号").fill("坏的 微信");
   await page.getByRole("button", { name: "保存微信号" }).click();
   await expect(page.getByText("微信号格式不对")).toBeVisible();
@@ -228,7 +228,7 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await page.getByLabel("新密码", { exact: true }).fill(third);
   await page.getByLabel("再输一次新密码").fill(third);
   await page.getByRole("button", { name: "改密码" }).click();
-  await expect(page.getByText("其他 1 台设备已退出登录")).toBeVisible();
+  await expect(page.getByText("其他地方的登录都已退出")).toBeVisible();
   await otherPage.goto("/dashboard");
   await expect(otherPage).toHaveURL(/\/login/);
   await other.close();

@@ -53,12 +53,6 @@ export async function destroySession() {
   jar.delete(COOKIE);
 }
 
-// 这个客人现在有几台设备登录着（没过期的会话）
-export async function countSessions(customerId: number): Promise<number> {
-  const r = await db().prepare("SELECT COUNT(*) AS n FROM sessions WHERE customer_id = ? AND expires_at > ?").bind(customerId, nowSec()).first<{ n: number }>();
-  return r?.n ?? 0;
-}
-
 // 退出这个客人在其他设备上的登录，当前这台保留。返回退出了几台
 export async function destroyOtherSessions(customerId: number): Promise<number> {
   const token = (await cookies()).get(COOKIE)?.value;
