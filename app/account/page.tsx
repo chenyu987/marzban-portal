@@ -20,7 +20,7 @@ export default async function AccountPage() {
         <Section title="微信号" desc="客服有事会加你这个微信，比如线路调整、续费提醒。">
           <WechatForm current={customer.wechat ?? ""} />
         </Section>
-        <Section title="登录邮箱" desc={`现在是 ${customer.email}。改的时候要输一次密码，防止别人趁你登录着把账号改走。`}>
+        <Section title="登录邮箱" desc={`现在是 ${customer.email}。改的时候要输一次密码。`}>
           <EmailForm />
         </Section>
         <Section title="密码" desc="改完以后，别的设备上的登录会自动退出，这台不用重新登录。">
