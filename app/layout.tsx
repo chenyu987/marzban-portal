@@ -6,6 +6,8 @@ import ConfirmHost from "./ConfirmDialog";
 import { SiteProvider } from "./SiteContext";
 import { publicSite } from "@/lib/public-site";
 import { getT } from "@/lib/lang";
+import { cookies } from "next/headers";
+import { THEME_COOKIE, parseTheme, themeAttr } from "@/lib/theme";
 import { LOCALE } from "@/lib/i18n";
 import { LangProvider } from "./LangContext";
 import LangSwitch from "./LangSwitch";
@@ -26,8 +28,9 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const { lang, t } = await getT();
+  const theme = themeAttr(parseTheme((await cookies()).get(THEME_COOKIE)?.value));
   return (
-    <html lang={LOCALE[lang]}>
+    <html lang={LOCALE[lang]} data-theme={theme}>
       <body className="flex min-h-screen flex-col bg-base-200">
         <SiteProvider value={publicSite}>
         <LangProvider value={lang}>

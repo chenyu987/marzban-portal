@@ -2,14 +2,18 @@ import { requireCustomer } from "@/lib/session";
 import { EmailForm, PasswordForm, PrefsForm, WechatForm } from "./AccountForms";
 import CustomerNav from "../CustomerNav";
 import LangSwitch from "../LangSwitch";
+import ThemeSwitch from "../ThemeSwitch";
+import { cookies } from "next/headers";
+import { THEME_COOKIE, parseTheme } from "@/lib/theme";
 import { getT } from "@/lib/lang";
 
 export const dynamic = "force-dynamic";
 
-// 客人自己的账户：改微信号、登录邮箱、密码，到期提醒
+// 客人自己的账户：改微信号、登录邮箱、密码，到期提醒，深浅色，语言
 export default async function AccountPage() {
   const customer = await requireCustomer();
   const { t } = await getT();
+  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16">
       <CustomerNav />
@@ -35,11 +39,16 @@ export default async function AccountPage() {
         <Section
           title={t("到期提醒", "Expiry reminders")}
           desc={t(
-            "月付到期前 3 天和当天各发一封；季付、半年、一年到期前 7 天、3 天和当天各发一封；免费体验到期前 1 天和当天各发一封。",
-            "Monthly plans: 3 days before and on the day. Quarterly, 6-month and yearly plans: 7 days, 3 days before and on the day. Free trials: 1 day before and on the day.",
+            "月付到期前 3 天和当天各发一封；季付、半年、一年到期前 7 天、3 天和当天各发一封。",
+            "Monthly plans: 3 days before and on the day. Quarterly, 6-month and yearly plans: 7 days, 3 days before and on the day.",
           )}
         >
           <PrefsForm notify={!!customer.notify_expiry} />
+        </Section>
+        <Section title={t("外观", "Appearance")} desc={t("跟随系统时，手机或电脑是深色模式就用深色。", "System follows your device's dark mode setting.")}>
+          <div data-testid="account-theme">
+            <ThemeSwitch current={theme} />
+          </div>
         </Section>
         <Section title={t("语言", "Language")} desc={t("网站和提醒邮件用的语言。", "Used for the website and reminder emails.")}>
           <div data-testid="account-lang">

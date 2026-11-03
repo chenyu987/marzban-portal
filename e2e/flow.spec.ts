@@ -536,6 +536,16 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await expect(otherPage).toHaveURL(/\/login/);
   await other.close();
 
+  // 外观：选深色马上生效，刷新后还在；选回跟随系统就不写 data-theme
+  const themeSwitch = page.getByTestId("account-theme");
+  await themeSwitch.getByRole("button", { name: "深色" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "brand-dark");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "brand-dark");
+  await expect(themeSwitch.getByRole("button", { name: "深色" })).toHaveAttribute("aria-pressed", "true");
+  await themeSwitch.getByRole("button", { name: "跟随系统" }).click();
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme", /./);
+
   // 账户页也能切语言，选的语言记到账号上（提醒邮件按它写）
   await page.getByTestId("account-lang").getByRole("button", { name: "English" }).click();
   await expect(page.getByRole("heading", { name: "Account", level: 1 })).toBeVisible();
