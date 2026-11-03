@@ -207,6 +207,11 @@ const server = http.createServer(async (req, res) => {
       for (const k of ["expire", "data_limit", "note", "status", "data_limit_reset_strategy"]) {
         if (k in body) u[k] = (k === "expire" || k === "data_limit") && body[k] === 0 ? null : body[k];
       }
+      // 照 Marzban 0.8.4：改用户时列出来的协议，没列的入站都取消勾选（不会自动补全）
+      for (const [p, tags] of Object.entries(body.inbounds ?? {})) {
+        for (const tag of tags) if (!(INBOUNDS[p] ?? []).includes(tag)) return log(400), send(res, 400, { detail: `Inbound ${tag} doesn't exist` });
+        u.inbounds = { ...u.inbounds, [p]: tags };
+      }
       // 只有假 Marzban 认：e2e 用来模拟「客人连上过」（真 Marzban 的这个字段是只读的）
       if ("online_at" in body) u.online_at = body.online_at;
       log(200);

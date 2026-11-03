@@ -2,14 +2,15 @@
 // 不放在 app/actions.ts 里：那个文件 export 的函数都会变成浏览器能直接调用的 Server Action
 import "server-only";
 import { db } from "./env";
-import { createUser, findUser, modifyUser, resetUsage } from "./marzban";
+import { createUser, findUser, modifyUser, resetUsage, vlessInbounds } from "./marzban";
 import { nextUsername } from "./plans";
 import { provisionNew, provisionRenew, type ProvisionOps, type ProvisionResult } from "./provision";
 import type { Plan } from "../site.config.example";
+import { site } from "../site.config";
 import { makeT, type Lang } from "./i18n";
 
 // 网页这边的 Marzban 操作，交给 lib/provision.ts 判断出错时 Marzban 改没改
-const marzbanOps: ProvisionOps = { findUser, createUser, modifyUser, resetUsage };
+const marzbanOps: ProvisionOps = { findUser, createUser, modifyUser, resetUsage, vlessInbounds, proOnly: site.proOnlyInbounds };
 
 // 按 target（"new" 或客人名下的用户名）在 Marzban 上新开或续期。兑换码和余额购买共用。
 // 返回 { error }：写 Marzban 之前就发现不行；抛异常：写之前出了意外。这两种 Marzban 都没动过，调用方可以放心退款/放回兑换码。

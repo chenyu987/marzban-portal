@@ -1,9 +1,29 @@
 import { describe, expect, it } from "vitest";
 import type { Plan } from "../site.config.example";
-import { changePlanBody, findPlan, newUserBody, nextUsername, renewUserBody, renewedExpire, isWechatUsername, setIpNote, wechatUsername } from "./plans";
+import { changePlanBody, findPlan, newUserBody, nextUsername, planInbounds, renewUserBody, renewedExpire, isWechatUsername, setIpNote, wechatUsername } from "./plans";
 
 const now = 1_800_000_000;
 const plan: Plan = { id: "month", name: "月付", price: 2000, days: 30, dataGB: 100, ip: 3 };
+
+describe("planInbounds", () => {
+  const all = ["VLESS TCP REALITY", "VLESS SEL", "VLESS LAX"];
+  it("Basic 去掉只给 Pro 的入站，Pro 全要", () => {
+    expect(planInbounds(plan, all, ["VLESS LAX"])).toEqual(["VLESS TCP REALITY", "VLESS SEL"]);
+    expect(planInbounds({ ...plan, pro: true }, all, ["VLESS LAX"])).toEqual(all);
+  });
+  it("没配 proOnly 就不分档", () => {
+    expect(planInbounds(plan, all, undefined)).toBeUndefined();
+    expect(planInbounds(plan, all, [])).toBeUndefined();
+  });
+  it("一个入站都分不到时报错，不开一个连不上的用户", () => {
+    expect(() => planInbounds(plan, ["VLESS LAX"], ["VLESS LAX"])).toThrow();
+  });
+  it("改用户的请求体带完整的入站列表；不传就不碰入站", () => {
+    expect(changePlanBody({}, plan, ["A", "B"])).toMatchObject({ inbounds: { vless: ["A", "B"] } });
+    expect(changePlanBody({}, plan)).not.toHaveProperty("inbounds");
+    expect(newUserBody("c7_1", plan, now, ["A"]).inbounds).toEqual({ vless: ["A"] });
+  });
+});
 
 describe("renewedExpire", () => {
   it("没过期的从原到期时间往后加", () => {

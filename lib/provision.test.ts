@@ -133,3 +133,40 @@ describe("provisionRenew", () => {
     expect(r).toMatchObject({ kind: "stuck", username: "alice" });
   });
 });
+
+describe("分档", () => {
+  const ALL = ["VLESS TCP REALITY", "VLESS OSK", "VLESS LAX"];
+  const tiered = (users: Record<string, ProvisionUser> = {}) => {
+    const f = fakeMarzban(users);
+    const vlessInbounds = vi.fn(async () => ALL);
+    return { ops: Object.assign(f.ops, { vlessInbounds, proOnly: ["VLESS LAX"] }), store: f.store };
+  };
+  const alice: ProvisionUser = { username: "alice", expire: NOW + 5 * DAY, note: "ip=2" };
+
+  it("Basic 新开不勾 Pro 的入站，Pro 全勾", async () => {
+    const { ops } = tiered();
+    await provisionNew(ops, "c1_1", plan, NOW);
+    expect(ops.createUser.mock.calls[0][0]).toMatchObject({ inbounds: { vless: ["VLESS TCP REALITY", "VLESS OSK"] } });
+    await provisionNew(ops, "c1_2", { ...plan, pro: true }, NOW);
+    expect(ops.createUser.mock.calls[1][0]).toMatchObject({ inbounds: { vless: ALL } });
+  });
+
+  it("续期按新套餐的档位改入站，列的是完整列表", async () => {
+    const { ops } = tiered({ alice });
+    await provisionRenew(ops, alice, { ...plan, pro: true }, NOW);
+    expect(ops.modifyUser.mock.calls[0][1]).toMatchObject({ inbounds: { vless: ALL } });
+  });
+
+  it("查入站失败：Marzban 还没动，可以重试", async () => {
+    const { ops } = tiered({ alice });
+    ops.vlessInbounds.mockRejectedValueOnce(new Error("timeout"));
+    expect(await provisionRenew(ops, alice, plan, NOW)).toMatchObject({ kind: "retry" });
+    expect(ops.modifyUser).not.toHaveBeenCalled();
+  });
+
+  it("不分档时不查入站，请求体和以前一样", async () => {
+    const { ops } = fakeMarzban({ alice });
+    await provisionRenew(ops, alice, plan, NOW);
+    expect(ops.modifyUser.mock.calls[0][1]).not.toHaveProperty("inbounds");
+  });
+});

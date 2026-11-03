@@ -9,7 +9,7 @@
 //   - 确认不了   → stuck：兑换码不放回，交给管理员核对
 import type { Plan } from "../site.config.example";
 // 带 .ts 后缀：命令行脚本用 node 直接跑这个文件
-import { newUserBody, renewUserBody } from "./plans.ts";
+import { newUserBody, planInbounds, renewUserBody } from "./plans.ts";
 
 export type ProvisionUser = {
   username: string;
@@ -24,7 +24,16 @@ export type ProvisionOps = {
   createUser: (body: ReturnType<typeof newUserBody>) => Promise<ProvisionUser>;
   modifyUser: (username: string, body: ReturnType<typeof renewUserBody>) => Promise<ProvisionUser>;
   resetUsage: (username: string) => Promise<unknown>;
+  // 分档用：Marzban 上全部 VLESS 入站的 tag，和 site.config 的 proOnlyInbounds。proOnly 空着就不分档，也不会去查入站
+  vlessInbounds: () => Promise<string[]>;
+  proOnly?: string[];
 };
+
+// 这个套餐该勾的入站（不分档时 undefined）。在写 Marzban 之前算，出错时 Marzban 还没动过
+async function inboundsFor(ops: ProvisionOps, plan: Plan): Promise<string[] | undefined> {
+  if (!ops.proOnly?.length) return undefined;
+  return planInbounds(plan, await ops.vlessInbounds(), ops.proOnly);
+}
 
 export type ProvisionResult =
   // Marzban 已经开通/续期好了。warning：主要的改动成功了，但有附带的步骤没做成（比如流量清零），要告诉管理员
@@ -38,8 +47,14 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 // 新开一个用户。username 由调用方挑好（要确认 Marzban 上没有同名用户）
 export async function provisionNew(ops: ProvisionOps, username: string, plan: Plan, now: number): Promise<ProvisionResult> {
+  let vless: string[] | undefined;
   try {
-    const u = await ops.createUser(newUserBody(username, plan, now));
+    vless = await inboundsFor(ops, plan);
+  } catch (e) {
+    return { kind: "retry", reason: `查 Marzban 入站失败，还没新建 ${username}：${errText(e)}` };
+  }
+  try {
+    const u = await ops.createUser(newUserBody(username, plan, now, vless));
     // 用户建出来了但一个入站都没勾，客人导入后看不到节点。不能当成功，也不能放回兑换码（用户已经建了）
     if (u.inbounds && !u.inbounds.vless?.length) {
       return { kind: "stuck", username, reason: `新建的 ${username} 没有勾上任何 VLESS 入站，客人连不上。去面板给它勾上全部入站` };
@@ -66,7 +81,13 @@ export async function provisionRenew(
   now: number,
 ): Promise<ProvisionResult> {
   const { username } = current;
-  const body = renewUserBody(current, plan, now);
+  let vless: string[] | undefined;
+  try {
+    vless = await inboundsFor(ops, plan);
+  } catch (e) {
+    return { kind: "retry", reason: `查 Marzban 入站失败，还没续期 ${username}：${errText(e)}` };
+  }
+  const body = renewUserBody(current, plan, now, vless);
   let expire: number | null;
   try {
     expire = (await ops.modifyUser(username, body)).expire;

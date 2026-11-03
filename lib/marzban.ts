@@ -183,6 +183,8 @@ export type ProxyHost = {
 };
 
 export const listInbounds = () => api<Record<string, Inbound[]>>("GET", "/inbounds");
+// 全部 VLESS 入站的 tag，分档开通用
+export const vlessInbounds = async () => ((await listInbounds()).vless ?? []).map((i) => i.tag);
 export const getHosts = () => api<Record<string, ProxyHost[]>>("GET", "/hosts");
 // 整份替换：传进去的是全部入站的 Host
 export const putHosts = (hosts: Record<string, ProxyHost[]>) => api<Record<string, ProxyHost[]>>("PUT", "/hosts", hosts);

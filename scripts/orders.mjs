@@ -15,7 +15,7 @@ import { formatBytes, formatDate, formatExpire, formatMoney, parseYuan, formatOr
 import { findPlan, newUserBody, nextUsername, renewUserBody } from "../lib/plans.ts";
 import { provisionNew, provisionRenew } from "../lib/provision.ts";
 import { site } from "../site.config.ts";
-import { confirmYes, d1 as d1At, describeUser, fail, marzban, q } from "./admin.mjs";
+import { confirmYes, d1 as d1At, describeUser, fail, marzban, q, tierText } from "./admin.mjs";
 
 const USAGE = `用法:
   npm run orders -- list [到账金额] [--remote]
@@ -176,7 +176,7 @@ if (o.marzban_username) {
 }
 
 const now = Math.floor(Date.now() / 1000);
-console.log(`套餐：${plan.name}（${plan.id}），${plan.days} 天，${plan.dataGB === null ? "不限流量" : `${plan.dataGB} GB`}，${plan.ip ? `${plan.ip} 个 IP` : "不限 IP"}`);
+console.log(`套餐：${plan.name}（${plan.id}），${plan.days} 天，${plan.dataGB === null ? "不限流量" : `${plan.dataGB} GB`}，${plan.ip ? `${plan.ip} 个 IP` : "不限 IP"}${tierText(plan)}`);
 console.log(`Marzban（${mz.url}）：`);
 if (action.kind === "new") {
   const b = newUserBody(action.username, plan, now);

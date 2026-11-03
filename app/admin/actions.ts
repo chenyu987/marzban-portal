@@ -9,8 +9,8 @@ import { verifyPassword } from "@/lib/password";
 import { createAdminSession, currentAdmin, destroyAdminSession, logAdmin, requireAccess, requireAdmin } from "@/lib/admin";
 import { cancelPendingOrder, confirmTransferOrder, orderLabel, revokeOrder, verifyOrder, type AdminResult } from "@/lib/admin-orders";
 import type { FormState } from "../actions";
-import { addNode, createUser, deleteExpiredUsers, deleteNode, deleteUser, expiredUsers, findUser, getHosts, resetAllUsage, listNodes, putHosts, modifyNode, modifyUser, reconnectNode, resetUsage, restartCore, revokeSubscription } from "@/lib/marzban";
-import { changePlanBody } from "@/lib/plans";
+import { addNode, createUser, deleteExpiredUsers, deleteNode, deleteUser, expiredUsers, findUser, getHosts, resetAllUsage, listNodes, putHosts, modifyNode, modifyUser, reconnectNode, resetUsage, restartCore, revokeSubscription, vlessInbounds } from "@/lib/marzban";
+import { changePlanBody, planInbounds } from "@/lib/plans";
 import { createUserBody, describeChanges, parseOnHoldDays, parseExpiredDays, parseNodeForm, parseUserForm, validateHosts, USERNAME_RE, type UserFields } from "@/lib/admin-users";
 import { formatBytes, formatExpire, RESET_LABEL } from "@/lib/format";
 import { findPlan } from "@/lib/plans";
@@ -532,7 +532,7 @@ export async function adminBindUser(_: FormState, form: FormData): Promise<FormS
   return r;
 }
 
-// 改套餐：按新套餐改 Marzban 上的流量上限、重置方式、设备数（ip=N），到期时间不动；记下现在的套餐，客人订阅页标题跟着变
+// 改套餐：按新套餐改 Marzban 上的流量上限、重置方式、设备数（ip=N）、档位对应的入站，到期时间不动；记下现在的套餐，客人订阅页标题跟着变
 export async function adminChangePlan(_: FormState, form: FormData): Promise<FormState> {
   const admin = await requireAdmin();
   const username = String(form.get("username") ?? "");
@@ -542,7 +542,9 @@ export async function adminChangePlan(_: FormState, form: FormData): Promise<For
   try {
     current = await findUser(username);
     if (!current) return { error: `Marzban 上没有 ${username}` };
-    await modifyUser(username, changePlanBody(current, plan));
+    const proOnly = site.proOnlyInbounds;
+    const vless = proOnly?.length ? planInbounds(plan, await vlessInbounds(), proOnly) : undefined;
+    await modifyUser(username, changePlanBody(current, plan, vless));
   } catch (e) {
     return { error: `改套餐失败：${errText(e)}` };
   }

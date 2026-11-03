@@ -63,6 +63,15 @@ export function nextUsername(customerId: number, existing: string[], wechat?: st
   return base && max === 0 ? base : `${prefix}${max + 1}`;
 }
 
+// 这个套餐该勾哪些 VLESS 入站。all 是 Marzban 上现有的全部 VLESS 入站（GET /api/inbounds）。
+// Pro 全勾；Basic 去掉 proOnly 里的。proOnly 空着表示不分档，返回 undefined：开通时照旧让 Marzban 全勾，续期不动入站
+export function planInbounds(plan: Plan, all: string[], proOnly: string[] | undefined): string[] | undefined {
+  if (!proOnly?.length) return undefined;
+  const tags = plan.pro ? all : all.filter((t) => !proOnly.includes(t));
+  if (!tags.length) throw new Error(`套餐 ${plan.id} 一个 VLESS 入站都分不到，检查 proOnlyInbounds 和 Marzban 上的入站`);
+  return tags;
+}
+
 const dataLimit = (plan: Plan) => (plan.dataGB === null ? 0 : plan.dataGB * GB); // Marzban 里 0 表示不限
 const resetStrategy = (plan: Plan) => (plan.dataGB !== null && plan.dataReset === "month" ? "month" : "no_reset");
 
@@ -70,12 +79,13 @@ const resetStrategy = (plan: Plan) => (plan.dataGB !== null && plan.dataReset ==
 // 入站：inbounds 必须明确写成 {}，Marzban 才会把所有 VLESS 入站（每个节点一个）都勾上。
 // 整个不写的话，Marzban 0.8.4 的校验不会运行（pydantic 不校验默认值），结果是一个入站都不勾，客人连不上。
 // 不点名具体入站，以后加新的 VLESS 入站，这里不用改，已开的用户也会自动带上。
-// 只开 VLESS，不开 Shadowsocks 等其他协议
-export function newUserBody(username: string, plan: Plan, now: number) {
+// 只开 VLESS，不开 Shadowsocks 等其他协议。
+// 分档时传 vless（planInbounds 算出来的），只勾这些入站
+export function newUserBody(username: string, plan: Plan, now: number, vless?: string[]) {
   return {
     username,
     proxies: { vless: { flow: "xtls-rprx-vision" } },
-    inbounds: {},
+    inbounds: vless ? { vless } : {},
     expire: now + plan.days * DAY,
     data_limit: dataLimit(plan),
     data_limit_reset_strategy: resetStrategy(plan),
@@ -84,18 +94,28 @@ export function newUserBody(username: string, plan: Plan, now: number) {
   };
 }
 
-// 后台「改套餐」用的 PUT /api/user/{username} 请求体：只按新套餐改流量上限、重置方式、设备数（备注里的 ip=N），到期时间不动
-export function changePlanBody(current: { note?: string | null }, plan: Plan) {
-  return { data_limit: dataLimit(plan), data_limit_reset_strategy: resetStrategy(plan), note: setIpNote(current.note, plan.ip) };
+// 改用户时的入站。Marzban 0.8.4 改用户时不会自动补全入站：没列出来的入站都会被取消勾选，
+// 所以 vless 必须是完整的列表（planInbounds 给的就是）；不分档时不传，入站不动
+const inboundsField = (vless?: string[]) => (vless ? { inbounds: { vless } } : {});
+
+// 后台「改套餐」用的 PUT /api/user/{username} 请求体：只按新套餐改流量上限、重置方式、设备数（备注里的 ip=N）、档位对应的入站，到期时间不动
+export function changePlanBody(current: { note?: string | null }, plan: Plan, vless?: string[]) {
+  return {
+    data_limit: dataLimit(plan),
+    data_limit_reset_strategy: resetStrategy(plan),
+    note: setIpNote(current.note, plan.ip),
+    ...inboundsField(vless),
+  };
 }
 
-// 续期用的 PUT /api/user/{username} 请求体。流量另外调 reset 接口清零
-export function renewUserBody(current: { expire: number | null; note?: string | null }, plan: Plan, now: number) {
+// 续期用的 PUT /api/user/{username} 请求体。流量另外调 reset 接口清零。入站按新套餐的档位改（Basic 续 Pro 就加上 Pro 的节点）
+export function renewUserBody(current: { expire: number | null; note?: string | null }, plan: Plan, now: number, vless?: string[]) {
   return {
     expire: renewedExpire(current.expire, plan.days, now),
     data_limit: dataLimit(plan),
     data_limit_reset_strategy: resetStrategy(plan),
     status: "active",
     note: setIpNote(current.note, plan.ip),
+    ...inboundsField(vless),
   };
 }

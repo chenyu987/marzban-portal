@@ -18,6 +18,8 @@ export type Plan = {
   ip: number; // 同时在用的 IP 数，写进 Marzban 备注 ip=N；0 表示不限
   // true：只能用兑换码开（比如免费体验），不在价目表和首页价格卡上，客人不能自己下单
   codeOnly?: boolean;
+  // true：Pro 档，能用全部 VLESS 入站；不写是 Basic 档，用不了 proOnlyInbounds 里的入站
+  pro?: boolean;
 };
 
 export type SiteConfig = {
@@ -66,6 +68,9 @@ export type SiteConfig = {
   currency: string;
   // 套餐列表。空着表示还没定，记账脚本就不能开通订阅
   plans: Plan[];
+  // 只给 Pro 套餐（pro: true）用的入站 tag。开通、续期、改套餐时 Basic 套餐会去掉这些入站，Pro 套餐勾上全部 VLESS 入站。
+  // 不写或空着：不分档，所有套餐都勾全部 VLESS 入站（续期、改套餐也不动入站）。新加的入站默认两档都有，只给 Pro 的要加进来
+  proOnlyInbounds?: string[];
   // 套餐页价目表上每一档怎么显示，按 Plan.group 对应，没写的档位只显示档位名和流量。
   // name：档位叫什么（订阅页、首页价格卡上显示），不写就用 Plan.group；title：价目表第一列的名字；lines：第二列的说明，每条一行；accent：说明第一行标红；
   // highlight：hot 名字格标红底、写上 hot，top 名字上加 👑、整行标红加粗；

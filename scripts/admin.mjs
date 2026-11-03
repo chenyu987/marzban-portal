@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { formatBytes, formatExpire } from "../lib/format.ts";
+import { site } from "../site.config.ts";
 
 export function fail(msg) {
   console.error(msg);
@@ -92,9 +93,15 @@ export function marzban(remote) {
       createUser: (body) => api("POST", "/user", body),
       modifyUser: (username, body) => api("PUT", `/user/${encodeURIComponent(username)}`, body),
       resetUsage: (username) => api("POST", `/user/${encodeURIComponent(username)}/reset`),
+      vlessInbounds: async () => ((await api("GET", "/inbounds")).vless ?? []).map((i) => i.tag),
+      proOnly: site.proOnlyInbounds,
     },
   };
 }
+
+// 确认前显示的档位（分档时才显示）
+export const tierText = (plan) =>
+  site.proOnlyInbounds?.length ? `，${plan.pro ? "Pro 档（全部节点）" : `Basic 档（不含 ${site.proOnlyInbounds.join("、")}）`}` : "";
 
 export const describeUser = (u) =>
   `到期 ${formatExpire(u.expire || null)}，流量 ${formatBytes(u.used_traffic)} / ${u.data_limit ? formatBytes(u.data_limit) : "不限"}，备注 ${u.note || "（空）"}`;

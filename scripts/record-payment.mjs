@@ -10,7 +10,7 @@ import { formatBytes, formatExpire, formatMoney, parseYuan, formatOrderNo } from
 import { findPlan, newUserBody, nextUsername, renewUserBody } from "../lib/plans.ts";
 import { provisionNew, provisionRenew } from "../lib/provision.ts";
 import { site } from "../site.config.ts";
-import { confirmYes, d1 as d1At, describeUser, fail, marzban, q } from "./admin.mjs";
+import { confirmYes, d1 as d1At, describeUser, fail, marzban, q, tierText } from "./admin.mjs";
 
 const USAGE = `用法:
   只记账:        npm run payment:record -- <客人邮箱> <金额（元）> [--note 备注] [--remote]
@@ -85,7 +85,7 @@ const now = Math.floor(Date.now() / 1000);
 const reward = Math.floor((amount * 10) / 100);
 console.log(`${remote ? "【线上库】" : "【本地库】"}给 ${c.email} 记一笔付款 ${formatMoney(amount)} 元${note ? `（${note}）` : ""}`);
 if (plan) {
-  console.log(`套餐：${plan.name}（${plan.id}），${plan.days} 天，${plan.dataGB === null ? "不限流量" : `${plan.dataGB} GB`}，${plan.ip ? `${plan.ip} 个 IP` : "不限 IP"}，标价 ${formatMoney(plan.price)} 元`);
+  console.log(`套餐：${plan.name}（${plan.id}），${plan.days} 天，${plan.dataGB === null ? "不限流量" : `${plan.dataGB} GB`}，${plan.ip ? `${plan.ip} 个 IP` : "不限 IP"}${tierText(plan)}，标价 ${formatMoney(plan.price)} 元`);
   if (amount !== plan.price) console.log("⚠️ 金额和套餐标价不一样，推荐奖励按记账金额算");
   console.log(`Marzban（${mz.url}）：`);
   if (action.kind === "new") {
