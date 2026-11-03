@@ -96,7 +96,7 @@ export async function confirmTransferOrder(
   };
 }
 
-// 取消等付款的单，下单时抵扣的余额退回
+// 取消等付款的单。抵扣的余额付款时才扣，取消了就不再占用（万一已经有扣款，一起退回）
 export async function cancelPendingOrder(orderId: number): Promise<AdminResult> {
   const r = await db().prepare("UPDATE orders SET status = 'cancelled' WHERE id = ? AND status = 'pending'").bind(orderId).run();
   if (r.meta.changes !== 1) return { error: `${await orderLabel(orderId)} 已经不是「等付款」了，刷新看看` };

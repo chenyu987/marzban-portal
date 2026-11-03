@@ -1,5 +1,5 @@
 // 主流程：注册 → 下单 → 我已付款（马上开通） → 快到期提醒 → 一键续费 → 忘记密码 → 管理员发重置链接 → 设新密码登录；
-// 另一条：余额付全款、余额抵扣一部分（取消后退回）、用兑换码续期；
+// 另一条：余额付全款、余额抵扣一部分（付款时才扣，取消就不占用）、用兑换码续期；
 // 还有管理后台：登录、对账（确认到账 / 没收到钱收回）、取消订单、客人管理（加减余额、重置链接、绑定订阅）、兑换码、操作日志。
 // 还有老客人：注册时微信号对上，管理员之前开的订阅自动出现在「我的订阅」，改微信号也跟着走。
 // 还有手机：右上角菜单、下单后弹出付款窗、买了还没用的订阅顶上引导看安装教程。
@@ -587,16 +587,33 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   await expect(card).toContainText("已用余额抵扣 ¥5");
   const orderId = (await card.locator(".card-title").innerText()).match(/\d{6}-\d{5}/)![0];
   expect(run(["orders", "--", "list", "20"])).toContain(orderId);
+  // 还没付款：余额不扣，只是被这张单占着，不能再拿去下别的单
+  await expect(page.getByLabel(/用余额抵扣/)).toHaveCount(0);
   await page.goto("/dashboard");
-  await expect(page.getByText("¥0.00")).toBeVisible();
+  await expect(page.getByText("¥5.00", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("balance-reserved")).toContainText("其中 ¥5.00 抵扣在还没付款的订单上");
 
-  // 客人取消：抵扣的余额退回
+  // 客人取消：不再占着
   await page.goto("/plans");
   await card.getByRole("button", { name: "取消这张单" }).click();
   await confirmOk(page);
   await expect(page.locator(".card.border")).toHaveCount(0);
   await page.goto("/dashboard");
-  await expect(page.getByText("¥5.00")).toBeVisible();
+  await expect(page.getByText("¥5.00", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("balance-reserved")).toHaveCount(0);
+
+  // 再下一单抵扣 ¥5，点「我已付款」开通后余额才扣成 ¥0
+  await page.goto("/plans");
+  await expect(page.getByLabel("用余额抵扣（剩 ¥5）")).toBeChecked();
+  await page.locator('button[value="p1-month"]').click();
+  await confirmOk(page);
+  const paidCard = page.locator(".card.border").first();
+  await expect(paidCard).toContainText("已用余额抵扣 ¥5");
+  await paidCard.getByLabel("支付宝", { exact: true }).check();
+  await paidCard.getByRole("button", { name: "我已付款" }).click();
+  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page.getByText("¥0.00", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("balance-reserved")).toHaveCount(0);
 
   // 管理员生成兑换码，客人输入后给这个订阅续期
   await page.goto("/plans");

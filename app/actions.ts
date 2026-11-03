@@ -14,7 +14,7 @@ import { provisionTarget } from "@/lib/orders";
 import { confirmTransferOrder, orderLabel } from "@/lib/admin-orders";
 import { site } from "@/site.config";
 import { RENEW_REFRESH_HINT } from "@/lib/clients";
-import { BALANCE_SQL } from "@/lib/balance";
+import { AVAILABLE_SQL, LEDGER_SQL, RESERVED_SQL } from "@/lib/balance";
 import { canSendMail, sendMail } from "@/lib/mail";
 import { hashResetToken, newResetToken, RESET_MAX_PER_HOUR, RESET_TTL_SELF, resetLink } from "@/lib/reset";
 import { getT } from "@/lib/lang";
@@ -278,8 +278,9 @@ export async function createOrder(prev: FormState, form: FormData): Promise<Form
   const { t } = await getT();
   const plan = findPlan(forSale(site.plans), String(form.get("plan") ?? ""));
   if (!plan) return { error: t("这个套餐已经下架了，请刷新页面再选", "This plan is no longer available. Please refresh and choose again") };
-  const balanceRow = await db().prepare(BALANCE_SQL).bind(customer.id).first<{ balance: number }>();
-  const balance = form.get("useBalance") === "1" ? Math.max(0, balanceRow?.balance ?? 0) : 0;
+  // 能用的余额 = 余额 - 已经抵扣在别的没付款单上的
+  const avail = await db().prepare(AVAILABLE_SQL).bind(customer.id).first<{ balance: number; reserved: number }>();
+  const balance = form.get("useBalance") === "1" ? Math.max(0, (avail?.balance ?? 0) - (avail?.reserved ?? 0)) : 0;
   if (balance >= plan.price) return buyWithBalance(prev, form);
   if (site.payments.length === 0) return { error: balance > 0 ? t("余额不够付这个套餐", "Not enough balance for this plan") : t("现在还不能在线下单，请用兑换码", "Online ordering isn't available yet. Please use a redeem code") };
   const target = String(form.get("target") ?? "new");
@@ -297,36 +298,26 @@ export async function createOrder(prev: FormState, form: FormData): Promise<Form
     .first<{ n: number }>();
   if ((open?.n ?? 0) >= MAX_OPEN_ORDERS) return { error: t("你还有没付款的单，先付款或者取消不要的单再下新的", "You have unpaid orders. Pay or cancel them before placing a new one") };
 
-  // 抵扣：先建单（记下用了多少余额），再用带条件的 INSERT 扣余额；余额刚好变了扣不了，就删掉这张单让客人重来
+  // 抵扣的余额只记在单上，付款时才扣（migrations/0022 的触发器），没付款的单不会让余额变少。
+  // 建单是一条带条件的 INSERT：能用的余额刚好变了（比如同时下了另一张单）就插不进去，让客人重来
   const now = nowSec();
   const order = await db()
     .prepare(
       `INSERT INTO orders (customer_id, amount, balance_used, method, status, plan_id, marzban_username, created_at)
-       VALUES (?, ?, ?, 'transfer', 'pending', ?, ?, ?) RETURNING id`,
+       SELECT ?1, ?2, ?3, 'transfer', 'pending', ?4, ?5, ?6
+       WHERE ?3 = 0 OR ${LEDGER_SQL} - ${RESERVED_SQL} >= ?3
+       RETURNING id`,
     )
     .bind(customer.id, plan.price, balance, plan.id, target === "new" ? null : target, now)
     .first<{ id: number }>();
-  if (balance > 0) {
-    const charge = await db()
-      .prepare(
-        `INSERT INTO balance_entries (customer_id, amount, kind, order_id, created_at)
-         SELECT ?1, -?2, 'purchase', ?3, ?4
-         WHERE (SELECT COALESCE(SUM(amount), 0) FROM balance_entries WHERE customer_id = ?1) >= ?2`,
-      )
-      .bind(customer.id, balance, order!.id, now)
-      .run();
-    if (charge.meta.changes !== 1) {
-      await db().prepare("DELETE FROM orders WHERE id = ?").bind(order!.id).run();
-      return { error: t("余额刚刚变了，请刷新页面再下单", "Your balance just changed. Please refresh and order again") };
-    }
-  }
+  if (!order) return { error: t("余额刚刚变了，请刷新页面再下单", "Your balance just changed. Please refresh and order again") };
   revalidatePath("/plans");
   revalidatePath("/dashboard");
   // orderId：手机上下单后弹出这张单的付款窗（订单卡片在价目表上面，不弹的话客人看不到）
   return { ok: t("下单成功，请按上面的说明付款", "Order placed. Please pay as described above"), orderId: order!.id };
 }
 
-// 客人取消自己还没付款的单，下单时抵扣的余额退回。点过「我已付款」的、管理员已经在开通的（processing）都不能取消，免得付了钱又把单取消掉
+// 客人取消自己还没付款的单。抵扣的余额付款时才扣，取消了就不再占用。点过「我已付款」的、管理员已经在开通的（processing）都不能取消，免得付了钱又把单取消掉
 export async function cancelOrder(form: FormData) {
   const customer = await requireCustomer();
   const id = Number(form.get("id"));
@@ -337,7 +328,7 @@ export async function cancelOrder(form: FormData) {
     )
     .bind(id, customer.id)
     .run();
-  // 下单时抵扣的余额退回
+  // 付款前不会有扣款；万一有（比如开通到一半退回的单），一起退回
   if (r.meta.changes === 1) {
     await db().prepare("DELETE FROM balance_entries WHERE order_id = ? AND kind = 'purchase'").bind(id).run();
   }
@@ -488,12 +479,12 @@ export async function buyWithBalance(_: FormState, form: FormData): Promise<Form
     .bind(customer.id, plan.price, plan.price, plan.id, target === "new" ? null : target, now)
     .first<{ id: number }>();
   const orderId = order!.id;
-  // 扣款是一条带条件的 INSERT：余额不够就插不进去。两个请求同时买，也不会把余额扣成负数
+  // 扣款是一条带条件的 INSERT：能用的余额（减掉抵扣在没付款单上的）不够就插不进去。两个请求同时买，也不会把余额扣成负数
   const charge = await db()
     .prepare(
       `INSERT INTO balance_entries (customer_id, amount, kind, order_id, created_at)
        SELECT ?1, -?2, 'purchase', ?3, ?4
-       WHERE (SELECT COALESCE(SUM(amount), 0) FROM balance_entries WHERE customer_id = ?1) >= ?2`,
+       WHERE ${LEDGER_SQL} - ${RESERVED_SQL} >= ?2`,
     )
     .bind(customer.id, plan.price, orderId, now)
     .run();

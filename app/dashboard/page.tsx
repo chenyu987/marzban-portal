@@ -3,7 +3,7 @@ import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
 import { getUser, type MarzbanUser } from "@/lib/marzban";
 import { formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, needsRenewal, resetLabel, statusLabel, timeLeft } from "@/lib/format";
-import { BALANCE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
+import { AVAILABLE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
 import { site } from "@/site.config";
 import { describePlan, findPlan } from "@/lib/plans";
 import BindForm from "./BindForm";
@@ -39,7 +39,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     .bind(customer.id)
     .all<{ email: string; wechat: string | null; created_at: number; earned: number }>();
   const friend = (r: { email: string; wechat?: string | null }) => (r.wechat ? t(`微信 ${r.wechat}`, `WeChat ${r.wechat}`) : maskEmail(r.email));
-  const balance = await db().prepare(BALANCE_SQL).bind(customer.id).first<{ balance: number }>();
+  // reserved：抵扣在还没付款的单上的部分，付款时才扣，余额里还算着
+  const balance = await db().prepare(AVAILABLE_SQL).bind(customer.id).first<{ balance: number; reserved: number }>();
   const { results: rewards } = await db().prepare(REFERRAL_REWARDS_SQL).bind(customer.id).all<RewardRow>();
   const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
   // 每个订阅现在的套餐（付款时自动记，管理员改套餐也改这里），用来当卡片标题；没记过的老订阅显示「我的订阅」
@@ -142,6 +143,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           code={customer.referral_code}
           referrals={referred.map((r) => ({ email: friend(r), createdAt: formatDate(r.created_at, lang), earned: money(r.earned) }))}
           balance={money(balance?.balance ?? 0)}
+          reserved={balance?.reserved ? money(balance.reserved) : null}
           rewards={rewards.map((r) => ({
             email: friend(r),
             date: formatDate(r.created_at, lang),

@@ -7,9 +7,10 @@ export type Referral = { email: string; createdAt: string; earned: string };
 export type Reward = { email: string; date: string; paid: string; reward: string };
 
 // 推荐链接用当前访问的域名拼，换域名或者在本地测试都不用改配置
-type Props = { code: string; referrals: Referral[]; balance: string; rewards: Reward[] };
+// reserved：抵扣在还没付款的单上的余额，没有是 null
+type Props = { code: string; referrals: Referral[]; balance: string; reserved: string | null; rewards: Reward[] };
 
-export default function ReferralCard({ code, referrals, balance, rewards }: Props) {
+export default function ReferralCard({ code, referrals, balance, reserved, rewards }: Props) {
   const [link, setLink] = useState("");
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
   const t = useT();
@@ -37,6 +38,14 @@ export default function ReferralCard({ code, referrals, balance, rewards }: Prop
           <div className="text-sm text-base-content/60">{t("我的余额", "My balance")}</div>
           <div className="text-2xl font-bold">{balance}</div>
           <div className="text-sm text-base-content/60">{t("买套餐或续费时，余额可以直接抵扣套餐费用。", "Your balance can be used to pay for plans and renewals.")}</div>
+          {reserved && (
+            <div className="text-sm text-base-content/60" data-testid="balance-reserved">
+              {t(
+                `其中 ${reserved} 抵扣在还没付款的订单上，付款后才扣；不要了在「购买/续费」里取消就行。`,
+                `${reserved} of it is applied to an unpaid order and only deducted once you pay; cancel the order under Buy / Renew if you don't need it.`,
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

@@ -2,7 +2,7 @@ import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
 import { formatDate, formatExpire, formatMoney, formatSubCode, formatOrderNo } from "@/lib/format";
 import { describePlan, findPlan, forSale } from "@/lib/plans";
-import { BALANCE_SQL } from "@/lib/balance";
+import { AVAILABLE_SQL } from "@/lib/balance";
 import { site } from "@/site.config";
 import type { Plan } from "@/site.config.example";
 import OrderForm, { type PlanGroup } from "./OrderForm";
@@ -45,9 +45,10 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
         claimed_at: number | null;
         created_at: number;
       }>(),
-    db().prepare(BALANCE_SQL).bind(customer.id).first<{ balance: number }>(),
+    db().prepare(AVAILABLE_SQL).bind(customer.id).first<{ balance: number; reserved: number }>(),
   ]);
-  const balance = balanceRow?.balance ?? 0;
+  // 下单时能用的余额：已经抵扣在没付款的单上的不能再用
+  const balance = Math.max(0, (balanceRow?.balance ?? 0) - (balanceRow?.reserved ?? 0));
   // 下拉框的值是 Marzban 用户名（后端用），给客人看的是订阅编号
   const subscriptions = subs.map((r) => ({ username: r.marzban_username, label: formatSubCode(r.code) }));
   const renewSub = typeof renew === "string" ? subscriptions.find((s) => s.username === renew) : undefined;
