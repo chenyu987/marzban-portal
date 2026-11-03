@@ -12,8 +12,10 @@ import { site } from "../site.config";
 
 const COOKIE = "asid";
 const TTL = 12 * 3600;
+const SEEN_EVERY = 5 * 60;
 
-export type Admin = { id: number; email: string };
+// sid：这次登录（admin_sessions.id，token 的哈希），账户页用来标出「这台设备」、退出别的设备
+export type Admin = { id: number; email: string; sid: string };
 
 async function sha256(s: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
@@ -39,17 +41,22 @@ export async function currentAdmin(): Promise<Admin | null> {
   const accessEmail = await requireAccess();
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
+  const sid = await sha256(token);
   const a = await db()
     .prepare(
-      `SELECT a.id, a.email FROM admin_sessions s JOIN admins a ON a.id = s.admin_id
+      `SELECT a.id, a.email, s.last_seen_at FROM admin_sessions s JOIN admins a ON a.id = s.admin_id
        WHERE s.id = ? AND s.expires_at > ?`,
     )
-    .bind(await sha256(token), nowSec())
-    .first<Admin>();
+    .bind(sid, nowSec())
+    .first<{ id: number; email: string; last_seen_at: number | null }>();
   if (!a) return null;
   // 两层必须是同一个人
   if (accessEmail !== null && a.email.toLowerCase() !== accessEmail) return null;
-  return a;
+  // 「最后活动」：5 分钟内不重复写
+  if (!a.last_seen_at || nowSec() - a.last_seen_at > SEEN_EVERY) {
+    await db().prepare("UPDATE admin_sessions SET last_seen_at = ? WHERE id = ?").bind(nowSec(), sid).run();
+  }
+  return { id: a.id, email: a.email, sid };
 }
 
 export async function requireAdmin(): Promise<Admin> {
@@ -61,11 +68,14 @@ export async function requireAdmin(): Promise<Admin> {
 export async function createAdminSession(adminId: number) {
   const token = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
   const now = nowSec();
+  const h = await headers();
+  const ua = (h.get("user-agent") ?? "").slice(0, 300);
+  const ip = h.get("cf-connecting-ip") ?? "local";
   await db().batch([
     db().prepare("DELETE FROM admin_sessions WHERE expires_at <= ?").bind(now),
     db()
-      .prepare("INSERT INTO admin_sessions (id, admin_id, expires_at, created_at) VALUES (?, ?, ?, ?)")
-      .bind(await sha256(token), adminId, now + TTL, now),
+      .prepare("INSERT INTO admin_sessions (id, admin_id, expires_at, created_at, user_agent, ip, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(await sha256(token), adminId, now + TTL, now, ua, ip, now),
     db().prepare("UPDATE admins SET last_login_at = ? WHERE id = ?").bind(now, adminId),
   ]);
   (await cookies()).set(COOKIE, token, {
@@ -84,8 +94,24 @@ export async function destroyAdminSession() {
   jar.delete({ name: COOKIE, path: "/admin" });
 }
 
+// 退出这个管理员别的登录（改密码、账户页「退出其他设备」用），返回退出了几个
+export async function destroyOtherAdminSessions(admin: Admin): Promise<number> {
+  const r = await db().prepare("DELETE FROM admin_sessions WHERE admin_id = ? AND id != ?").bind(admin.id, admin.sid).run();
+  return r.meta.changes ?? 0;
+}
+
+// 后台偏好（账户页设置）。没设过是 null，用默认
+export type AdminPrefs = { pageSize: number | null; sort: string | null; time: "relative" | "absolute" };
+export async function adminPrefs(adminId: number): Promise<AdminPrefs> {
+  const r = await db()
+    .prepare("SELECT pref_page_size, pref_sort, pref_time FROM admins WHERE id = ?")
+    .bind(adminId)
+    .first<{ pref_page_size: number | null; pref_sort: string | null; pref_time: string | null }>();
+  return { pageSize: r?.pref_page_size ?? null, sort: r?.pref_sort ?? null, time: r?.pref_time === "absolute" ? "absolute" : "relative" };
+}
+
 // 操作日志：谁、什么时候、对谁、做了什么
-export async function logAdmin(admin: Admin | { id: null; email: string }, action: string, target: string | null, detail?: string) {
+export async function logAdmin(admin: { id: number | null; email: string }, action: string, target: string | null, detail?: string) {
   const ip = (await headers()).get("cf-connecting-ip") ?? "local";
   await db()
     .prepare("INSERT INTO admin_logs (admin_id, admin_email, action, target, detail, ip, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")

@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
-import { getUser, type MarzbanUser } from "@/lib/marzban";
-import { formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, canRenewEarly, needsRenewal, resetLabel, statusLabel, timeLeft } from "@/lib/format";
+import { findUser, type MarzbanUser } from "@/lib/marzban";
+import { formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, canRenewEarly, isExpiredSub, needsRenewal, resetLabel, statusLabel, timeLeft } from "@/lib/format";
 import { AVAILABLE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
 import { site } from "@/site.config";
 import { describePlan, findPlan } from "@/lib/plans";
 import BindForm from "./BindForm";
+import HideButton from "./HideButton";
 import SubscriptionLink from "./SubscriptionLink";
 import ReferralCard from "./ReferralCard";
 import ContactSupport from "../ContactSupport";
@@ -24,9 +25,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const { renewed } = await searchParams;
   const { t, lang } = await getT();
   const { results } = await db()
-    .prepare("SELECT marzban_username, code FROM subscriptions WHERE customer_id = ? ORDER BY id")
+    .prepare("SELECT marzban_username, code, hidden_at FROM subscriptions WHERE customer_id = ? ORDER BY id")
     .bind(customer.id)
-    .all<{ marzban_username: string; code: string | null }>();
+    .all<{ marzban_username: string; code: string | null; hidden_at: number | null }>();
   // 被推荐的人给推荐人看微信号（推荐人本来就认识）；没填微信号的老账号显示打码后的邮箱。
   // earned：这个朋友付的款一共给推荐人返了多少
   const { results: referred } = await db()
@@ -53,16 +54,29 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     .all<{ marzban_username: string; plan_id: string }>();
   const planOf = new Map(paid.map((o) => [o.marzban_username, o.plan_id]));
 
-  // 一个订阅查失败不影响其他订阅显示
-  const subs = await Promise.all(
-    results.map(async ({ marzban_username, code }) => {
+  // 一个订阅查失败不影响其他订阅显示。gone：Marzban 上已经没有这个用户（被删了）；user 为 null 且不是 gone：暂时连不上
+  const now = Date.now();
+  const all = await Promise.all(
+    results.map(async ({ marzban_username, code, hidden_at }) => {
       try {
-        return { username: marzban_username, code, user: await getUser(marzban_username) };
+        const user = await findUser(marzban_username);
+        return { username: marzban_username, code, hiddenAt: hidden_at, user, gone: !user };
       } catch {
-        return { username: marzban_username, code, user: null };
+        return { username: marzban_username, code, hiddenAt: hidden_at, user: null, gone: false };
       }
     }),
   );
+  // 客人隐藏过的订阅，只在还是过期 / 已删除时才藏
+  const isHidden = (s: (typeof all)[number]) => s.hiddenAt !== null && (s.gone || (!!s.user && isExpiredSub(s.user, now)));
+  // 隐藏过、后来又续上了的：清掉隐藏标记，以后再过期或被删时照常显示，让客人自己决定要不要再藏
+  const revived = all.filter((s) => s.hiddenAt !== null && s.user && !isExpiredSub(s.user, now));
+  if (revived.length) {
+    await db().batch(
+      revived.map((s) => db().prepare("UPDATE subscriptions SET hidden_at = NULL WHERE customer_id = ? AND marzban_username = ?").bind(customer.id, s.username)),
+    );
+  }
+  const subs = all.filter((s) => !isHidden(s));
+  const hidden = all.filter(isHidden);
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16">
@@ -128,9 +142,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </div>
           </div>
         )}
-        {subs.map(({ username, code, user }) =>
+        {subs.map(({ username, code, user, gone }) =>
           user ? (
             <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} lang={lang} />
+          ) : gone ? (
+            <GoneCard key={username} username={username} code={code} lang={lang} />
           ) : (
             <UnavailableCard key={username} code={code} lang={lang} />
           ),
@@ -154,6 +170,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </div>
 
       {subs.length > 0 && <BindForm compact />}
+
+      {hidden.length > 0 && (
+        <details className="mt-6 text-sm text-base-content/60" data-testid="hidden-subs">
+          <summary className="cursor-pointer">{t(`已隐藏 ${hidden.length} 个过期或已删除的订阅`, `${hidden.length} hidden expired or removed subscription(s)`)}</summary>
+          <ul className="mt-2 space-y-1">
+            {hidden.map((h) => (
+              <li key={h.username} className="flex items-center justify-between gap-2">
+                <span>
+                  {t("订阅编号", "Subscription ID")} {formatSubCode(h.code)}
+                  <span className="ml-2 text-base-content/40">{h.gone ? t("已删除", "removed") : t("已过期", "expired")}</span>
+                </span>
+                <HideButton username={h.username} unhide />
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }
@@ -277,7 +310,10 @@ function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; cod
         )}
 
         <SubscriptionLink username={user.username} url={user.subscription_url} />
-        <SubscriptionId code={code} lang={lang} />
+        <div className="flex items-center justify-between gap-2">
+          {expired ? <HideButton username={user.username} /> : <span />}
+          <SubscriptionId code={code} lang={lang} />
+        </div>
       </div>
     </div>
   );
@@ -298,6 +334,27 @@ function Ring({ pct, tone, children }: { pct: number; tone: string; children: Re
   );
 }
 
+// Marzban 上已经没有这个用户了（管理员删了）。直说，客人可以把它从主页隐藏，记录留着
+function GoneCard({ username, code, lang }: { username: string; code: string | null; lang: Lang }) {
+  const t = makeT(lang);
+  return (
+    <div className="card bg-base-100 shadow-sm" data-testid="sub-gone">
+      <div className="card-body">
+        <h2 className="card-title">{t("我的订阅", "My subscription")}</h2>
+        <div role="alert" className="alert alert-soft">
+          {t("查不到这个订阅了，可能已经删除。如需联系客服，请报上下方订阅编号。", "This subscription no longer exists; it may have been removed. If you contact support, please give the subscription ID below.")}
+        </div>
+        <ContactSupport />
+        <div className="flex items-center justify-between gap-2">
+          <HideButton username={username} />
+          <SubscriptionId code={code} lang={lang} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Marzban 暂时连不上（不是删了）：只能等
 function UnavailableCard({ code, lang }: { code: string | null; lang: Lang }) {
   const t = makeT(lang);
   return (
@@ -306,8 +363,8 @@ function UnavailableCard({ code, lang }: { code: string | null; lang: Lang }) {
         <h2 className="card-title">{t("我的订阅", "My subscription")}</h2>
         <div role="alert" className="alert alert-warning alert-soft">
           {t(
-            "暂时查不到这个订阅的信息，请稍后刷新。一直这样的话请联系客服，报上下面的订阅编号。",
-            "Can't load this subscription right now. Please refresh in a moment; if it keeps happening, contact support with the subscription ID below.",
+            "暂时连不上服务器，查不到这个订阅的信息，请稍后刷新。如需联系客服，请报上下方订阅编号。",
+            "Can't reach the server to load this subscription. Please refresh in a moment; if you contact support, give the subscription ID below.",
           )}
         </div>
         <ContactSupport />

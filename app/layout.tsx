@@ -10,6 +10,7 @@ import { cookies } from "next/headers";
 import { THEME_COOKIE, parseTheme, themeAttr } from "@/lib/theme";
 import { LOCALE } from "@/lib/i18n";
 import { LangProvider } from "./LangContext";
+import HideOnAdmin from "./HideOnAdmin";
 import LangSwitch from "./LangSwitch";
 import WechatHint from "./WechatHint";
 import "./globals.css";
@@ -37,6 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <WechatHint />
         <div className="flex-1">{children}</div>
         <footer className="flex flex-col items-center gap-3 border-t border-base-300/60 px-4 py-8 text-sm text-base-content/60">
+          <HideOnAdmin>
           <nav className="flex flex-wrap justify-center gap-x-5 gap-y-1">
             <Link href="/" className="link link-hover">
               {t("首页", "Home")}
@@ -53,6 +55,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </nav>
           {(site.contactEmail || site.supportWechat) && <ContactSupport className="justify-center" />}
           <LangSwitch />
+          </HideOnAdmin>
           <p className="text-xs text-base-content/40">
             © {new Date().getFullYear()} {site.brand}
           </p>

@@ -16,6 +16,11 @@ export function formatBytes(n: number): string {
 }
 
 // 到期时间按北京时间显示
+// 已经过期的订阅（客人可以在主页隐藏它）：Marzban 标成 expired，或者到期时间已经过了
+export function isExpiredSub(user: { status: string; expire: number | null }, nowMs: number): boolean {
+  return user.status === "expired" || (!!user.expire && user.expire * 1000 <= nowMs);
+}
+
 export function formatExpire(expire: number | null, lang: Lang = "zh"): string {
   if (!expire) return lang === "en" ? "Never" : "永不到期";
   return new Date(expire * 1000).toLocaleString(LOCALE[lang], {

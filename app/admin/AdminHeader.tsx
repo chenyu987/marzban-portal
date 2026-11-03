@@ -11,7 +11,11 @@ export default function AdminHeader({ email }: { email: string }) {
         管理后台
       </Link>
       <AdminNav />
-      <span className="hidden shrink-0 text-sm text-base-content/60 lg:inline">{email}</span>
+      {/* 点邮箱进「我的账户」；窄屏不放邮箱，写「账户」 */}
+      <Link href="/admin/account" className="btn btn-ghost btn-sm shrink-0 font-normal text-base-content/70" aria-label="我的账户">
+        <span className="hidden lg:inline">{email}</span>
+        <span className="lg:hidden">账户</span>
+      </Link>
       <form action={adminLogout} className="shrink-0">
         <button className="btn btn-ghost btn-sm">退出</button>
       </form>

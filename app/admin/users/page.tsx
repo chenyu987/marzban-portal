@@ -1,18 +1,17 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/admin";
+import { adminPrefs, requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
 import { getSystem, listUsers, type MarzbanUser, type SystemStats, type UserStatus } from "@/lib/marzban";
 import { formatBytes, formatExpire, RESET_LABEL, STATUS_LABEL } from "@/lib/format";
-import { onlineState, SORTS, STATUS_FILTERS } from "@/lib/admin-users";
+import { expireRelative, onlineState, parsePageSize, PAGE_SIZES, SORTS, STATUS_FILTERS } from "@/lib/admin-users";
 import AdminHeader from "../AdminHeader";
 import { CustomerLink } from "../Links";
 import { findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
 import BulkActions from "./BulkActions";
+import PageSize from "./PageSize";
 
 export const dynamic = "force-dynamic";
-
-const PAGE_SIZE = 20;
 
 // Marzban 用户列表：直接查 Marzban，和面板是同一份数据。能按用户名、备注搜，按状态筛，排序，翻页
 export default async function UsersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -21,8 +20,13 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const str = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string).trim() : "");
   const q = str("q");
   const status = (STATUS_FILTERS as readonly string[]).includes(str("status")) ? (str("status") as UserStatus) : undefined;
-  const sort = str("sort") in SORTS ? str("sort") : "-created_at";
+  // 网址里没带的，用管理员在「我的账户」里设的偏好
+  const prefs = await adminPrefs(admin.id);
+  const defaultSort = prefs.sort && prefs.sort in SORTS ? prefs.sort : "-created_at";
+  const defaultSize = prefs.pageSize && (PAGE_SIZES as readonly number[]).includes(prefs.pageSize) ? prefs.pageSize : parsePageSize("");
+  const sort = str("sort") in SORTS ? str("sort") : defaultSort;
   const page = Math.max(1, Number.parseInt(str("page"), 10) || 1);
+  const PAGE_SIZE = str("size") ? parsePageSize(str("size")) : defaultSize;
 
   let data: { users: MarzbanUser[]; total: number } | null = null;
   let system: SystemStats | null = null;
@@ -41,24 +45,26 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const owners = new Map<string, { id: number; email: string; wechat: string | null }>();
   const legacyWechat = new Map<string, string>();
   const planOf = new Map<string, string>();
+  // D1 一条语句最多绑 100 个参数，名单整个当一个 JSON 传进去
+  const namesJson = JSON.stringify(names);
   if (names.length) {
     const { results } = await db()
       .prepare(
         `SELECT s.marzban_username, c.id, c.email, c.wechat FROM subscriptions s JOIN customers c ON c.id = s.customer_id
-         WHERE s.marzban_username IN (${names.map(() => "?").join(",")})`,
+         WHERE s.marzban_username IN (SELECT value FROM json_each(?))`,
       )
-      .bind(...names)
+      .bind(namesJson)
       .all<{ marzban_username: string; id: number; email: string; wechat: string | null }>();
     for (const r of results) owners.set(r.marzban_username, r);
     // 没绑客人的老订阅：显示记着的微信号
     const { results: old } = await db()
-      .prepare(`SELECT marzban_username, wechat FROM marzban_wechat WHERE marzban_username IN (${names.map(() => "?").join(",")})`)
-      .bind(...names)
+      .prepare(`SELECT marzban_username, wechat FROM marzban_wechat WHERE marzban_username IN (SELECT value FROM json_each(?))`)
+      .bind(namesJson)
       .all<{ marzban_username: string; wechat: string }>();
     for (const r of old) legacyWechat.set(r.marzban_username, r.wechat);
     const { results: plans } = await db()
-      .prepare(`SELECT marzban_username, plan_id FROM subscription_plans WHERE marzban_username IN (${names.map(() => "?").join(",")})`)
-      .bind(...names)
+      .prepare(`SELECT marzban_username, plan_id FROM subscription_plans WHERE marzban_username IN (SELECT value FROM json_each(?))`)
+      .bind(namesJson)
       .all<{ marzban_username: string; plan_id: string }>();
     for (const r of plans) planOf.set(r.marzban_username, findPlan(site.plans, r.plan_id)?.group ?? r.plan_id);
   }
@@ -68,7 +74,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     const qs = new URLSearchParams();
     if (q) qs.set("q", q);
     if (status) qs.set("status", status);
-    if (sort !== "-created_at") qs.set("sort", sort);
+    if (sort !== defaultSort) qs.set("sort", sort);
+    if (PAGE_SIZE !== defaultSize) qs.set("size", String(PAGE_SIZE));
     if (p > 1) qs.set("page", String(p));
     const s = qs.toString();
     return `/admin/users${s ? `?${s}` : ""}`;
@@ -129,6 +136,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
             </option>
           ))}
         </select>
+        {PAGE_SIZE !== defaultSize && <input type="hidden" name="size" value={PAGE_SIZE} />}
         <button className="btn btn-sm">搜索</button>
       </form>
 
@@ -192,7 +200,9 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                     <td>
                       <span className={`badge badge-sm ${st.badge}`}>{st.text}</span>
                     </td>
-                    <td className="whitespace-nowrap">{formatExpire(u.expire)}</td>
+                    <td className="whitespace-nowrap" title={u.expire && prefs.time === "relative" ? formatExpire(u.expire) : undefined}>
+                      {prefs.time === "absolute" ? formatExpire(u.expire) : expireRelative(u.expire, now)}
+                    </td>
                     <td className="whitespace-nowrap">
                       {formatBytes(u.used_traffic)} / {u.data_limit ? formatBytes(u.data_limit) : "不限"}
                       {u.data_limit ? <div className="text-xs text-base-content/50">{RESET_LABEL[u.data_limit_reset_strategy ?? ""] ?? "不重置"}</div> : null}
@@ -204,10 +214,13 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
             </tbody>
           </table>
           {data.users.length === 0 && <p className="py-4 text-sm text-base-content/60">没有符合条件的订阅。</p>}
-          <div className="mt-4 flex items-center justify-between text-sm">
-            <span className="text-base-content/60">
-              共 {data.total} 个，第 {page} / {pages} 页
-            </span>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm">
+            <div className="flex items-center gap-4">
+              <PageSize size={PAGE_SIZE} />
+              <span className="text-base-content/60">
+                共 {data.total} 个，第 {page} / {pages} 页
+              </span>
+            </div>
             <div className="join">
               {page > 1 && (
                 <Link href={href(page - 1)} className="btn btn-sm join-item">

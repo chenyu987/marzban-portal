@@ -272,6 +272,53 @@ test("手机上：右上角菜单能切页面、能退出；买了还没连过�
   await ctx.close();
 });
 
+test("过期、被删掉的订阅能从主页隐藏，记录留着；又续上了自动重新显示", async ({ page }) => {
+  const stamp = Date.now();
+  const wechat = `e2e_hide_${stamp}`;
+  const now = Math.floor(Date.now() / 1000);
+  await mockMarzban("POST", "/user", { username: wechat, expire: now - 86400 });
+  await page.goto("/register");
+  await page.getByPlaceholder("邮箱").fill(`e2e-hide-${stamp}@example.test`);
+  await page.getByPlaceholder("密码（至少 8 位）").fill("E2eTest-1234");
+  await page.getByPlaceholder("微信号").fill(wechat);
+  await page.getByRole("button", { name: "注册" }).click();
+  await expect(page).toHaveURL(/\/dashboard/);
+  const confirm = page.getByRole("dialog", { name: "确认" });
+
+  // 过期的：卡片底下有「从主页隐藏」，确认后不显示，底部能重新显示
+  await page.getByRole("button", { name: "从主页隐藏" }).click();
+  await confirm.getByRole("button", { name: "隐藏" }).click();
+  await expect(page.getByTestId("sub-id")).toHaveCount(0);
+  const hidden = page.getByTestId("hidden-subs");
+  await expect(hidden).toContainText("已隐藏 1 个");
+  await expect(hidden).toContainText("已过期");
+  expect(query(`SELECT hidden_at FROM subscriptions WHERE marzban_username = '${wechat}'`)[0].hidden_at).toBeTruthy();
+  await hidden.locator("summary").click();
+  await hidden.getByRole("button", { name: "重新显示" }).click();
+  await expect(page.getByTestId("sub-id")).toBeVisible();
+  await expect(page.getByTestId("hidden-subs")).toHaveCount(0);
+
+  // 再隐藏一次，然后续上了：自动重新显示，不用客人去点
+  await page.getByRole("button", { name: "从主页隐藏" }).click();
+  await confirm.getByRole("button", { name: "隐藏" }).click();
+  await expect(page.getByTestId("sub-id")).toHaveCount(0);
+  await mockMarzban("PUT", `/user/${wechat}`, { expire: now + 30 * 86400, status: "active" });
+  await page.goto("/dashboard");
+  await expect(page.getByTestId("sub-id")).toBeVisible();
+  // 没过期的订阅没有隐藏按钮
+  await expect(page.getByRole("button", { name: "从主页隐藏" })).toHaveCount(0);
+
+  // Marzban 上删掉了：直说查不到了，也能隐藏；subscriptions 那一行还在
+  await mockMarzban("DELETE", `/user/${wechat}`);
+  await page.goto("/dashboard");
+  await expect(page.getByTestId("sub-gone")).toContainText("查不到这个订阅了");
+  await page.getByRole("button", { name: "从主页隐藏" }).click();
+  await confirm.getByRole("button", { name: "隐藏" }).click();
+  await expect(page.getByTestId("sub-gone")).toHaveCount(0);
+  await expect(page.getByTestId("hidden-subs")).toContainText("已删除");
+  expect(query(`SELECT 1 FROM subscriptions WHERE marzban_username = '${wechat}'`)).toHaveLength(1);
+});
+
 test("手机上下单：付款窗从底部弹出来，能关掉、刷新不再弹，在弹窗里点我已付款就开通", async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 402, height: 874 }, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();
@@ -882,6 +929,8 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
 
   await admin.goto(`/admin/users?q=${mzUser}`);
   await expect(admin.getByTestId("marzban-user")).toHaveCount(1);
+  // 客人和套餐是按名单一次查 D1 的（json_each），要能对上
+  await expect(admin.getByTestId("marzban-user")).toContainText("高速版");
   // 用户名前的在线圆点，照 Marzban：没连过是空心，连上了是绿的「在线」
   await expect(admin.getByTestId("marzban-user").locator("[data-online]")).toHaveAttribute("data-online", "never");
   await expect(admin.getByTestId("marzban-user")).toContainText("没连过");
@@ -889,6 +938,11 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await admin.reload();
   await expect(admin.getByTestId("marzban-user").locator("[data-online]")).toHaveAttribute("data-online", "online");
   await expect(admin.getByTestId("marzban-user")).toContainText("在线");
+  // 每页多少个：换成 200，网址带上 size，搜索条件还在
+  await admin.getByLabel("每页多少个").selectOption("200");
+  await expect(admin).toHaveURL(/size=200/);
+  await expect(admin).toHaveURL(new RegExp(`q=${mzUser}`));
+  await expect(admin.getByTestId("marzban-user")).toHaveCount(1);
   await admin.getByRole("link", { name: mzUser }).click();
   admin.removeAllListeners("dialog");
   admin.on("dialog", (d) => (d.type() === "prompt" ? d.accept(mzUser) : d.accept()));
@@ -1017,9 +1071,66 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
     "hosts.save",
   ]);
 
-  // 退出后回到登录页
+  // 我的账户：点右上角邮箱进去；偏好、登录中的设备、改密码、我的操作
+  await admin.goto("/admin");
+  await admin.getByRole("link", { name: "我的账户" }).click();
+  await expect(admin).toHaveURL(/\/admin\/account/);
+  await expect(admin.getByTestId("admin-theme").getByRole("button", { name: "深色" })).toBeVisible();
+  // 后台页脚不放给客人的链接和联系客服
+  await expect(admin.locator("footer").getByRole("link", { name: "购买套餐" })).toHaveCount(0);
+  await expect(admin.locator("footer").getByText("联系客服")).toHaveCount(0);
+  // 偏好：每页 10 个、快到期的在前、具体日期 → 订阅列表打开就是这样
+  const prefsCard = admin.getByTestId("admin-prefs");
+  await prefsCard.getByLabel("订阅列表每页").selectOption("10");
+  await prefsCard.getByLabel("订阅列表默认排序").selectOption("expire");
+  await prefsCard.getByLabel("到期时间显示成").selectOption("absolute");
+  await prefsCard.getByRole("button", { name: "保存偏好" }).click();
+  await expect(prefsCard.getByText("已保存")).toBeVisible();
+  await admin.goto("/admin/users");
+  await expect(admin.getByLabel("每页多少个")).toHaveValue("10");
+  await expect(admin.locator('select[name="sort"]')).toHaveValue("expire");
+  expect(await admin.getByTestId("marzban-user").count()).toBeLessThanOrEqual(10);
+  await expect(admin.getByTestId("marzban-user").first()).toContainText(/\d{4}\/\d{2}\/\d{2}|永不到期/);
+  // 同一个管理员在另一台设备也登录着：列出来，退出其他设备后那边要重新登录
+  const ctx2 = await browser.newContext();
+  const admin2 = await ctx2.newPage();
+  await admin2.goto("/admin/login");
+  await admin2.getByPlaceholder("管理员邮箱").fill(adminEmail);
+  await admin2.getByPlaceholder("密码").fill(adminPassword);
+  await admin2.getByRole("button", { name: "登录" }).click();
+  await expect(admin2).toHaveURL(/\/admin$/);
+  await admin.goto("/admin/account");
+  const sessionsCard = admin.getByTestId("admin-sessions");
+  await expect(sessionsCard.getByText("这台设备")).toBeVisible();
+  await sessionsCard.getByRole("button", { name: /退出其他 \d+ 台设备/ }).click();
+  await confirmOk(admin);
+  await expect(sessionsCard.getByText(/已退出 \d+ 个登录/)).toBeVisible();
+  await admin2.goto("/admin");
+  await expect(admin2).toHaveURL(/\/admin\/login/);
+  await ctx2.close();
+  // 改密码：当前密码不对不让改；对了就改，用新密码能登录
+  const newPassword = "E2eAdmin-654321";
+  await admin.getByLabel("当前密码").fill("wrong-password-123");
+  await admin.getByLabel("新密码", { exact: true }).fill(newPassword);
+  await admin.getByLabel("再输一次新密码").fill(newPassword);
+  await admin.getByRole("button", { name: "改密码" }).click();
+  await expect(admin.getByText("当前密码不对")).toBeVisible();
+  // 提交后表单会清空，重新填
+  await admin.getByLabel("当前密码").fill(adminPassword);
+  await admin.getByLabel("新密码", { exact: true }).fill(newPassword);
+  await admin.getByLabel("再输一次新密码").fill(newPassword);
+  await admin.getByRole("button", { name: "改密码" }).click();
+  await expect(admin.getByText(/^密码已修改/)).toBeVisible();
+  await expect(admin.getByTestId("admin-my-logs")).toContainText("改后台偏好");
+  await expect(admin.getByTestId("admin-my-logs")).toContainText("改自己的密码");
+
+  // 退出后回到登录页，新密码能登录
   await admin.goto("/admin");
   await admin.getByRole("button", { name: "退出" }).click();
   await expect(admin).toHaveURL(/\/admin\/login/);
+  await admin.getByPlaceholder("管理员邮箱").fill(adminEmail);
+  await admin.getByPlaceholder("密码").fill(newPassword);
+  await admin.getByRole("button", { name: "登录" }).click();
+  await expect(admin).toHaveURL(/\/admin$/);
   await ctx.close();
 });

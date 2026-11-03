@@ -5,41 +5,11 @@ import Link from "next/link";
 import AdminHeader from "../AdminHeader";
 import { SubLink } from "../Links";
 import { FilterBar, Pager, pageOf, param } from "../ui";
+import { LOG_ACTIONS as ACTIONS } from "@/lib/admin-account";
 
 export const dynamic = "force-dynamic";
 
 // 操作日志：最近 200 条，能按管理员邮箱、操作类型筛
-const ACTIONS: Record<string, string> = {
-  login: "登录",
-  "login.fail": "登录失败",
-  logout: "退出",
-  "order.confirm": "确认订单",
-  "order.verify": "对账：确认到账",
-  "order.revoke": "对账：没收到钱收回",
-  "order.cancel": "取消订单",
-  "balance.adjust": "加减余额",
-  "password.reset_link": "生成重置链接",
-  "subscription.bind": "绑定订阅",
-  "subscription.auto_bind": "微信号对上，自动绑定订阅",
-  "codes.create": "生成兑换码",
-  "code.void": "作废兑换码",
-  "user.create": "新建订阅",
-  "user.edit": "修改订阅",
-  "user.reset_usage": "流量清零",
-  "user.revoke_sub": "重置订阅链接",
-  "user.delete": "删除订阅",
-  "user.change_plan": "改套餐",
-  "node.add": "加节点",
-  "node.edit": "修改节点",
-  "node.enable": "启用节点",
-  "node.disable": "停用节点",
-  "node.reconnect": "重连节点",
-  "node.delete": "删除节点",
-  "core.restart": "重启 Xray",
-  "hosts.save": "保存 Host",
-  "users.delete_expired": "删除过期订阅",
-  "users.reset_all_usage": "全部流量清零",
-};
 
 type Row = { id: number; admin_email: string; action: string; target: string | null; detail: string | null; ip: string | null; created_at: number };
 

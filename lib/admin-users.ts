@@ -94,6 +94,14 @@ export function parseOnHoldDays(v: string): { days: number | null } | { error: s
   return Number.isInteger(n) && n >= 1 && n <= 3650 ? { days: n } : { error: "首次连上后有效天数要写 1 到 3650 的整数" };
 }
 
+// 订阅列表每页多少个，最多 200；网址里的 size 不在这几个里就用默认的
+export const PAGE_SIZES = [10, 20, 30, 50, 100, 200] as const;
+export const DEFAULT_PAGE_SIZE = 50;
+export function parsePageSize(v: string): number {
+  const n = Number(v);
+  return (PAGE_SIZES as readonly number[]).includes(n) ? n : DEFAULT_PAGE_SIZE;
+}
+
 // 在线状态，照 Marzban 列表：在线（2 分钟内连过）/ 连过 / 没连过。Marzban 的 online_at 是 UTC 但不带时区
 export type OnlineState = "online" | "offline" | "never";
 export function onlineState(onlineAt: string | null | undefined, nowMs: number): { state: OnlineState; text: string } {
@@ -112,6 +120,19 @@ export function onlineState(onlineAt: string | null | undefined, nowMs: number):
 
 export function onlineText(onlineAt: string | null | undefined, nowMs: number): string {
   return onlineState(onlineAt, nowMs).text;
+}
+
+// 到期写成「2 个月 26 天后到期」「已过期 3 天」，照 Marzban 列表。按 1 年 365 天、1 个月 30 天算，最多写两级
+export function expireRelative(expire: number | null | undefined, nowMs: number): string {
+  if (!expire) return "永不到期";
+  const sec = Math.abs(expire * 1000 - nowMs) / 1000;
+  const days = Math.floor(sec / 86400);
+  const units: [number, string][] = days
+    ? [[Math.floor(days / 365), "年"], [Math.floor((days % 365) / 30), "个月"], [(days % 365) % 30, "天"]]
+    : [[Math.floor(sec / 3600), "小时"], [Math.floor((sec % 3600) / 60), "分钟"]];
+  const first = units.findIndex(([n]) => n > 0);
+  const text = first < 0 ? "不到 1 分钟" : units.slice(first, first + 2).filter(([n]) => n > 0).map(([n, u]) => `${n} ${u}`).join(" ");
+  return expire * 1000 > nowMs ? `${text}后到期` : `已过期 ${text}`;
 }
 
 // 编辑前后对比，写进操作日志

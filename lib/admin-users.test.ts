@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseOnHoldDays, createUserBody, describeChanges, fromBeijingInput, monthStartBeijing, onlineState, onlineText, parseExpiredDays, parseNodeForm, validateHosts, parseUserForm, toBeijingInput } from "./admin-users";
+import { parseOnHoldDays, createUserBody, describeChanges, fromBeijingInput, monthStartBeijing, expireRelative, onlineState, onlineText, parsePageSize, parseExpiredDays, parseNodeForm, validateHosts, parseUserForm, toBeijingInput } from "./admin-users";
 
 const GB = 1024 ** 3;
 const form = (o: Record<string, string>) => (k: string) => o[k] ?? "";
@@ -63,6 +63,24 @@ describe("其他", () => {
     expect(onlineState(null, now * 1000).state).toBe("never");
     expect(onlineState(at(1), now * 1000).state).toBe("online");
     expect(onlineState(at(30), now * 1000).state).toBe("offline");
+  });
+  it("每页多少个", () => {
+    expect(parsePageSize("200")).toBe(200);
+    expect(parsePageSize("10")).toBe(10);
+    expect(parsePageSize("")).toBe(50);
+    expect(parsePageSize("500")).toBe(50);
+    expect(parsePageSize("abc")).toBe(50);
+  });
+  it("到期写成多久以后", () => {
+    const ms = now * 1000;
+    const in_ = (d: number, extraSec = 0) => now + d * 86400 + extraSec;
+    expect(expireRelative(null, ms)).toBe("永不到期");
+    expect(expireRelative(in_(3, 600), ms)).toBe("3 天后到期");
+    expect(expireRelative(in_(86, 600), ms)).toBe("2 个月 26 天后到期");
+    expect(expireRelative(in_(365, 600), ms)).toBe("1 年后到期");
+    expect(expireRelative(in_(360, 600), ms)).toBe("12 个月后到期");
+    expect(expireRelative(now + 5 * 3600 + 120, ms)).toBe("5 小时 2 分钟后到期");
+    expect(expireRelative(in_(-3, -600), ms)).toBe("已过期 3 天");
   });
   it("改了什么", () => {
     const after = { data_limit: 0, data_limit_reset_strategy: "no_reset" as const, expire: 100, note: "ip=2", status: "active" as const };

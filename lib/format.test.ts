@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, formatRedeemCode, canRenewEarly, needsRenewal, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft, formatOrderNo, parseOrderNo } from "./format";
+import { formatBytes, formatDate, formatExpire, isExpiredSub, formatMoney, maskEmail, formatRedeemCode, canRenewEarly, needsRenewal, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft, formatOrderNo, parseOrderNo } from "./format";
 import { hashPassword, verifyPassword } from "./password";
 
 describe("parseSubToken", () => {
@@ -32,6 +32,14 @@ describe("到期时间", () => {
     // 2026-11-01 00:00 UTC = 北京时间 08:00
     expect(formatExpire(Date.UTC(2026, 10, 1) / 1000)).toBe("2026/11/01 08:00");
     expect(formatExpire(null)).toBe("永不到期");
+  });
+  it("哪些订阅算过期（主页能隐藏）", () => {
+    const now = Date.UTC(2026, 10, 4);
+    expect(isExpiredSub({ status: "expired", expire: null }, now)).toBe(true);
+    expect(isExpiredSub({ status: "active", expire: now / 1000 - 60 }, now)).toBe(true);
+    expect(isExpiredSub({ status: "active", expire: now / 1000 + 60 }, now)).toBe(false);
+    expect(isExpiredSub({ status: "active", expire: null }, now)).toBe(false);
+    expect(isExpiredSub({ status: "limited", expire: now / 1000 + 60 }, now)).toBe(false);
   });
   it("剩余时间往下取整到小时", () => {
     const h = 3600;

@@ -6,8 +6,8 @@ import { revalidatePath } from "next/cache";
 import { db, nowSec } from "@/lib/env";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { createSession, currentCustomer, destroyOtherSessions, destroySession, requireCustomer } from "@/lib/session";
-import { lookupSubscription, revokeSubscription } from "@/lib/marzban";
-import { formatExpire, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
+import { findUser, lookupSubscription, revokeSubscription } from "@/lib/marzban";
+import { formatExpire, isExpiredSub, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
 import { findPlan, forSale } from "@/lib/plans";
 import { type ProvisionResult } from "@/lib/provision";
 import { provisionTarget } from "@/lib/orders";
@@ -146,6 +146,34 @@ export async function resetSubscriptionLink(form: FormData) {
     .first();
   if (!mine) return;
   await revokeSubscription(username);
+  revalidatePath("/dashboard");
+}
+
+// 主页上隐藏 / 重新显示一个订阅。只能隐藏已过期的，或者 Marzban 上已经没有的（管理员删了）；
+// Marzban 暂时连不上时不让隐藏，免得把还能用的订阅藏起来。只改 hidden_at，记录都留着
+export async function hideSubscription(form: FormData) {
+  const customer = await requireCustomer();
+  const username = String(form.get("username") ?? "");
+  const mine = await db()
+    .prepare("SELECT 1 FROM subscriptions WHERE customer_id = ? AND marzban_username = ?")
+    .bind(customer.id, username)
+    .first();
+  if (!mine) return;
+  let user;
+  try {
+    user = await findUser(username);
+  } catch {
+    return;
+  }
+  if (user && !isExpiredSub(user, Date.now())) return;
+  await db().prepare("UPDATE subscriptions SET hidden_at = ? WHERE customer_id = ? AND marzban_username = ?").bind(nowSec(), customer.id, username).run();
+  revalidatePath("/dashboard");
+}
+
+export async function unhideSubscription(form: FormData) {
+  const customer = await requireCustomer();
+  const username = String(form.get("username") ?? "");
+  await db().prepare("UPDATE subscriptions SET hidden_at = NULL WHERE customer_id = ? AND marzban_username = ?").bind(customer.id, username).run();
   revalidatePath("/dashboard");
 }
 
