@@ -127,15 +127,15 @@ export default function OrderForm({
       {state?.ok && <div role="alert" className="alert alert-success alert-soft">{state.ok}</div>}
 
       {canOrder && <p className="text-center text-sm text-base-content/60 sm:hidden">{t("点价格就能下单", "Tap a price to order")}</p>}
-      <div data-testid="plan-table" className="grid grid-cols-4 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 sm:grid-cols-[6rem_1.7fr_repeat(4,1fr)]">
+      <div data-testid="plan-table" className="grid grid-cols-4 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 max-sm:border-[1.5px] max-sm:border-base-content/45 sm:grid-cols-[6rem_1.7fr_repeat(4,1fr)]">
         {groups.map((g, gi) => {
           const hot = g.highlight === "hot";
           const top = g.highlight === "top";
           return (
             <Fragment key={g.name}>
               {/* 手机上套餐之间的线深一点：一个套餐占两行（名字一行、四个价格一行），线都一样的话分不清哪行价格是哪个套餐的。
-                  -my-px 让它盖住上下两道格子缝，看起来就是一道 2px 的深色线；宽屏一个套餐一行，不需要 */}
-              {gi > 0 && <div aria-hidden className="col-span-full -my-px h-0.5 bg-base-content/45 sm:hidden" />}
+                  -my-px 让它盖住上面那道格子缝，看起来是一道 1.5px 的深色线，和外框一样深；宽屏一个套餐一行，不需要 */}
+              {gi > 0 && <div aria-hidden className="col-span-full -my-px h-[1.5px] bg-base-content/45 sm:hidden" />}
               <div
                 className={`flex flex-col items-center justify-center p-2 text-center font-bold ${hot ? "bg-error text-error-content" : "bg-base-100"} ${top ? "text-error" : ""}`}
               >
