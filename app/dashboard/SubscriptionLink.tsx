@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { clashVergeImport, hiddifyImport, shadowrocketImport } from "@/lib/clients";
+import { clashVergeImport, hiddifyImport, shadowrocketImport, shadowrocketQr } from "@/lib/clients";
 import { useSite } from "../SiteContext";
 import { resetSubscriptionLink } from "../actions";
 import { confirmSubmit } from "../ConfirmDialog";
@@ -22,11 +22,15 @@ export default function SubscriptionLink({ username, url }: { username: string; 
   const t = useT();
   const [shown, setShown] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
+  // 两个 App 认的二维码格式不一样（2026-11-03 真机试过，没有两边通用的），默认给 Shadowrocket；
+  // Hiddify 扫的是和导入按钮一样的 hiddify:// 链接。都带名字，扫进去不显示域名
+  const [forShadowrocket, setForShadowrocket] = useState(true);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (shown) QRCode.toDataURL(url, { width: 240, margin: 1 }).then(setQr);
-  }, [shown, url]);
+    if (shown)
+      QRCode.toDataURL(forShadowrocket ? shadowrocketQr(url, importName) : hiddifyImport(url, importName), { width: 240, margin: 1 }).then(setQr);
+  }, [shown, url, forShadowrocket, importName]);
 
   async function copy() {
     await navigator.clipboard.writeText(url);
@@ -67,6 +71,14 @@ export default function SubscriptionLink({ username, url }: { username: string; 
 
       {shown && (
         <div className="flex flex-col items-center gap-2 rounded-box bg-base-200 p-4">
+          <div role="tablist" className="tabs tabs-box tabs-sm">
+            <button type="button" role="tab" className={`tab ${forShadowrocket ? "tab-active" : ""}`} onClick={() => setForShadowrocket(true)}>
+              Shadowrocket
+            </button>
+            <button type="button" role="tab" className={`tab ${forShadowrocket ? "" : "tab-active"}`} onClick={() => setForShadowrocket(false)}>
+              Hiddify
+            </button>
+          </div>
           {qr ? <img src={qr} alt={t("订阅二维码", "Subscription QR code")} width={240} height={240} /> : <span className="loading loading-spinner" />}
           <p className="text-center text-xs text-base-content/60">
             {t("用客户端扫码导入。不要截图发给别人：别人拿到就能用你的流量", "Scan it with your app to import. Don't share screenshots: anyone who has it can use your data")}

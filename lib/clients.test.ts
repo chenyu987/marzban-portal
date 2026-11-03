@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { AUTO_GROUP, CLASH_RULES, clashVergeImport, hiddifyImport, detectPlatform, shadowrocketImport } from "./clients";
+import { AUTO_GROUP, CLASH_RULES, clashVergeImport, hiddifyImport, detectPlatform, shadowrocketImport, shadowrocketQr } from "./clients";
 
 describe("客户端", () => {
   it("Shadowrocket 导入链接里是订阅链接的 base64", () => {
     const url = "https://sub.example.com:8000/sub/abc";
     expect(shadowrocketImport(url, "例子.com")).toBe(`shadowrocket://add/sub://${btoa(url)}?remark=${encodeURIComponent("例子.com")}`);
+  });
+
+  it("Shadowrocket 二维码是 sub://<base64>#名字，扫进去不显示域名", () => {
+    const url = "https://sub.example.com:8000/sub/abc";
+    expect(shadowrocketQr(url, "例子.com")).toBe(`sub://${btoa(url)}#${encodeURIComponent("例子.com")}`);
   });
 
   it("三个客户端导入后订阅都叫传进来的名字", () => {

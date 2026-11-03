@@ -337,11 +337,12 @@ function tabs(lang: Lang): { id: Platform; label: string; content: React.ReactNo
                 <li>
                   {zh ? (
                     <>
-                      点 Hiddify 右上角的「+」→ 扫描二维码，扫 <MySubs /> 里的二维码。
+                      点 Hiddify 右上角的「+」→ 扫描二维码，扫 <MySubs /> 里的二维码（二维码上方先切到「Hiddify」）。
                     </>
                   ) : (
                     <>
-                      Tap &quot;+&quot; in the top-right of Hiddify → Scan QR code, and scan the QR code in <MySubs />.
+                      Tap &quot;+&quot; in the top-right of Hiddify → Scan QR code, and scan the QR code in <MySubs /> (switch to &quot;Hiddify&quot; above
+                      the QR code first).
                     </>
                   )}
                 </li>

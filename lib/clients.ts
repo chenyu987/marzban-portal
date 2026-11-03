@@ -7,6 +7,12 @@ export function shadowrocketImport(url: string, name: string): string {
   return `shadowrocket://add/sub://${btoa(url)}?remark=${encodeURIComponent(name)}`;
 }
 
+// Shadowrocket 扫码：sub://<订阅链接的 base64>#<名字>。扫裸订阅链接会拿域名当名字。
+// 2026-11-03 真机验证过；在订阅链接后面直接加 #名字 不行（名字有了，链接坏了）。Hiddify 不认这个格式，它扫 hiddifyImport 的链接
+export function shadowrocketQr(url: string, name: string): string {
+  return `sub://${btoa(url)}#${encodeURIComponent(name)}`;
+}
+
 // 续期后订阅链接不变，节点照样能连；客户端里显示的到期时间要刷新订阅才更新，之前过期连不上的也是刷新一下就好
 export const RENEW_REFRESH_HINT = {
   zh: "已经导入过的不用重新导入，打开客户端刷新（更新）一下订阅，到期时间就会更新",
@@ -18,7 +24,7 @@ export function clashVergeImport(url: string, name: string): string {
   return `clash://install-config?url=${encodeURIComponent(url)}&name=${encodeURIComponent(name)}`;
 }
 
-// Hiddify：hiddify://import/<订阅链接>#<名字>
+// Hiddify：hiddify://import/<订阅链接>#<名字>。也拿来生成给 Hiddify 扫的二维码（2026-11-03 真机验证过）
 export function hiddifyImport(url: string, name: string): string {
   return `hiddify://import/${url}#${encodeURIComponent(name)}`;
 }
