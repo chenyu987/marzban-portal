@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Plan } from "../site.config.example";
-import { changePlanBody, findPlan, newUserBody, nextUsername, renewUserBody, renewedExpire, setIpNote, wechatUsername } from "./plans";
+import { changePlanBody, findPlan, newUserBody, nextUsername, renewUserBody, renewedExpire, isWechatUsername, setIpNote, wechatUsername } from "./plans";
 
 const now = 1_800_000_000;
 const plan: Plan = { id: "month", name: "月付", price: 2000, days: 30, dataGB: 100, ip: 3 };
@@ -129,3 +129,21 @@ describe("免费体验套餐", () => {
   });
 });
 
+
+describe("isWechatUsername", () => {
+  it("微信号本身和 微信号_数字 算，大小写、减号按 Marzban 用户名的规则转", () => {
+    expect(isWechatUsername("Tom-123", "tom_123")).toBe(true);
+    expect(isWechatUsername("tom_123", "tom_123_2")).toBe(true);
+    expect(isWechatUsername("tom_123", "tom_123_15")).toBe(true);
+  });
+  it("前缀一样但不是序号的不算，别人的微信号不算", () => {
+    expect(isWechatUsername("tom_123", "tom_1234")).toBe(false);
+    expect(isWechatUsername("tom_123", "tom_123_x")).toBe(false);
+    expect(isWechatUsername("tom_123", "tom_123_")).toBe(false);
+    expect(isWechatUsername("tom", "tommy")).toBe(false);
+  });
+  it("微信号太短转不出用户名，什么都不算", () => {
+    expect(isWechatUsername("ab", "ab")).toBe(false);
+    expect(isWechatUsername("", "")).toBe(false);
+  });
+});

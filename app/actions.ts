@@ -26,6 +26,7 @@ import { LANG_COOKIE, makeT, parseLang, pick, type Lang } from "@/lib/i18n";
 export type FormState = { error?: string; ok?: string; email?: string; ref?: string; wechat?: string; support?: boolean } | undefined;
 
 import { emailError, passwordError, wechatError } from "@/lib/account";
+import { claimByWechat, followWechatChange } from "@/lib/claim";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function register(_: FormState, form: FormData): Promise<FormState> {
@@ -58,6 +59,8 @@ export async function register(_: FormState, form: FormData): Promise<FormState>
     )
     .bind(email, await hashPassword(password), wechat, newReferralCode(), referrer, nowSec())
     .first<{ id: number }>();
+  // 管理员之前按这个微信号开过的订阅，直接绑过来，「我的订阅」里就能看到
+  await claimByWechat({ id: row!.id, email }, wechat);
   await createSession(row!.id);
   redirect("/dashboard");
 }
@@ -592,7 +595,17 @@ export async function updateWechat(_: FormState, form: FormData): Promise<FormSt
   const error = wechatError(wechat, lang);
   if (error) return { error, wechat };
   await db().prepare("UPDATE customers SET wechat = ? WHERE id = ?").bind(wechat, customer.id).run();
+  await followWechatChange(customer.id, wechat);
+  const claimed = await claimByWechat(customer, wechat);
   revalidatePath("/account");
+  revalidatePath("/dashboard");
+  if (claimed.length > 0)
+    return {
+      ok: t(
+        `微信号已更新，找到 ${claimed.length} 个按这个微信号开的订阅，已经放进「我的订阅」`,
+        `WeChat ID updated. Found ${claimed.length} subscription(s) under this WeChat ID and added them to My subscription`,
+      ),
+    };
   return { ok: t("微信号已更新", "WeChat ID updated") };
 }
 

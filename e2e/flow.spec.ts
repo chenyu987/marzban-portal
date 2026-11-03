@@ -1,6 +1,8 @@
 // 主流程：注册 → 下单 → 我已付款（马上开通） → 快到期提醒 → 一键续费 → 忘记密码 → 管理员发重置链接 → 设新密码登录；
 // 另一条：余额付全款、余额抵扣一部分（取消后退回）、用兑换码续期；
 // 还有管理后台：登录、对账（确认到账 / 没收到钱收回）、取消订单、客人管理（加减余额、重置链接、绑定订阅）、兑换码、操作日志。
+// 还有老客人：注册时微信号对上，管理员之前开的订阅自动出现在「我的订阅」，改微信号也跟着走。
+// 还有兜底：网站刚更新、旧页面点按钮出错时自动刷新一次；微信内置浏览器提示换浏览器打开。
 // 每次用新邮箱注册，不依赖之前的数据；管理员那一步直接调命令行脚本（本地库 + 假 Marzban）
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
@@ -141,6 +143,87 @@ test("打错网址：带品牌的 404，能回首页", async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
   // 每页底部有导航和版权
   await expect(page.locator("footer")).toContainText("安装教程");
+});
+
+test("网站刚更新、旧页面点登录：自动刷新一次，一分钟内再出错就停在提示上", async ({ page }) => {
+  // 假装服务器已经换了新版本：登录表单提交时回「找不到这个 Server Action」
+  await page.route("**/login", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 404, headers: { "x-nextjs-action-not-found": "1" }, body: "" })
+      : route.continue(),
+  );
+  const submit = async () => {
+    await page.getByPlaceholder("邮箱").fill("stale@example.test");
+    await page.getByPlaceholder("密码").fill("whatever-123");
+    await page.getByRole("button", { name: "登录" }).click();
+  };
+  await page.goto("/login");
+  const reloaded = page.waitForEvent("load");
+  await submit();
+  await reloaded;
+  await expect(page.getByRole("button", { name: "登录" })).toBeVisible();
+  await submit();
+  await expect(page.getByText("网站刚更新过，刷新一下页面就好。")).toBeVisible();
+});
+
+test("在微信里打开：顶部提示换浏览器，别的浏览器没有", async ({ browser, page }) => {
+  const wechat = await browser.newContext({
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.50",
+  });
+  const wx = await wechat.newPage();
+  await wx.goto(new URL("/login", test.info().project.use.baseURL).toString());
+  await expect(wx.getByRole("alert").filter({ hasText: "在浏览器打开" })).toBeVisible();
+  await wechat.close();
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: "登录" })).toBeVisible();
+  await expect(page.getByText("在浏览器打开")).toHaveCount(0);
+});
+
+test("老客人注册：微信号对上的订阅自动绑过来，改微信号后还在，别人再用这个微信号拿不走", async ({ page, browser }) => {
+  const stamp = Date.now();
+  const wechat = `E2E-Claim-${stamp}`;
+  const base = `e2e_claim_${stamp}`;
+  const expire = Math.floor(Date.now() / 1000) + 30 * 86400;
+  // 管理员在 Marzban 上按微信号建的用户（第一个、第二个），和一个记在 marzban_wechat 里的老订阅（用户名是微信名）
+  await mockMarzban("POST", "/user", { username: base, expire });
+  await mockMarzban("POST", "/user", { username: `${base}_2`, expire });
+  // 前缀一样但不是这个微信号的，不能被认走
+  await mockMarzban("POST", "/user", { username: `${base}0`, expire });
+  const legacy = `e2e_old_${stamp}`;
+  await mockMarzban("POST", "/user", { username: legacy, expire });
+  sql(`INSERT INTO marzban_wechat (marzban_username, wechat, created_at) VALUES ('${legacy}', '${wechat.toLowerCase()}', unixepoch())`);
+
+  const signUp = async (p: Page, email: string, wx: string) => {
+    await p.goto("/register");
+    await p.getByPlaceholder("邮箱").fill(email);
+    await p.getByPlaceholder("密码（至少 8 位）").fill("E2eTest-1234");
+    await p.getByPlaceholder("微信号").fill(wx);
+    await p.getByRole("button", { name: "注册" }).click();
+    await expect(p).toHaveURL(/\/dashboard/);
+  };
+  const email = `e2e-claim-${stamp}@example.test`;
+  await signUp(page, email, wechat);
+  await expect(page.getByTestId("sub-id")).toHaveCount(3);
+  const owned = () =>
+    query(`SELECT s.marzban_username AS u FROM subscriptions s JOIN customers c ON c.id = s.customer_id WHERE c.email = '${email}' ORDER BY u`).map((r) => r.u);
+  expect(owned()).toEqual([base, `${base}_2`, legacy].sort());
+  const logged = query(`SELECT COUNT(*) AS n FROM admin_logs WHERE action = 'subscription.auto_bind' AND target = '${email}'`)[0].n;
+  expect(logged).toBe(3);
+
+  // 改微信号：订阅还在他名下，老订阅记的微信号跟着改
+  await page.goto("/account");
+  await page.getByLabel("微信号").fill(`e2e_claim2_${stamp}`);
+  await page.getByRole("button", { name: "保存微信号" }).click();
+  await expect(page.getByText("微信号已更新")).toBeVisible();
+  expect(owned()).toEqual([base, `${base}_2`, legacy].sort());
+  expect(query(`SELECT wechat FROM marzban_wechat WHERE marzban_username = '${legacy}'`)[0].wechat).toBe(`e2e_claim2_${stamp}`);
+
+  // 别人用原来的微信号注册：已经绑走的拿不到
+  const ctx = await browser.newContext();
+  const other = await ctx.newPage();
+  await signUp(other, `e2e-claim-other-${stamp}@example.test`, wechat);
+  await expect(other.getByTestId("sub-id")).toHaveCount(0);
+  await ctx.close();
 });
 
 test("页面底部切换中英文：记住选择，登录页和报错跟着换", async ({ page }) => {

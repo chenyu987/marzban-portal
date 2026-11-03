@@ -20,6 +20,7 @@ const ACTIONS: Record<string, string> = {
   "balance.adjust": "加减余额",
   "password.reset_link": "生成重置链接",
   "subscription.bind": "绑定订阅",
+  "subscription.auto_bind": "微信号对上，自动绑定订阅",
   "codes.create": "生成兑换码",
   "code.void": "作废兑换码",
   "user.create": "新建订阅",
@@ -51,7 +52,7 @@ function Target({ action, target }: { action: string; target: string | null }) {
   const order = /^订单 ([\d-]+)$/.exec(target);
   if (order) return <Link href={`/admin?view=all&q=${order[1].replace("-", "")}`} className="link link-hover">{target}</Link>;
   if (action.startsWith("user.")) return <SubLink username={target} />;
-  if (["balance.adjust", "password.reset_link", "subscription.bind"].includes(action))
+  if (["balance.adjust", "password.reset_link", "subscription.bind", "subscription.auto_bind"].includes(action))
     return <Link href={`/admin/customers?q=${encodeURIComponent(target)}`} className="link link-hover">{target}</Link>;
   const page = action.startsWith("node.") || action === "core.restart" ? "/admin/nodes" : action === "hosts.save" ? "/admin/hosts" : action.startsWith("code") ? "/admin/codes" : action.startsWith("users.") ? "/admin/users" : "";
   return page ? <Link href={page} className="link link-hover">{target}</Link> : <>{target}</>;

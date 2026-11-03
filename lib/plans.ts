@@ -41,6 +41,13 @@ export function wechatUsername(wechat: string | null | undefined): string | null
   return base.length >= 3 ? base : null;
 }
 
+// 这个 Marzban 用户名是不是按这个微信号起的（nextUsername 的规则：微信号本身，或者 微信号_2、_3…）
+export function isWechatUsername(wechat: string | null | undefined, username: string): boolean {
+  const base = wechatUsername(wechat);
+  if (!base) return false;
+  return username === base || (username.startsWith(`${base}_`) && /^\d+$/.test(username.slice(base.length + 1)));
+}
+
 // Marzban 用户名：管理员在面板里一眼看出是谁，所以用客人的微信号，第一个就叫微信号，再开的接着 _2、_3 往下排。
 // 没有微信号的老客人用 c<客人id>_<序号>。不带邮箱，因为用户名会显示在客人的订阅页上
 export function nextUsername(customerId: number, existing: string[], wechat?: string | null): string {
