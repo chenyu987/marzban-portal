@@ -5,7 +5,6 @@ import { detectPlatform, type Platform } from "@/lib/clients";
 import { site } from "@/site.config";
 
 const DOWNLOADS = site.downloads;
-const IMPORT_NAME = site.importName ?? site.brand;
 import CopyRules from "./CopyRules";
 import Brand from "../Brand";
 import CustomerNav from "../CustomerNav";
@@ -112,13 +111,13 @@ function tabs(lang: Lang): { id: Platform; label: string; content: React.ReactNo
                 <li>
                   {zh ? (
                     <>
-                      手动添加：点首页右上角「+」→「类型」选 <b>Subscribe</b> →「URL」粘贴订阅链接 →「备注」填 {IMPORT_NAME} →
+                      手动添加：点首页右上角「+」→「类型」选 <b>Subscribe</b> →「URL」粘贴订阅链接 →
                       点右上角「完成」。
                     </>
                   ) : (
                     <>
                       Add it manually: tap &quot;+&quot; in the top-right → set Type to <b>Subscribe</b> → paste the subscription link into URL →
-                      enter {IMPORT_NAME} as the Remark → tap &quot;Done&quot;.
+                      tap &quot;Done&quot;.
                     </>
                   )}
                 </li>

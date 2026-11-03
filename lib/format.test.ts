@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, formatRedeemCode, needsRenewal, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft, formatOrderNo, parseOrderNo } from "./format";
+import { formatBytes, formatDate, formatExpire, formatMoney, maskEmail, formatRedeemCode, canRenewEarly, needsRenewal, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft, formatOrderNo, parseOrderNo } from "./format";
 import { hashPassword, verifyPassword } from "./password";
 
 describe("parseSubToken", () => {
@@ -49,6 +49,13 @@ describe("到期时间", () => {
     expect(needsRenewal(7 * 86400 - 1, 0)).toBe(true);
     expect(needsRenewal(-86400, 0)).toBe(true);
     expect(needsRenewal(null, 0)).toBe(false);
+  });
+  it("canRenewEarly：30 天以内才放「提前续费」", () => {
+    expect(canRenewEarly(30 * 86400, 0)).toBe(true);
+    expect(canRenewEarly(10 * 86400, 0)).toBe(true);
+    expect(canRenewEarly(30 * 86400 + 1, 0)).toBe(false);
+    expect(canRenewEarly(60 * 86400, 0)).toBe(false);
+    expect(canRenewEarly(null, 0)).toBe(false);
   });
 });
 

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
 import { getUser, type MarzbanUser } from "@/lib/marzban";
-import { formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, needsRenewal, resetLabel, statusLabel, timeLeft } from "@/lib/format";
+import { formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, canRenewEarly, needsRenewal, resetLabel, statusLabel, timeLeft } from "@/lib/format";
 import { AVAILABLE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
 import { site } from "@/site.config";
 import { describePlan, findPlan } from "@/lib/plans";
@@ -248,7 +248,7 @@ function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; cod
           </div>
         </div>
 
-        {/* 已到期：红色提示 + 续费；最后 3 天：黄色提醒 + 续费；7 天以内：只放一个续费按钮；其他时候放个「提前续费」小链接。
+        {/* 已到期：红色提示 + 续费；最后 3 天：黄色提醒 + 续费；7 天以内：只放一个续费按钮；30 天以内放个「提前续费」小链接；再久就什么都不放。
             免费体验只有前两种 */}
         {expired ? (
           <div role="alert" className="alert alert-error flex-wrap justify-between">
@@ -269,7 +269,7 @@ function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; cod
             {t("续费", "Renew")}
           </Link>
         ) : (
-          user.expire && (
+          canRenewEarly(user.expire) && (
             <Link href={`/plans?renew=${encodeURIComponent(user.username)}`} className="link link-hover text-sm text-base-content/60">
               {t("提前续费", "Renew early")}
             </Link>
