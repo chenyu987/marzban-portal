@@ -34,9 +34,12 @@ export type SiteConfig = {
   logo?: { svg: string; appleTouch?: string; icon192?: string; icon512?: string; maskable512?: string };
   // 品牌主色（手机浏览器顶栏、主屏幕启动画面用），比如 #2F6BFF
   themeColor?: string;
+  // false：landing 不公开。首页只有品牌名和登录、注册按钮，登录页左边只有品牌名和介绍；
+  // landing 里的常见问题照样显示在登录后的「安装教程」底部。不填等于 true
+  landingPublic?: boolean;
   // true：不让搜索引擎收录（页面加 noindex，robots.txt 禁止抓取）。客人靠推荐链接来、不靠搜索时打开
   noindex?: boolean;
-  // 首页（/）的内容。不填就只有品牌名、介绍和套餐价格。
+  // 首页（/）的内容。不填（或 landingPublic: false）时首页只有品牌名和登录、注册按钮。
   // highlights：卖点卡片；steps：几步用上；faq：常见问题。不列节点在哪，免得被人按地址封
   landing?: {
     headline: string;

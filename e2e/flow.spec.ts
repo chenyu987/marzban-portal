@@ -69,26 +69,24 @@ async function logout(page: Page) {
   await expect(page).toHaveURL(/\/login/);
 }
 
-test("首页：卖点、价格、常见问题，注册按钮带上推荐码", async ({ page }) => {
+test("首页不公开介绍：只有登录和注册，注册按钮带上推荐码", async ({ page }) => {
   await page.goto("/?ref=ABCD2345");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  // 不暴露节点在哪：首页和登录页都不出现城市名
+  await expect(page.getByRole("link", { name: "登录", exact: true })).toBeVisible();
+  // 没登录看不到价格、卖点、节点
+  await expect(page.locator("main")).not.toContainText("¥");
   await expect(page.locator("body")).not.toContainText("东京");
-  // 每个档位一张价格卡，标月付价
-  await expect(page.getByTestId("pricing").locator("h3").first()).toBeVisible();
-  // 价格卡默认看季付，能切到月付、半年付、年付
-  await expect(page.getByRole("tab", { name: "季付", exact: true })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByTestId("pricing")).toContainText("/季");
-  await expect(page.getByTestId("pricing")).toContainText("比按月买省");
-  for (const [tab, per] of [["月付", "/月"], ["半年付", "/半年"], ["年付", "/年"]]) {
-    await page.getByRole("tab", { name: tab, exact: true }).click();
-    await expect(page.getByTestId("pricing")).toContainText(per);
-  }
-  await expect(page.getByText("常见问题").first()).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("ChatGPT");
+  // 安装教程要登录（里面有客户端名字）
+  await page.goto("/tutorial");
+  await expect(page).toHaveURL(/\/login/);
   // 推荐链接带来的，注册页自动填好推荐码
-  await page.getByRole("link", { name: "免费注册" }).first().click();
+  await page.goto("/?ref=ABCD2345");
+  await page.getByRole("link", { name: "注册", exact: true }).click();
   await expect(page).toHaveURL(/\/register\?ref=ABCD2345/);
-  // 大屏左边的卖点在那半边正中间
+  await expect(page.getByPlaceholder("推荐码（选填）")).toHaveValue("ABCD2345");
+  // 登录页左边只有品牌名，不放卖点；内容在那半边正中间
+  await expect(page.locator("aside")).not.toContainText("ChatGPT");
   const aside = await page.locator("aside").boundingBox();
   const content = await page.getByTestId("auth-aside").boundingBox();
   const center = (b: { x: number; y: number; width: number; height: number } | null) => [(b?.x ?? 0) + (b?.width ?? 0) / 2, (b?.y ?? 0) + (b?.height ?? 0) / 2];
@@ -96,8 +94,6 @@ test("首页：卖点、价格、常见问题，注册按钮带上推荐码", as
   const [cx, cy] = center(content);
   expect(Math.abs(ax - cx)).toBeLessThan(4);
   expect(Math.abs(ay - cy)).toBeLessThan(4);
-  await expect(page.locator("body")).not.toContainText("东京");
-  await expect(page.getByPlaceholder("推荐码（选填）")).toHaveValue("ABCD2345");
   // 浏览器标签和主屏幕图标、manifest 都在
   const manifest = await (await page.request.get("/manifest.webmanifest")).json();
   expect(manifest.start_url).toBe("/dashboard");
@@ -113,13 +109,6 @@ test("不让搜索引擎收录：页面带 noindex，robots.txt 禁止抓取", a
   // 首页口径低调：不提视频网站
   await expect(page.locator("body")).not.toContainText("YouTube");
   await expect(page.locator("body")).not.toContainText("Netflix");
-});
-
-test("安装教程：没有美区 Apple ID 的可以直接复制客服联系方式", async ({ page }) => {
-  await page.goto("/tutorial");
-  await page.getByRole("tab", { name: "iPhone" }).check();
-  const step = page.getByRole("listitem").filter({ hasText: "如果没有美区 Apple ID，请联系客服" });
-  await expect(step.getByRole("button", { name: /复制客服/ }).first()).toBeVisible();
 });
 
 test("打错网址：带品牌的 404，能回首页", async ({ page }) => {
@@ -139,6 +128,16 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   page.on("dialog", (d) => d.accept());
 
   await register(page, email, password);
+  // 登录后首页直接去「我的订阅」
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/dashboard/);
+  // 安装教程：没有美区 Apple ID 的可以直接复制客服联系方式；底部有常见问题
+  await page.goto("/tutorial");
+  await page.getByRole("tab", { name: "iPhone" }).check();
+  const appleStep = page.getByRole("listitem").filter({ hasText: "如果没有美区 Apple ID，请联系客服" });
+  await expect(appleStep.getByRole("button", { name: /复制客服/ }).first()).toBeVisible();
+  await expect(page.getByTestId("tutorial-faq")).toContainText("怎么续费");
+  await page.goto("/dashboard");
   // 页面底部有「复制客服邮箱」，客人找客服不用另外去找联系方式
   await expect(page.getByRole("button", { name: /复制客服邮箱/ })).toBeVisible();
   // 新客人：三步上手的引导，第一步能直接去选套餐

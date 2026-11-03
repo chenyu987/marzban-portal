@@ -7,7 +7,7 @@ import CopyRules from "./CopyRules";
 import Brand from "../Brand";
 import CustomerNav from "../CustomerNav";
 import ContactSupport from "../ContactSupport";
-import { currentCustomer } from "@/lib/session";
+import { requireCustomer } from "@/lib/session";
 
 // iPhone 用 Shadowrocket，Mac 用 Clash Verge，Windows 和安卓用 Hiddify。
 // 不推荐 ClashX Meta 那种手动拖 yaml 文件的做法：那不是订阅，节点变了不会自动更新
@@ -201,13 +201,15 @@ const TABS: { id: Platform; label: string; content: React.ReactNode }[] = [
   },
 ];
 
+// 要登录才能看：教程里有客户端名字，不给外人看
 export default async function TutorialPage() {
+  await requireCustomer();
   // 按访问设备默认打开对应的标签页，认不出来就打开 iPhone
   const current = detectPlatform((await headers()).get("user-agent") ?? "") ?? "ios";
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16">
-      <CustomerNav loggedIn={!!(await currentCustomer())} />
+      <CustomerNav />
 
       <h1 className="mt-4 mb-4 text-2xl font-bold">安装教程</h1>
 
@@ -239,6 +241,23 @@ export default async function TutorialPage() {
           </ul>
         </div>
       </div>
+
+      {/* 常见问题：首页不公开后放到这里（内容在 site.config.ts 的 landing.faq） */}
+      {site.landing?.faq && (
+        <div className="card mt-4 bg-base-100 shadow-sm" data-testid="tutorial-faq">
+          <div className="card-body">
+            <h2 className="card-title">常见问题</h2>
+            <div className="flex flex-col gap-2">
+              {site.landing.faq.map((f) => (
+                <details key={f.q} className="collapse-arrow collapse bg-base-200/60">
+                  <summary className="collapse-title font-medium">{f.q}</summary>
+                  <div className="collapse-content text-sm text-base-content/70">{f.a}</div>
+                </details>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

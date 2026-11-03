@@ -7,7 +7,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: site.brand, template: `%s · ${site.brand}` },
-  description: site.landing?.sub ?? site.description,
+  description: (site.landingPublic === false ? undefined : site.landing?.sub) ?? site.description,
   icons: site.logo ? { icon: site.logo.svg, apple: site.logo.appleTouch } : undefined,
   appleWebApp: { title: site.brand, capable: true, statusBarStyle: "default" },
   robots: site.noindex ? { index: false, follow: false } : undefined,
@@ -24,8 +24,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="link link-hover">
               首页
             </Link>
-            <Link href="/#pricing" className="link link-hover">
-              套餐价格
+            <Link href="/plans" className="link link-hover">
+              购买套餐
             </Link>
             <Link href="/tutorial" className="link link-hover">
               安装教程

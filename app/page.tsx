@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { currentCustomer } from "@/lib/session";
 import { formatMoney } from "@/lib/format";
 import { describePlan } from "@/lib/plans";
@@ -9,12 +10,31 @@ import PricingCards, { type PricingGroup } from "./PricingCards";
 export const dynamic = "force-dynamic";
 
 // 首页：卖点、套餐价格、几步用上、常见问题。内容都在 site.config.ts 的 landing 里。
+// 没配 landing 或 landingPublic: false 时首页只有品牌名和登录、注册按钮，已经登录的直接去「我的订阅」。
 // 带 ?ref=推荐码 来的，注册按钮把推荐码带过去；已经登录的，按钮换成「进入我的订阅」
 export default async function Home({ searchParams }: { searchParams: Promise<{ ref?: string | string[] }> }) {
   const me = await currentCustomer();
   const { ref } = await searchParams;
   const register = typeof ref === "string" && ref ? `/register?ref=${encodeURIComponent(ref.slice(0, 32))}` : "/register";
-  const L = site.landing;
+  const L = site.landingPublic === false ? undefined : site.landing;
+  if (!L) {
+    if (me) redirect("/dashboard");
+    return (
+      <main className="flex min-h-[70vh] flex-col items-center justify-center px-4 text-center">
+        <Logo size={72} />
+        <h1 className="mt-5 text-3xl font-extrabold tracking-tight">{site.brand}</h1>
+        <p className="mt-2 text-base-content/60">{site.description}</p>
+        <div className="mt-8 flex gap-3">
+          <Link href="/login" className="btn btn-primary">
+            登录
+          </Link>
+          <Link href={register} className="btn">
+            注册
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   // 每个档位一张价格卡，上面切周期（默认季付）；说明取价目表上那行
   const money = (fen: number) => `${site.currency}${formatMoney(fen).replace(/\.00$/, "")}`;
