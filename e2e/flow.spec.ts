@@ -319,6 +319,96 @@ test("过期、被删掉的订阅能从主页隐藏，记录留着；又续上�
   expect(query(`SELECT 1 FROM subscriptions WHERE marzban_username = '${wechat}'`)).toHaveLength(1);
 });
 
+test("邀请朋友：每个朋友一行，写一共返了多少，点开看每笔付款", async ({ browser }) => {
+  const stamp = Date.now();
+  const me = await (await browser.newContext()).newPage();
+  await register(me, `e2e-ref-${stamp}@example.test`, "E2eTest-1234");
+  const code = query(`SELECT referral_code FROM customers WHERE email = 'e2e-ref-${stamp}@example.test'`)[0].referral_code as string;
+  const friendPage = await (await browser.newContext()).newPage();
+  await friendPage.goto(`/register?ref=${code}`);
+  await friendPage.getByPlaceholder("邮箱").fill(`e2e-ref-f-${stamp}@example.test`);
+  await friendPage.getByPlaceholder("密码（至少 8 位）").fill("E2eTest-1234");
+  await friendPage.getByPlaceholder("微信号").fill(`e2e_ref_f_${stamp}`);
+  await friendPage.getByRole("button", { name: "注册" }).click();
+  await expect(friendPage).toHaveURL(/\/dashboard/);
+
+  const card = me.getByTestId("referral-card");
+  await me.reload();
+  await expect(card.getByTestId("referrals")).toContainText(`微信 e2e_ref_f_${stamp}`);
+  await expect(card.getByTestId("referrals")).toContainText("还没付款");
+  // 朋友付了两笔：一行里写一共返了 ¥8.00，点开看到两笔
+  const fid = query(`SELECT id FROM customers WHERE email = 'e2e-ref-f-${stamp}@example.test'`)[0].id;
+  sql(`INSERT INTO orders (customer_id, amount, method, status, paid_at, created_at) VALUES (${fid}, 4500, 'manual', 'paid', 1793700000, 1793700000), (${fid}, 3500, 'manual', 'paid', 1793710000, 1793710000)`);
+  await me.reload();
+  const row = card.getByTestId("referrals").locator("details");
+  await expect(row).toHaveCount(1);
+  await expect(row.locator("summary")).toContainText("+¥8.00");
+  await expect(card).toContainText("累计返利");
+  await row.locator("summary").click();
+  await expect(row).toContainText("付款 ¥45.00");
+  await expect(row).toContainText("+¥4.50");
+  await expect(row).toContainText("付款 ¥35.00");
+});
+
+test("管理员删除客人：名下订阅从 Marzban 删掉，账号注销，记录留着，同一个邮箱能重新注册", async ({ page, browser }) => {
+  const stamp = Date.now();
+  const wechat = `e2e_del_${stamp}`;
+  const email = `e2e-del-${stamp}@example.test`;
+  const adminEmail = `e2e-del-admin-${stamp}@example.test`;
+  const adminPassword = "E2eAdmin-123456";
+  run(["admin:create", "--", adminEmail], `${adminPassword}\n${adminPassword}\n`);
+  await mockMarzban("POST", "/user", { username: wechat, expire: Math.floor(Date.now() / 1000) + 30 * 86400 });
+  await page.goto("/register");
+  await page.getByPlaceholder("邮箱").fill(email);
+  await page.getByPlaceholder("密码（至少 8 位）").fill("E2eTest-1234");
+  await page.getByPlaceholder("微信号").fill(wechat);
+  await page.getByRole("button", { name: "注册" }).click();
+  await expect(page.getByTestId("sub-id")).toBeVisible();
+  const id = query(`SELECT id FROM customers WHERE email = '${email}'`)[0].id;
+
+  const ctx = await browser.newContext();
+  const admin = await ctx.newPage();
+  await admin.goto("/admin/login");
+  await admin.getByPlaceholder("管理员邮箱").fill(adminEmail);
+  await admin.getByPlaceholder("密码").fill(adminPassword);
+  await admin.getByRole("button", { name: "登录" }).click();
+  await expect(admin).toHaveURL(/\/admin$/);
+  await admin.goto(`/admin/customers/${id}`);
+  // 输错邮箱不删
+  admin.once("dialog", (d) => d.accept("wrong@example.test"));
+  await admin.getByRole("button", { name: "删除客人和 1 个订阅" }).click();
+  await expect(admin).toHaveURL(new RegExp(`/admin/customers/${id}$`));
+  admin.once("dialog", (d) => d.accept(email));
+  await admin.getByRole("button", { name: "删除客人和 1 个订阅" }).click();
+  await expect(admin).toHaveURL(/\/admin\/customers$/);
+
+  // 列表默认不显示，选「已删除的」能看到；订阅从 Marzban 删掉了
+  await admin.goto(`/admin/customers?q=${wechat}`);
+  await expect(admin.getByRole("link", { name: new RegExp(email) })).toHaveCount(0);
+  await admin.goto(`/admin/users?q=${wechat}`);
+  await expect(admin.getByTestId("marzban-user")).toHaveCount(0);
+  const row = query(`SELECT email, wechat, deleted_at FROM customers WHERE id = ${id}`)[0];
+  expect(row.email).toBe(`deleted-${id}@deleted.invalid`);
+  expect(row.wechat).toBeNull();
+  expect(row.deleted_at).toBeTruthy();
+  expect(query(`SELECT 1 FROM subscriptions WHERE customer_id = ${id}`)).toHaveLength(0);
+  await admin.goto(`/admin/customers?has=deleted&q=deleted-${id}@`);
+  await expect(admin.getByRole("link", { name: new RegExp(`deleted-${id}@`) })).toBeVisible();
+  await admin.goto(`/admin/logs?action=customer.delete`);
+  await expect(admin.getByText(email)).toBeVisible();
+  await ctx.close();
+
+  // 客人那边登录没了；同一个邮箱能重新注册
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/login/);
+  await page.goto("/register");
+  await page.getByPlaceholder("邮箱").fill(email);
+  await page.getByPlaceholder("密码（至少 8 位）").fill("E2eTest-1234");
+  await page.getByPlaceholder("微信号").fill(`${wechat}_2`);
+  await page.getByRole("button", { name: "注册" }).click();
+  await expect(page).toHaveURL(/\/dashboard/);
+});
+
 test("手机上下单：付款窗从底部弹出来，能关掉、刷新不再弹，在弹窗里点我已付款就开通", async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 402, height: 874 }, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();
@@ -633,7 +723,7 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   const username = usernameOf(await title.innerText());
   // 卡片标题是套餐档位名（p1 是普通版），不是用户名
   await expect(page.locator(".card-title").filter({ hasText: "普通版" }).first()).toBeVisible();
-  await expect(page.getByText("¥5.00")).toBeVisible();
+  await expect(page.getByTestId("balance")).toHaveText("¥5.00");
 
   // 余额不够付全款：抵扣 ¥5，还要转 ¥20；管理员列表里显示的也是 ¥20
   await page.goto("/plans");
@@ -647,7 +737,7 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   // 还没付款：余额不扣，只是被这张单占着，不能再拿去下别的单
   await expect(page.getByLabel(/用余额抵扣/)).toHaveCount(0);
   await page.goto("/dashboard");
-  await expect(page.getByText("¥5.00", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("balance")).toHaveText("¥5.00");
   await expect(page.getByTestId("balance-reserved")).toContainText("其中 ¥5.00 抵扣在还没付款的订单上");
 
   // 客人取消：不再占着
@@ -656,7 +746,7 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   await confirmOk(page);
   await expect(page.locator(".card.border")).toHaveCount(0);
   await page.goto("/dashboard");
-  await expect(page.getByText("¥5.00", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("balance")).toHaveText("¥5.00");
   await expect(page.getByTestId("balance-reserved")).toHaveCount(0);
 
   // 再下一单抵扣 ¥5，点「我已付款」开通后余额才扣成 ¥0
@@ -669,7 +759,7 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   await paidCard.getByLabel("支付宝", { exact: true }).check();
   await paidCard.getByRole("button", { name: "我已付款" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
-  await expect(page.getByText("¥0.00", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("balance")).toHaveText("¥0.00");
   await expect(page.getByTestId("balance-reserved")).toHaveCount(0);
 
   // 管理员生成兑换码，客人输入后给这个订阅续期

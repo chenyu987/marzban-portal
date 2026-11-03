@@ -9,7 +9,7 @@ import { verifyPassword } from "@/lib/password";
 import { createAdminSession, currentAdmin, destroyAdminSession, logAdmin, requireAccess, requireAdmin } from "@/lib/admin";
 import { cancelPendingOrder, confirmTransferOrder, orderLabel, revokeOrder, verifyOrder, type AdminResult } from "@/lib/admin-orders";
 import type { FormState } from "../actions";
-import { addNode, createUser, deleteExpiredUsers, deleteNode, deleteUser, expiredUsers, findUser, getHosts, resetAllUsage, listNodes, putHosts, modifyNode, modifyUser, reconnectNode, resetUsage, restartCore, revokeSubscription, vlessInbounds } from "@/lib/marzban";
+import { MarzbanError, addNode, createUser, deleteExpiredUsers, deleteNode, deleteUser, expiredUsers, findUser, getHosts, resetAllUsage, listNodes, putHosts, modifyNode, modifyUser, reconnectNode, resetUsage, restartCore, revokeSubscription, vlessInbounds } from "@/lib/marzban";
 import { changePlanBody, planInbounds } from "@/lib/plans";
 import { createUserBody, describeChanges, parseOnHoldDays, parseExpiredDays, parseNodeForm, parseUserForm, validateHosts, USERNAME_RE, type UserFields } from "@/lib/admin-users";
 import { formatBytes, formatExpire, RESET_LABEL } from "@/lib/format";
@@ -333,6 +333,67 @@ export async function adminDeleteUser(_: FormState, form: FormData): Promise<For
   await db().prepare("DELETE FROM subscriptions WHERE marzban_username = ?").bind(username).run();
   await logAdmin(admin, "user.delete", username, owner ? `原来绑在 ${owner.email} 名下` : undefined);
   redirect("/admin/users");
+}
+
+// 删除客人：先把他名下的订阅从 Marzban 删掉，再注销账号。
+// 订单、余额流水、提现记录留着（账目要对得上，推荐人的返利也指着这些订单），客人那一行改成匿名的、记下 deleted_at：
+// 邮箱、微信号、推荐码换掉，登录、找回密码、用推荐码注册都不行了，同一个邮箱以后能重新注册。
+// 还有钱没处理完（客人说已付款还没开通的单、等打款的提现）不让删，先处理
+export async function adminDeleteCustomer(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const id = Number(form.get("customerId"));
+  const c = Number.isInteger(id)
+    ? await db().prepare("SELECT id, email, wechat, deleted_at FROM customers WHERE id = ?").bind(id).first<{ id: number; email: string; wechat: string | null; deleted_at: number | null }>()
+    : null;
+  if (!c || c.deleted_at) return { error: "没有这个客人，或者已经删掉了" };
+  // 前端输过一遍邮箱，后端再对一次
+  if (String(form.get("confirm") ?? "").trim().toLowerCase() !== c.email.toLowerCase()) return { error: "输入的邮箱对不上，没删" };
+  const busy = await db()
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM orders WHERE customer_id = ?1 AND (status = 'processing' OR (status = 'pending' AND claimed_at IS NOT NULL))) AS orders,
+         (SELECT COUNT(*) FROM withdrawals WHERE customer_id = ?1 AND status = 'pending') AS withdrawals`,
+    )
+    .bind(id)
+    .first<{ orders: number; withdrawals: number }>();
+  if (busy?.orders) return { error: `他有 ${busy.orders} 张说已付款、还没处理完的单，先在订单页处理` };
+  if (busy?.withdrawals) return { error: "他有一笔等打款的提现，先处理" };
+
+  const { results: subs } = await db().prepare("SELECT marzban_username FROM subscriptions WHERE customer_id = ? ORDER BY id").bind(id).all<{ marzban_username: string }>();
+  const removed: string[] = [];
+  for (const { marzban_username: name } of subs) {
+    try {
+      await deleteUser(name);
+    } catch (e) {
+      // Marzban 上本来就没有了，算删掉
+      if (!(e instanceof MarzbanError && e.status === 404)) {
+        if (removed.length) {
+          await db().batch(removed.map((n) => db().prepare("DELETE FROM subscriptions WHERE marzban_username = ?").bind(n)));
+          await logAdmin(admin, "user.delete", removed.join("、"), `删除客人 ${c.email} 时删的，客人没删成`);
+        }
+        return { error: `删订阅 ${name} 失败：${errText(e)}。${removed.length ? `已经删了 ${removed.join("、")}，` : ""}客人还没删，可以再试一次` };
+      }
+    }
+    removed.push(name);
+  }
+
+  const now = nowSec();
+  await db().batch([
+    // 没付款的单直接取消；万一有扣过余额的（以前下单就扣），一起退回，和客人自己取消一样
+    db().prepare("DELETE FROM balance_entries WHERE kind = 'purchase' AND order_id IN (SELECT id FROM orders WHERE customer_id = ? AND status = 'pending')").bind(id),
+    db().prepare("UPDATE orders SET status = 'cancelled' WHERE customer_id = ? AND status = 'pending'").bind(id),
+    db().prepare("DELETE FROM subscriptions WHERE customer_id = ?").bind(id),
+    db().prepare("DELETE FROM sessions WHERE customer_id = ?").bind(id),
+    db().prepare("DELETE FROM password_resets WHERE customer_id = ?").bind(id),
+    db()
+      .prepare(
+        `UPDATE customers SET email = 'deleted-' || id || '@deleted.invalid', wechat = NULL, referral_code = 'deleted-' || id,
+           password_hash = '!', notify_expiry = 0, deleted_at = ? WHERE id = ?`,
+      )
+      .bind(now, id),
+  ]);
+  await logAdmin(admin, "customer.delete", c.email, `${c.wechat ? `微信 ${c.wechat}，` : ""}${removed.length ? `删了 ${removed.length} 个订阅：${removed.join("、")}` : "名下没有订阅"}`);
+  revalidatePath("/admin/customers");
+  redirect("/admin/customers");
 }
 
 // ---- 节点和核心（/admin/nodes）----

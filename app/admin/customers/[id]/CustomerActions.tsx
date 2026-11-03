@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { adminAdjustBalance, adminBindSubscription, adminResetLink } from "../../actions";
+import { adminAdjustBalance, adminBindSubscription, adminDeleteCustomer, adminResetLink } from "../../actions";
 
 function Alert({ state }: { state?: { error?: string; ok?: string } }) {
   if (state?.error) return <div role="alert" className="alert alert-error alert-soft text-sm">{state.error}</div>;
@@ -78,5 +78,42 @@ export default function CustomerActions({ customerId, email }: { customerId: num
         </div>
       </form>
     </div>
+  );
+}
+
+// 删除客人：要输一遍邮箱。名下订阅从 Marzban 删掉、账号注销；订单和余额记录留着
+export function DeleteCustomer({ customerId, email, subs }: { customerId: number; email: string; subs: string[] }) {
+  const [state, action, pending] = useActionState(adminDeleteCustomer, undefined);
+  return (
+    <form
+      action={action}
+      onSubmit={(e) => {
+        const typed = prompt(
+          `删除客人 ${email}：\n` +
+            (subs.length ? `名下 ${subs.length} 个订阅（${subs.join("、")}）会从 Marzban 删掉，马上连不上。\n` : "") +
+            "账号注销，登录不了；订单和余额记录留着。不能恢复。\n确定要删就输入他的邮箱：",
+        );
+        if (typed?.trim().toLowerCase() !== email.toLowerCase()) {
+          e.preventDefault();
+          return;
+        }
+        (e.currentTarget.elements.namedItem("confirm") as HTMLInputElement).value = typed.trim();
+      }}
+      className="card border border-error/40 bg-base-100 shadow-sm"
+    >
+      <div className="card-body gap-2 p-4">
+        <h3 className="font-bold text-error">删除客人</h3>
+        <p className="text-xs text-base-content/60">
+          名下所有订阅一起从 Marzban 删掉，账号注销。订单、余额、提现记录留着对账，在客人列表选「已删除的」能看到。
+        </p>
+        <input type="hidden" name="customerId" value={customerId} />
+        <input type="hidden" name="confirm" value="" />
+        <button className="btn btn-sm btn-error btn-outline self-start" disabled={pending}>
+          {pending && <span className="loading loading-spinner loading-xs" />}
+          删除客人{subs.length ? `和 ${subs.length} 个订阅` : ""}
+        </button>
+        <Alert state={state} />
+      </div>
+    </form>
   );
 }

@@ -32,14 +32,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // earned：这个朋友付的款一共给推荐人返了多少
   const { results: referred } = await db()
     .prepare(
-      `SELECT c.email, c.wechat, c.created_at,
+      `SELECT c.id, c.email, c.wechat, c.created_at,
          (SELECT COALESCE(SUM(b.amount), 0) FROM balance_entries b JOIN orders o ON o.id = b.order_id
           WHERE b.customer_id = ?1 AND b.kind = 'referral_reward' AND o.customer_id = c.id) AS earned
        FROM customers c WHERE c.referred_by = ?1 ORDER BY c.id DESC`,
     )
     .bind(customer.id)
-    .all<{ email: string; wechat: string | null; created_at: number; earned: number }>();
-  const friend = (r: { email: string; wechat?: string | null }) => (r.wechat ? t(`微信 ${r.wechat}`, `WeChat ${r.wechat}`) : maskEmail(r.email));
+    .all<{ id: number; email: string; wechat: string | null; created_at: number; earned: number }>();
+  // 管理员删掉的客人邮箱换成了 deleted-…@deleted.invalid，不打码显示
+  const friend = (r: { email: string; wechat?: string | null }) =>
+    r.wechat ? t(`微信 ${r.wechat}`, `WeChat ${r.wechat}`) : r.email.endsWith("@deleted.invalid") ? t("已注销的账号", "Closed account") : maskEmail(r.email);
   // reserved：抵扣在还没付款的单上的部分，付款时才扣，余额里还算着
   const balance = await db().prepare(AVAILABLE_SQL).bind(customer.id).first<{ balance: number; reserved: number }>();
   const { results: rewards } = await db().prepare(REFERRAL_REWARDS_SQL).bind(customer.id).all<RewardRow>();
@@ -157,15 +159,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <div className="mt-8">
         <ReferralCard
           code={customer.referral_code}
-          referrals={referred.map((r) => ({ email: friend(r), createdAt: formatDate(r.created_at, lang), earned: money(r.earned) }))}
+          referrals={referred.map((r) => ({
+            id: r.id,
+            name: friend(r),
+            createdAt: formatDate(r.created_at, lang),
+            earned: money(r.earned),
+            rewards: rewards
+              .filter((w) => w.friend_id === r.id)
+              .map((w) => ({ date: formatDate(w.created_at, lang), paid: money(w.paid), reward: money(w.reward) })),
+          }))}
           balance={money(balance?.balance ?? 0)}
           reserved={balance?.reserved ? money(balance.reserved) : null}
-          rewards={rewards.map((r) => ({
-            email: friend(r),
-            date: formatDate(r.created_at, lang),
-            paid: money(r.paid),
-            reward: money(r.reward),
-          }))}
+          totalEarned={money(referred.reduce((sum, r) => sum + r.earned, 0))}
         />
       </div>
 

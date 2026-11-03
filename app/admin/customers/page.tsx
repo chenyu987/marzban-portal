@@ -28,6 +28,7 @@ const HAS: Record<string, { label: string; sql: string }> = {
   balance: { label: "有余额", sql: "(SELECT COALESCE(SUM(amount), 0) FROM balance_entries b WHERE b.customer_id = c.id) > 0" },
   referred: { label: "别人推荐来的", sql: "c.referred_by IS NOT NULL" },
   nowechat: { label: "没填微信号", sql: "c.wechat IS NULL" },
+  deleted: { label: "已删除的", sql: "c.deleted_at IS NOT NULL" },
 };
 
 // 客人列表：搜邮箱、微信号、订阅名或订阅编号，按有没有订阅 / 余额 / 推荐人筛，排序、翻页。
@@ -39,7 +40,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const has = param(sp, "has") in HAS ? param(sp, "has") : "";
   const sort = param(sp, "sort") in SORTS ? param(sp, "sort") : "new";
   const page = pageOf(sp);
-  const where = `(?1 = '' OR c.email LIKE ?2 ESCAPE '\\' OR c.wechat LIKE ?2 ESCAPE '\\' OR c.id IN (SELECT customer_id FROM subscriptions WHERE marzban_username LIKE ?2 ESCAPE '\\' OR code = ?3))${has ? ` AND ${HAS[has].sql}` : ""}`;
+  const where = `(?1 = '' OR c.email LIKE ?2 ESCAPE '\\' OR c.wechat LIKE ?2 ESCAPE '\\' OR c.id IN (SELECT customer_id FROM subscriptions WHERE marzban_username LIKE ?2 ESCAPE '\\' OR code = ?3))${has ? ` AND ${HAS[has].sql}` : ""}${has === "deleted" ? "" : " AND c.deleted_at IS NULL"}`;
   const binds = [query, like(query), normalizeSubCode(query)];
   const total = await db().prepare(`SELECT COUNT(*) AS n FROM customers c WHERE ${where}`).bind(...binds).first<{ n: number }>();
   const { results } = await db()

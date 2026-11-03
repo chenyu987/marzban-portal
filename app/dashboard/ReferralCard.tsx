@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react";
 import { useT } from "../LangContext";
 
-export type Referral = { email: string; createdAt: string; earned: string };
-export type Reward = { email: string; date: string; paid: string; reward: string };
+// 每个朋友一行：谁、哪天加入、一共给你返了多少；点开看他每一笔付款返了多少（以前「已推荐」和「奖励明细」两张表，同一个人出现两次）
+export type Referral = { id: number; name: string; createdAt: string; earned: string; rewards: { date: string; paid: string; reward: string }[] };
 
 // 推荐链接用当前访问的域名拼，换域名或者在本地测试都不用改配置
-// reserved：抵扣在还没付款的单上的余额，没有是 null
-type Props = { code: string; referrals: Referral[]; balance: string; reserved: string | null; rewards: Reward[] };
+// reserved：抵扣在还没付款的单上的余额，没有是 null；totalEarned：推荐一共返了多少
+type Props = { code: string; referrals: Referral[]; balance: string; reserved: string | null; totalEarned: string };
 
-export default function ReferralCard({ code, referrals, balance, reserved, rewards }: Props) {
+export default function ReferralCard({ code, referrals, balance, reserved, totalEarned }: Props) {
   const [link, setLink] = useState("");
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
   const t = useT();
@@ -24,79 +24,102 @@ export default function ReferralCard({ code, referrals, balance, reserved, rewar
   }
 
   return (
-    <div className="card bg-base-100 shadow-sm">
-      <div className="card-body gap-4">
-        <h2 className="card-title">{t("邀请朋友", "Invite friends")}</h2>
-        <p className="text-sm text-base-content/70">
-          {t(
-            "把推荐码或推荐链接发给朋友，朋友注册时填上，就会记在你名下。以后朋友每付一笔款，你都能拿到这笔金额的 10%，记进你的余额。",
-            "Send your referral code or link to friends. When they sign up with it, they're linked to you, and you get 10% of every payment they make, added to your balance.",
-          )}
-        </p>
+    <div className="card bg-base-100 shadow-sm" data-testid="referral-card">
+      <div className="card-body gap-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="card-title">{t("邀请朋友", "Invite friends")}</h2>
+            <p className="mt-1 text-sm text-base-content/60">
+              {t("朋友用你的推荐码注册，之后他每付一笔款，你都拿 10%，记进余额。", "Friends who sign up with your code earn you 10% of every payment they make, added to your balance.")}
+            </p>
+          </div>
+          <span className="badge badge-soft badge-success shrink-0 font-semibold">{t("返 10%", "10% back")}</span>
+        </div>
 
-        <div>
-          <div className="text-sm text-base-content/60">{t("我的余额", "My balance")}</div>
-          <div className="text-2xl font-bold">{balance}</div>
-          <div className="text-sm text-base-content/60">{t("买套餐或续费时，余额可以直接抵扣套餐费用。", "Your balance can be used to pay for plans and renewals.")}</div>
+        {/* 推荐码：主操作是复制链接（朋友点开就填好了），推荐码给不方便点链接的人 */}
+        <div className="rounded-box border border-dashed border-base-300 p-4">
+          <div className="text-xs text-base-content/50">{t("我的推荐码", "My referral code")}</div>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+            <code className="font-mono text-2xl font-bold tracking-[0.2em]">{code}</code>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => copy("code")} className="btn btn-ghost btn-sm">
+                {copied === "code" ? t("已复制 ✓", "Copied ✓") : t("复制推荐码", "Copy code")}
+              </button>
+              <button type="button" onClick={() => copy("link")} className="btn btn-primary btn-sm" disabled={!link}>
+                {copied === "link" ? t("已复制 ✓", "Copied ✓") : t("复制推荐链接", "Copy link")}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 三个数：余额（能直接抵扣）、邀请了几个人、一共返了多少 */}
+        <div className="grid grid-cols-3 divide-x divide-base-200 rounded-box bg-base-200/60 py-3 text-center">
+          <div>
+            <div className="text-xs text-base-content/50">{t("余额", "Balance")}</div>
+            <div className="mt-0.5 text-lg font-bold tabular-nums" data-testid="balance">{balance}</div>
+          </div>
+          <div>
+            <div className="text-xs text-base-content/50">{t("已邀请", "Invited")}</div>
+            <div className="mt-0.5 text-lg font-bold tabular-nums">
+              {referrals.length}
+              <span className="ml-0.5 text-xs font-normal text-base-content/50">{t("人", "")}</span>
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-base-content/50">{t("累计返利", "Earned")}</div>
+            <div className="mt-0.5 text-lg font-bold text-success tabular-nums">{totalEarned}</div>
+          </div>
+        </div>
+        <p className="-mt-3 text-xs text-base-content/50">
+          {t("买套餐、续费时余额直接抵扣。", "Your balance is applied automatically when you buy or renew.")}
           {reserved && (
-            <div className="text-sm text-base-content/60" data-testid="balance-reserved">
+            <span className="block" data-testid="balance-reserved">
               {t(
                 `其中 ${reserved} 抵扣在还没付款的订单上，付款后才扣；不要了在「购买/续费」里取消就行。`,
                 `${reserved} of it is applied to an unpaid order and only deducted once you pay; cancel the order under Buy / Renew if you don't need it.`,
               )}
-            </div>
+            </span>
           )}
-        </div>
+        </p>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <code className="rounded-box bg-base-200 px-3 py-1 text-lg font-bold tracking-widest">{code}</code>
-          <button type="button" onClick={() => copy("code")} className="btn btn-sm">
-            {copied === "code" ? t("已复制 ✓", "Copied ✓") : t("复制推荐码", "Copy code")}
-          </button>
-          <button type="button" onClick={() => copy("link")} className="btn btn-sm" disabled={!link}>
-            {copied === "link" ? t("已复制 ✓", "Copied ✓") : t("复制推荐链接", "Copy link")}
-          </button>
-        </div>
-
-        <div>
-          <div className="mb-2 text-sm text-base-content/60">
-            {t(`已推荐 ${referrals.length} 人`, `${referrals.length} friend${referrals.length === 1 ? "" : "s"} referred`)}
-          </div>
-          {referrals.length > 0 && (
-            <ul className="divide-y divide-base-200 text-sm">
-              {referrals.map((r, i) => (
-                <li key={i} className="flex flex-wrap justify-between gap-x-4 py-2">
-                  <span>
-                    {r.email}
-                    <span className="ml-2 text-base-content/60">{t(`${r.createdAt} 注册`, `joined ${r.createdAt}`)}</span>
-                  </span>
-                  <span>
-                    {t("已为你返 ", "Earned you ")}
-                    <span className="font-medium text-success">{r.earned}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {rewards.length > 0 && (
-          <div>
-            <div className="mb-2 text-sm text-base-content/60">{t("奖励明细", "Rewards")}</div>
-            <ul className="divide-y divide-base-200 text-sm">
-              {rewards.map((r, i) => (
-                <li key={i} className="flex flex-wrap justify-between gap-x-4 py-2">
-                  <span>
-                    {r.email} {t("付款", "paid")} {r.paid}
-                  </span>
-                  <span>
-                    <span className="font-medium text-success">+{r.reward}</span>
-                    <span className="ml-2 text-base-content/60">{r.date}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+        {referrals.length > 0 && (
+          <ul className="-mx-2" data-testid="referrals">
+            {referrals.map((r) => (
+              <li key={r.id}>
+                <details className="group rounded-box px-2 open:bg-base-200/50">
+                  <summary className="flex cursor-pointer list-none items-center gap-3 py-2.5 [&::-webkit-details-marker]:hidden">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary" aria-hidden>
+                      {r.name.replace(/^微信\s*/, "").slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{r.name}</span>
+                      <span className="block text-xs text-base-content/50">{t(`${r.createdAt} 加入`, `Joined ${r.createdAt}`)}</span>
+                    </span>
+                    <span className={`text-sm font-semibold tabular-nums ${r.rewards.length ? "text-success" : "text-base-content/40"}`}>
+                      {r.rewards.length ? `+${r.earned}` : t("还没付款", "No payments yet")}
+                    </span>
+                    {r.rewards.length > 0 && (
+                      <svg viewBox="0 0 20 20" className="size-4 shrink-0 text-base-content/40 transition-transform group-open:rotate-180" aria-hidden>
+                        <path fill="currentColor" d="M5.3 7.3a1 1 0 0 1 1.4 0L10 10.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4Z" />
+                      </svg>
+                    )}
+                  </summary>
+                  {r.rewards.length > 0 && (
+                    <ul className="mb-2 ml-11 space-y-1 border-l border-base-300 pl-3 text-xs text-base-content/60">
+                      {r.rewards.map((w, i) => (
+                        <li key={i} className="flex justify-between gap-3 tabular-nums">
+                          <span>
+                            {w.date} {t("付款", "paid")} {w.paid}
+                          </span>
+                          <span className="text-success">+{w.reward}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </details>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>

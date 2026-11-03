@@ -7,7 +7,7 @@ import { getUser, type MarzbanUser } from "@/lib/marzban";
 import { findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
 import AdminHeader from "../../AdminHeader";
-import CustomerActions from "./CustomerActions";
+import CustomerActions, { DeleteCustomer } from "./CustomerActions";
 import { CustomerLink, SubLink } from "../../Links";
 import { ORDER_METHOD, ORDER_STATUS } from "../../ui";
 import BindButton from "../../BindButton";
@@ -23,11 +23,11 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   if (!Number.isInteger(id)) notFound();
   const c = await db()
     .prepare(
-      `SELECT c.id, c.email, c.wechat, c.referral_code, c.created_at, r.id AS referrer_id, r.email AS referrer
+      `SELECT c.id, c.email, c.wechat, c.referral_code, c.created_at, c.deleted_at, r.id AS referrer_id, r.email AS referrer
        FROM customers c LEFT JOIN customers r ON r.id = c.referred_by WHERE c.id = ?`,
     )
     .bind(id)
-    .first<{ id: number; email: string; wechat: string | null; referral_code: string; created_at: number; referrer_id: number | null; referrer: string | null }>();
+    .first<{ id: number; email: string; wechat: string | null; referral_code: string; created_at: number; deleted_at: number | null; referrer_id: number | null; referrer: string | null }>();
   if (!c) notFound();
 
   const [subs, orders, entries, referred] = await Promise.all([
@@ -108,6 +108,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
         <h1 className="text-2xl font-bold">
           {c.wechat ?? c.email}
           {c.wechat && <span className="ml-2 align-middle text-sm font-normal text-base-content/60">{c.email}</span>}
+          {c.deleted_at && <span className="badge badge-error badge-soft ml-2 align-middle">已删除 {formatExpire(c.deleted_at)}</span>}
         </h1>
         <div className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
           {info.map(([k, v]) => (
@@ -194,8 +195,12 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
         })}
       </div>
 
-      <h2 className="mt-8 mb-2 text-lg font-bold">操作</h2>
-      <CustomerActions customerId={c.id} email={c.email} />
+      {!c.deleted_at && (
+        <>
+          <h2 className="mt-8 mb-2 text-lg font-bold">操作</h2>
+          <CustomerActions customerId={c.id} email={c.email} />
+        </>
+      )}
 
       <div className="mt-8 mb-2 flex items-center justify-between">
         <h2 className="text-lg font-bold">订单（{orders.results.length}）</h2>
@@ -291,6 +296,12 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!c.deleted_at && (
+        <div className="mt-10">
+          <DeleteCustomer customerId={c.id} email={c.email} subs={users.map((u) => u.username)} />
         </div>
       )}
     </div>

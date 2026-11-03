@@ -32,6 +32,7 @@ export const LOG_ACTIONS: Record<string, string> = {
   "hosts.save": "保存 Host",
   "users.delete_expired": "删除过期订阅",
   "users.reset_all_usage": "全部流量清零",
+  "customer.delete": "删除客人",
   "account.password": "改自己的密码",
   "account.logout_others": "退出其他设备",
   "account.prefs": "改后台偏好",

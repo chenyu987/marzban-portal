@@ -15,7 +15,7 @@ export const AVAILABLE_SQL = `SELECT ${LEDGER_SQL} AS balance, ${RESERVED_SQL} A
 
 // 推荐人看到的明细：哪位朋友（打码前的邮箱，显示时再打码）、哪天付款、付了多少、自己拿了多少
 export const REFERRAL_REWARDS_SQL = `
-  SELECT c.email, c.wechat, o.amount AS paid, b.amount AS reward, b.created_at
+  SELECT o.customer_id AS friend_id, c.email, c.wechat, o.amount AS paid, b.amount AS reward, b.created_at
   FROM balance_entries b
   JOIN orders o ON o.id = b.order_id
   JOIN customers c ON c.id = o.customer_id
@@ -23,4 +23,4 @@ export const REFERRAL_REWARDS_SQL = `
   ORDER BY b.id DESC
   LIMIT 100`;
 
-export type RewardRow = { email: string; wechat: string | null; paid: number; reward: number; created_at: number };
+export type RewardRow = { friend_id: number; email: string; wechat: string | null; paid: number; reward: number; created_at: number };

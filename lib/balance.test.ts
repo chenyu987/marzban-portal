@@ -82,8 +82,8 @@ describe("推荐奖励", () => {
     pay(b, 3000);
     pay(c, 1000);
     expect(db.prepare(REFERRAL_REWARDS_SQL).all(a)).toEqual([
-      { email: "c@x.com", wechat: null, paid: 1000, reward: 100, created_at: 100 },
-      { email: "b@x.com", wechat: null, paid: 3000, reward: 300, created_at: 100 },
+      { friend_id: c, email: "c@x.com", wechat: null, paid: 1000, reward: 100, created_at: 100 },
+      { friend_id: b, email: "b@x.com", wechat: null, paid: 3000, reward: 300, created_at: 100 },
     ]);
   });
 });

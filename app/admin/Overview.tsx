@@ -17,7 +17,7 @@ export default async function Overview({ pending }: { pending: number }) {
       .bind(month)
       .first<{ n: number; sum: number }>(),
     db()
-      .prepare("SELECT COUNT(*) AS total, COALESCE(SUM(created_at >= ?), 0) AS fresh FROM customers")
+      .prepare("SELECT COUNT(*) AS total, COALESCE(SUM(created_at >= ?), 0) AS fresh FROM customers WHERE deleted_at IS NULL")
       .bind(month)
       .first<{ total: number; fresh: number }>(),
   ]);
