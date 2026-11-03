@@ -4,6 +4,7 @@ import { Fragment, useActionState, useState } from "react";
 import { createOrder } from "../actions";
 import ContactSupport from "../ContactSupport";
 import { confirmSubmit } from "../ConfirmDialog";
+import { useT } from "../LangContext";
 
 export type PlanGroup = {
   name: string;
@@ -11,12 +12,9 @@ export type PlanGroup = {
   lines: string[];
   accent?: boolean;
   highlight?: "hot" | "top";
-  // price：带币种的价格，确认框里用；amount：价目表上的数字；fen：价格（分），用余额抵扣时算还要付多少
-  plans: { id: string; label: string; name: string; price: string; amount: string; fen: number; days: number; tag?: string }[];
+  // price：带币种的价格，确认框里用；amount：价目表上的数字；per：跟在价格后面的「/月」；fen：价格（分），用余额抵扣时算还要付多少
+  plans: { id: string; name: string; per: string; price: string; amount: string; fen: number; days: number; tag?: string }[];
 };
-
-// 「月付」→「/月」，跟在价格后面
-const per = (label: string) => (label.endsWith("付") ? `/${label.slice(0, -1)}` : "");
 
 // 价目表照 Canva 上的原版：一行一档，名字、说明、四个价格各占一格，格子之间有线。
 // 手机上放不下六列，名字和说明占一行，四个价格排在下一行
@@ -41,6 +39,8 @@ export default function OrderForm({
 }) {
   const [state, action, pending] = useActionState(createOrder, undefined);
   const [useBalance, setUseBalance] = useState(balance > 0);
+  const t = useT();
+  const renewText = (label: string) => t(`给订阅 ${label} 续期`, `Renew subscription ${label}`);
   const deduct = useBalance ? balance : 0;
   const canOrder = canTransfer || balance > 0;
   const money = (fen: number) => `${currency}${(fen / 100).toFixed(2).replace(/\.00$/, "")}`;
@@ -54,14 +54,17 @@ export default function OrderForm({
         if (!btn) return e.preventDefault();
         const fen = Number(btn.dataset.fen);
         const target = new FormData(e.currentTarget).get("target");
-        const what = !target || target === "new" ? "新开一个订阅" : `给订阅 ${subscriptions.find((s) => s.username === target)?.label ?? target} 续期`;
+        const what =
+          !target || target === "new" ? t("新开一个订阅", "New subscription") : renewText(subscriptions.find((s) => s.username === target)?.label ?? String(target));
         const how =
           deduct >= fen
-            ? "全部用余额付，马上开通"
+            ? t("全部用余额付，马上开通", "Paid in full with your balance, activated right away")
             : deduct > 0
-              ? `余额抵扣 ${money(deduct)}，还要转账 ${money(fen - deduct)}`
-              : "下单后转账";
-        confirmSubmit(e, `${btn.dataset.name}，${btn.dataset.price}\n${what}。${how}。`, { ok: "确定下单" });
+              ? t(`余额抵扣 ${money(deduct)}，还要转账 ${money(fen - deduct)}`, `${money(deduct)} from your balance, ${money(fen - deduct)} left to pay`)
+              : t("下单后转账", "Pay by transfer after ordering");
+        confirmSubmit(e, t(`${btn.dataset.name}，${btn.dataset.price}\n${what}。${how}。`, `${btn.dataset.name}, ${btn.dataset.price}\n${what}. ${how}.`), {
+          ok: t("确定下单", "Place order"),
+        });
       }}
       className="flex flex-col gap-4"
     >
@@ -75,17 +78,17 @@ export default function OrderForm({
             onChange={(e) => setUseBalance(e.target.checked)}
             className="checkbox checkbox-primary checkbox-sm"
           />
-          <span>用余额抵扣（剩 {money(balance)}）</span>
+          <span>{t(`用余额抵扣（剩 ${money(balance)}）`, `Use my balance (${money(balance)} left)`)}</span>
         </label>
       )}
       {/* 续期还是新开：只有一个订阅时两个选项左右并排，一眼看到；订阅多了再收进下拉框 */}
       {canOrder && subscriptions.length === 1 && (
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-2 text-sm text-base-content/70">买给哪个订阅</legend>
+          <legend className="mb-2 text-sm text-base-content/70">{t("买给哪个订阅", "Which subscription is this for?")}</legend>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { value: subscriptions[0].username, title: `给订阅 ${subscriptions[0].label} 续期`, desc: "时长接着加，链接不变" },
-              { value: "new", title: "新开一个订阅", desc: "多一条订阅链接，给家人或别的设备用" },
+              { value: subscriptions[0].username, title: renewText(subscriptions[0].label), desc: t("时长接着加，链接不变", "Adds time, same link") },
+              { value: "new", title: t("新开一个订阅", "New subscription"), desc: t("多一条订阅链接，给家人或别的设备用", "A second link for family or another device") },
             ].map((o) => (
               <label
                 key={o.value}
@@ -103,22 +106,22 @@ export default function OrderForm({
       )}
       {canOrder && subscriptions.length > 1 && (
         <label className="flex flex-col gap-1">
-          <span className="text-sm text-base-content/70">买给哪个订阅</span>
+          <span className="text-sm text-base-content/70">{t("买给哪个订阅", "Which subscription is this for?")}</span>
           <select name="target" className="select w-full" defaultValue={defaultTarget ?? subscriptions[0].username}>
             {subscriptions.map((s) => (
               <option key={s.username} value={s.username}>
-                给订阅 {s.label} 续期
+                {renewText(s.label)}
               </option>
             ))}
-            <option value="new">新开一个订阅</option>
+            <option value="new">{t("新开一个订阅", "New subscription")}</option>
           </select>
         </label>
       )}
       {state?.error && <div role="alert" className="alert alert-error alert-soft">{state.error}</div>}
-      {state?.error?.includes("联系客服") && <ContactSupport />}
+      {state?.support && <ContactSupport />}
       {state?.ok && <div role="alert" className="alert alert-success alert-soft">{state.ok}</div>}
 
-      {canOrder && <p className="text-center text-sm text-base-content/60 sm:hidden">点价格就能下单</p>}
+      {canOrder && <p className="text-center text-sm text-base-content/60 sm:hidden">{t("点价格就能下单", "Tap a price to order")}</p>}
       <div data-testid="plan-table" className="grid grid-cols-4 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 sm:grid-cols-[6rem_1.7fr_repeat(4,1fr)]">
         {groups.map((g) => {
           const hot = g.highlight === "hot";
@@ -145,7 +148,7 @@ export default function OrderForm({
                     {p.tag && <span className="text-xs leading-tight text-error">{p.tag}</span>}
                     <span className={`whitespace-nowrap ${top ? "font-bold text-error" : ""}`}>
                       {p.amount}
-                      {per(p.label)}
+                      {p.per}
                     </span>
                   </>
                 );
@@ -165,14 +168,14 @@ export default function OrderForm({
                     data-price={p.price}
                     data-fen={p.fen}
                     disabled={pending || (!canTransfer && deduct < p.fen)}
-                    title={`${p.name} ${p.price}，点击下单`}
+                    title={t(`${p.name} ${p.price}，点击下单`, `${p.name} ${p.price}, click to order`)}
                     className={`group relative ${cell} cursor-pointer transition-colors duration-200 hover:bg-primary hover:text-primary-content focus-visible:bg-primary focus-visible:text-primary-content focus-visible:outline-none active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-base-100 disabled:hover:text-inherit`}
                   >
                     <span className="flex flex-col items-center transition-transform duration-200 group-hover:-translate-y-1.5 group-hover:scale-115 group-focus-visible:-translate-y-1.5 group-focus-visible:scale-115 group-disabled:transform-none group-hover:[&_*]:text-inherit group-focus-visible:[&_*]:text-inherit">
                       {inner}
                     </span>
                     <span className="pointer-events-none absolute inset-x-0 bottom-1 translate-y-1 text-[11px] leading-none font-semibold opacity-0 transition duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100 group-disabled:hidden">
-                      {deduct >= p.fen ? "余额付 →" : "下单 →"}
+                      {deduct >= p.fen ? t("余额付 →", "Pay with balance →") : t("下单 →", "Order →")}
                     </span>
                   </button>
                 );

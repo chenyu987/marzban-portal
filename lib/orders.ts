@@ -6,6 +6,7 @@ import { createUser, findUser, modifyUser, resetUsage } from "./marzban";
 import { nextUsername } from "./plans";
 import { provisionNew, provisionRenew, type ProvisionOps, type ProvisionResult } from "./provision";
 import type { Plan } from "../site.config.example";
+import { makeT, type Lang } from "./i18n";
 
 // 网页这边的 Marzban 操作，交给 lib/provision.ts 判断出错时 Marzban 改没改
 const marzbanOps: ProvisionOps = { findUser, createUser, modifyUser, resetUsage };
@@ -19,7 +20,9 @@ export async function provisionTarget(
   target: string,
   plan: Plan,
   now: number,
+  lang: Lang = "zh",
 ): Promise<{ error: string } | ProvisionResult> {
+  const t = makeT(lang);
   if (target === "new") {
     // 用户名用客人的微信号，管理员在面板里一眼看出是谁
     const c = await db().prepare("SELECT wechat FROM customers WHERE id = ?").bind(customerId).first<{ wechat: string | null }>();
@@ -32,8 +35,9 @@ export async function provisionTarget(
     return provisionNew(marzbanOps, username, plan, now);
   }
   const current = await findUser(target);
-  if (!current) return { error: "暂时查不到这个订阅，请稍后再试或联系客服" };
-  if (!current.expire) return { error: "这个订阅永不到期，不用续期。可以选「新开一个订阅」" };
+  if (!current) return { error: t("暂时查不到这个订阅，请稍后再试或联系客服", "Can't find this subscription right now. Please try again later or contact support") };
+  if (!current.expire)
+    return { error: t("这个订阅永不到期，不用续期。可以选「新开一个订阅」", "This subscription never expires, so it doesn't need renewing. You can choose \"New subscription\" instead") };
   return provisionRenew(marzbanOps, current, plan, now);
 }
 

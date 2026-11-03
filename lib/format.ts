@@ -1,4 +1,7 @@
-// 纯函数，前后端都能用，有单元测试（format.test.ts）
+// 纯函数，前后端都能用，有单元测试（format.test.ts）。
+// 带 lang 参数的是客人页面也用的：不传就是中文（管理后台只有中文）
+type Lang = "zh" | "en";
+const LOCALE = { zh: "zh-CN", en: "en-US" } as const;
 
 // 从客人粘贴的订阅链接里取出 token。只要 token，不用客人给的域名去请求，
 // 免得有人借 portal 去访问任意网址。支持 .../sub/<token>、末尾带 / 或 /<客户端类型>
@@ -13,9 +16,9 @@ export function formatBytes(n: number): string {
 }
 
 // 到期时间按北京时间显示
-export function formatExpire(expire: number | null): string {
-  if (!expire) return "永不到期";
-  return new Date(expire * 1000).toLocaleString("zh-CN", {
+export function formatExpire(expire: number | null, lang: Lang = "zh"): string {
+  if (!expire) return lang === "en" ? "Never" : "永不到期";
+  return new Date(expire * 1000).toLocaleString(LOCALE[lang], {
     timeZone: "Asia/Shanghai",
     year: "numeric",
     month: "2-digit",
@@ -36,15 +39,19 @@ export function needsRenewal(expire: number | null, nowSec = Date.now() / 1000):
   return !!expire && expire - nowSec < RENEW_SOON_DAYS * 86400;
 }
 
-export function timeLeft(expire: number | null, nowSec = Date.now() / 1000): { text: string; urgent: boolean } | null {
+export function timeLeft(expire: number | null, nowSec = Date.now() / 1000, lang: Lang = "zh"): { text: string; urgent: boolean } | null {
   if (!expire) return null;
+  const en = lang === "en";
   const sec = expire - nowSec;
-  if (sec <= 0) return { text: "已到期", urgent: true };
+  if (sec <= 0) return { text: en ? "Expired" : "已到期", urgent: true };
   const days = Math.floor(sec / 86400);
   const hours = Math.floor((sec % 86400) / 3600);
   const urgent = sec < 3 * 86400;
-  if (days === 0) return { text: hours > 0 ? `还剩 ${hours} 小时` : "不到 1 小时", urgent };
-  return { text: hours > 0 ? `还剩 ${days} 天 ${hours} 小时` : `还剩 ${days} 天`, urgent };
+  const d = en ? `${days} day${days === 1 ? "" : "s"}` : `${days} 天`;
+  const h = en ? `${hours} hour${hours === 1 ? "" : "s"}` : `${hours} 小时`;
+  const left = (x: string) => (en ? `${x} left` : `还剩 ${x}`);
+  if (days === 0) return { text: hours > 0 ? left(h) : en ? "Less than 1 hour left" : "不到 1 小时", urgent };
+  return { text: hours > 0 ? left(`${d} ${h}`) : left(d), urgent };
 }
 
 // Marzban 的 data_limit_reset_strategy
@@ -55,6 +62,16 @@ export const RESET_LABEL: Record<string, string> = {
   year: "每年重置",
 };
 
+const RESET_LABEL_EN: Record<string, string> = {
+  day: "Resets daily",
+  week: "Resets weekly",
+  month: "Resets monthly",
+  year: "Resets yearly",
+};
+
+export const resetLabel = (strategy: string, lang: Lang = "zh"): string | undefined =>
+  (lang === "en" ? RESET_LABEL_EN : RESET_LABEL)[strategy];
+
 export const STATUS_LABEL: Record<string, { text: string; badge: string }> = {
   active: { text: "正常", badge: "badge-success" },
   expired: { text: "已到期", badge: "badge-error" },
@@ -62,6 +79,19 @@ export const STATUS_LABEL: Record<string, { text: string; badge: string }> = {
   disabled: { text: "已停用", badge: "badge-neutral" },
   on_hold: { text: "未激活", badge: "badge-warning" },
 };
+
+const STATUS_TEXT_EN: Record<string, string> = {
+  active: "Active",
+  expired: "Expired",
+  limited: "Out of data",
+  disabled: "Disabled",
+  on_hold: "Not activated",
+};
+
+export function statusLabel(status: string, lang: Lang = "zh"): { text: string; badge: string } {
+  const s = STATUS_LABEL[status] ?? { text: status, badge: "badge-neutral" };
+  return lang === "en" ? { ...s, text: STATUS_TEXT_EN[status] ?? status } : s;
+}
 
 // 去掉容易看错的 0/O、1/I/L
 const REFERRAL_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
@@ -99,8 +129,8 @@ export function maskEmail(email: string): string {
   return `${name.slice(0, name.length > 2 ? 2 : 1)}***${email.slice(at)}`;
 }
 
-export function formatDate(sec: number): string {
-  return new Date(sec * 1000).toLocaleDateString("zh-CN", {
+export function formatDate(sec: number, lang: Lang = "zh"): string {
+  return new Date(sec * 1000).toLocaleDateString(LOCALE[lang], {
     timeZone: "Asia/Shanghai",
     year: "numeric",
     month: "2-digit",

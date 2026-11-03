@@ -12,6 +12,7 @@ import UserActions from "./UserActions";
 import PlanCard from "./PlanCard";
 import { describePlan, findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
+import { pick } from "@/lib/i18n";
 import BindToCustomer from "./BindToCustomer";
 import BindButton from "../../BindButton";
 import { CustomerLink } from "../../Links";
@@ -60,7 +61,8 @@ export default async function UserPage({ params }: { params: Promise<{ username:
   // 套餐说明：价目表上那行（比如「单设备  20G流量/月」），没配就写流量
   const desc = (id: string) => {
     const p = findPlan(site.plans, id)!;
-    return site.planGroups?.[p.group ?? p.name]?.lines?.at(-1) ?? describePlan(p);
+    const line = site.planGroups?.[p.group ?? p.name]?.lines?.at(-1);
+    return line ? pick(line, "zh") : describePlan(p);
   };
   const currentPlan = planRow && findPlan(site.plans, planRow.plan_id) ? { id: planRow.plan_id, name: findPlan(site.plans, planRow.plan_id)!.name, desc: desc(planRow.plan_id) } : null;
   const planOptions = site.plans.map((p) => ({ id: p.id, name: p.name, desc: desc(p.id) }));

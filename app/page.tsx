@@ -7,6 +7,8 @@ import { describePlan, forSale } from "@/lib/plans";
 import { site } from "@/site.config";
 import Brand, { Logo } from "./Brand";
 import PricingCards, { type PricingGroup } from "./PricingCards";
+import { getT } from "@/lib/lang";
+import { groupName, periodLabel } from "@/lib/plan-text";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
   // 后台域名前面挡着 Cloudflare Access，过了 Access 的请求会带这个头：打开后台域名的根目录直接进后台
   if ((await headers()).get("cf-access-jwt-assertion")) redirect("/admin");
   const me = await currentCustomer();
+  const { t, p: tx, lang } = await getT();
   const { ref } = await searchParams;
   const register = typeof ref === "string" && ref ? `/register?ref=${encodeURIComponent(ref.slice(0, 32))}` : "/register";
   const L = site.landingPublic === false ? undefined : site.landing;
@@ -26,13 +29,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
       <main className="flex min-h-[70vh] flex-col items-center justify-center px-4 text-center">
         <Logo size={72} />
         <h1 className="mt-5 text-3xl font-extrabold tracking-tight">{site.brand}</h1>
-        <p className="mt-2 text-base-content/60">{site.description}</p>
+        <p className="mt-2 text-base-content/60">{tx(site.description)}</p>
         <div className="mt-8 flex gap-3">
           <Link href="/login" className="btn btn-primary">
-            登录
+            {t("登录", "Log in")}
           </Link>
           <Link href={register} className="btn">
-            注册
+            {t("注册", "Sign up")}
           </Link>
         </div>
       </main>
@@ -47,17 +50,16 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
     const plans = sale.filter((p) => (p.group ?? p.name) === g);
     const month = plans.find((p) => p.days <= 31) ?? plans[0];
     const show = site.planGroups?.[g];
+    const line = show?.lines?.at(-1);
     return {
-      name: g,
-      desc: show?.lines?.at(-1) ?? describePlan(month),
-      badge: show?.highlight === "hot" ? "最受欢迎" : show?.highlight === "top" ? "旗舰" : null,
+      name: groupName(g, lang),
+      desc: line ? tx(line) : describePlan(month, lang),
+      badge: show?.highlight === "hot" ? "hot" : show?.highlight === "top" ? "top" : null,
       plans: plans.map((p) => {
         const months = Math.max(1, Math.round(p.days / 30));
-        const label = p.name.replace(g, "").trim();
         const save = month.price * months - p.price;
         return {
-          label,
-          per: label.endsWith("付") ? `/${label.slice(0, -1)}` : "",
+          ...periodLabel(p.days, lang),
           price: money(p.price),
           perMonth: months > 1 ? money(Math.round(p.price / months)) : null,
           save: months > 1 && save > 0 ? money(save) : null,
@@ -71,15 +73,15 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
 
   const cta = me ? (
     <Link href="/dashboard" className="btn btn-primary btn-lg">
-      进入我的订阅
+      {t("进入我的订阅", "Go to my subscription")}
     </Link>
   ) : (
     <>
       <Link href={register} className="btn btn-primary btn-lg">
-        免费注册
+        {t("免费注册", "Sign up free")}
       </Link>
       <Link href="/login" className="btn btn-ghost btn-lg">
-        登录
+        {t("登录", "Log in")}
       </Link>
     </>
   );
@@ -90,22 +92,22 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
         <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-3">
           <Brand size={30} className="flex-1 text-lg" />
           <a href="#pricing" className="btn btn-ghost btn-sm hidden sm:inline-flex">
-            套餐价格
+            {t("套餐价格", "Pricing")}
           </a>
           <a href="#faq" className="btn btn-ghost btn-sm hidden sm:inline-flex">
-            常见问题
+            {t("常见问题", "FAQ")}
           </a>
           {me ? (
             <Link href="/dashboard" className="btn btn-primary btn-sm">
-              我的订阅
+              {t("我的订阅", "My subscription")}
             </Link>
           ) : (
             <>
               <Link href="/login" className="btn btn-ghost btn-sm">
-                登录
+                {t("登录", "Log in")}
               </Link>
               <Link href={register} className="btn btn-primary btn-sm">
-                注册
+                {t("注册", "Sign up")}
               </Link>
             </>
           )}
@@ -118,9 +120,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
         <div className="relative mx-auto flex max-w-4xl flex-col items-center px-4 pt-16 pb-12 text-center sm:pt-24">
           <Logo size={72} />
           <h1 className="mt-6 text-4xl font-extrabold tracking-tight sm:text-6xl">
-            <span className="brand-gradient-text">{L?.headline ?? site.brand}</span>
+            <span className="brand-gradient-text">{L ? tx(L.headline) : site.brand}</span>
           </h1>
-          <p className="mt-4 max-w-2xl text-lg text-base-content/70 sm:text-xl">{L?.sub ?? site.description}</p>
+          <p className="mt-4 max-w-2xl text-lg text-base-content/70 sm:text-xl">{tx(L?.sub ?? site.description)}</p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">{cta}</div>
         </div>
       </section>
@@ -130,12 +132,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
         <section className="mx-auto max-w-6xl px-4 py-12">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {L.highlights.map((h) => (
-              <div key={h.title} className="rounded-box border border-base-300/70 bg-base-100 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+              <div key={tx(h.title)} className="rounded-box border border-base-300/70 bg-base-100 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                 <div className="text-3xl" aria-hidden>
                   {h.icon}
                 </div>
-                <h3 className="mt-3 text-lg font-bold">{h.title}</h3>
-                <p className="mt-1 text-sm text-base-content/70">{h.desc}</p>
+                <h3 className="mt-3 text-lg font-bold">{tx(h.title)}</h3>
+                <p className="mt-1 text-sm text-base-content/70">{tx(h.desc)}</p>
               </div>
             ))}
           </div>
@@ -145,13 +147,21 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
       {/* 价格 */}
       <section id="pricing" className="scroll-mt-20 bg-base-200/60 py-16">
         <div className="mx-auto max-w-6xl px-4">
-          <h2 className="text-center text-3xl font-bold">套餐价格</h2>
-          <p className="mt-2 text-center text-base-content/60">买得越久越便宜，续费时天数接着往后加</p>
-          <PricingCards groups={groups} periods={periods} defaultPeriod={defaultPeriod} href={me ? "/plans" : register} cta={me ? "去购买" : "注册后购买"} />
+          <h2 className="text-center text-3xl font-bold">{t("套餐价格", "Pricing")}</h2>
+          <p className="mt-2 text-center text-base-content/60">
+            {t("买得越久越便宜，续费时天数接着往后加", "Longer plans cost less per month; renewals add days after your current expiry")}
+          </p>
+          <PricingCards
+            groups={groups}
+            periods={periods}
+            defaultPeriod={defaultPeriod}
+            href={me ? "/plans" : register}
+            cta={me ? t("去购买", "Buy now") : t("注册后购买", "Sign up to buy")}
+          />
           {site.planNotes && (
             <div className="mt-6 space-y-1 text-center text-sm text-base-content/50">
               {site.planNotes.map((n) => (
-                <p key={n}>{n}</p>
+                <p key={tx(n)}>{tx(n)}</p>
               ))}
             </div>
           )}
@@ -161,13 +171,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
       {/* 几步用上 */}
       {L?.steps && (
         <section className="mx-auto max-w-5xl px-4 py-16">
-          <h2 className="text-center text-3xl font-bold">{L.steps.length} 步就能用上</h2>
+          <h2 className="text-center text-3xl font-bold">{t(`${L.steps.length} 步就能用上`, `Up and running in ${L.steps.length} steps`)}</h2>
           <ol className="mt-8 grid gap-4 sm:grid-cols-3">
             {L.steps.map((s, i) => (
-              <li key={s.title} className="rounded-box bg-base-100 p-5 text-center shadow-sm">
+              <li key={tx(s.title)} className="rounded-box bg-base-100 p-5 text-center shadow-sm">
                 <div className="brand-gradient mx-auto flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold text-white">{i + 1}</div>
-                <h3 className="mt-3 font-bold">{s.title}</h3>
-                <p className="mt-1 text-sm text-base-content/60">{s.desc}</p>
+                <h3 className="mt-3 font-bold">{tx(s.title)}</h3>
+                <p className="mt-1 text-sm text-base-content/60">{tx(s.desc)}</p>
               </li>
             ))}
           </ol>
@@ -177,12 +187,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
       {/* 常见问题 */}
       {L?.faq && (
         <section id="faq" className="mx-auto max-w-3xl scroll-mt-20 px-4 pb-16">
-          <h2 className="mb-6 text-center text-3xl font-bold">常见问题</h2>
+          <h2 className="mb-6 text-center text-3xl font-bold">{t("常见问题", "FAQ")}</h2>
           <div className="flex flex-col gap-2">
             {L.faq.map((f, i) => (
-              <details key={f.q} className="collapse collapse-arrow rounded-box bg-base-100 shadow-sm" open={i === 0}>
-                <summary className="collapse-title font-medium">{f.q}</summary>
-                <div className="collapse-content text-sm text-base-content/70">{f.a}</div>
+              <details key={tx(f.q)} className="collapse collapse-arrow rounded-box bg-base-100 shadow-sm" open={i === 0}>
+                <summary className="collapse-title font-medium">{tx(f.q)}</summary>
+                <div className="collapse-content text-sm text-base-content/70">{tx(f.a)}</div>
               </details>
             ))}
           </div>
@@ -192,10 +202,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
       {/* 收尾 */}
       <section className="mx-auto max-w-5xl px-4 pb-20">
         <div className="brand-gradient flex flex-col items-center gap-4 rounded-box px-6 py-12 text-center text-white shadow-lg">
-          <h2 className="text-2xl font-bold sm:text-3xl">现在就开始</h2>
-          <p className="text-white/85">{L?.steps ? L.steps.map((s) => s.title).join(" → ") : site.description}</p>
+          <h2 className="text-2xl font-bold sm:text-3xl">{t("现在就开始", "Get started now")}</h2>
+          <p className="text-white/85">{L?.steps ? L.steps.map((s) => tx(s.title)).join(" → ") : tx(site.description)}</p>
           <Link href={me ? "/dashboard" : register} className="btn btn-lg border-none bg-white text-primary hover:bg-white/90">
-            {me ? "进入我的订阅" : "免费注册"}
+            {me ? t("进入我的订阅", "Go to my subscription") : t("免费注册", "Sign up free")}
           </Link>
         </div>
       </section>

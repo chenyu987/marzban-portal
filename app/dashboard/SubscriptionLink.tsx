@@ -6,17 +6,19 @@ import { clashVergeImport, hiddifyImport, shadowrocketImport } from "@/lib/clien
 import { useSite } from "../SiteContext";
 import { resetSubscriptionLink } from "../actions";
 import { confirmSubmit } from "../ConfirmDialog";
+import { useT } from "../LangContext";
 
 // 大部分客人用 iPhone，Shadowrocket 固定放导入按钮的第一个
-const IMPORTS: { id: string; label: string; href: (url: string, name: string) => string }[] = [
-  { id: "shadowrocket", label: "导入 Shadowrocket", href: shadowrocketImport },
-  { id: "clash", label: "导入 Clash Verge", href: clashVergeImport },
-  { id: "hiddify", label: "导入 Hiddify", href: hiddifyImport },
+const IMPORTS: { id: string; app: string; href: (url: string, name: string) => string }[] = [
+  { id: "shadowrocket", app: "Shadowrocket", href: shadowrocketImport },
+  { id: "clash", app: "Clash Verge", href: clashVergeImport },
+  { id: "hiddify", app: "Hiddify", href: hiddifyImport },
 ];
 
 // 订阅链接等于密码：默认收起，二维码在浏览器里本地生成，不交给任何第三方服务
 export default function SubscriptionLink({ username, url }: { username: string; url: string }) {
   const { importName } = useSite();
+  const t = useT();
   const [shown, setShown] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -36,22 +38,24 @@ export default function SubscriptionLink({ username, url }: { username: string; 
       <div className="flex flex-wrap gap-2">
         {/* 复制链接和二维码哪个客户端都能用，放最前面；复制链接是主按钮 */}
         <button type="button" onClick={copy} className="btn btn-sm btn-primary">
-          {copied ? "已复制 ✓" : "复制订阅链接"}
+          {copied ? t("已复制 ✓", "Copied ✓") : t("复制订阅链接", "Copy subscription link")}
         </button>
         <button type="button" onClick={() => setShown(!shown)} className="btn btn-sm">
-          {shown ? "收起二维码" : "显示二维码"}
+          {shown ? t("收起二维码", "Hide QR code") : t("显示二维码", "Show QR code")}
         </button>
         {IMPORTS.map((c) => (
-          <a key={c.label} href={c.href(url, importName)} className="btn btn-sm">
-            {c.label}
+          <a key={c.id} href={c.href(url, importName)} className="btn btn-sm">
+            {t(`导入 ${c.app}`, `Import to ${c.app}`)}
           </a>
         ))}
       </div>
 
       {shown && (
         <div className="flex flex-col items-center gap-2 rounded-box bg-base-200 p-4">
-          {qr ? <img src={qr} alt="订阅二维码" width={240} height={240} /> : <span className="loading loading-spinner" />}
-          <p className="text-center text-xs text-base-content/60">用客户端扫码导入。不要截图发给别人：别人拿到就能用你的流量</p>
+          {qr ? <img src={qr} alt={t("订阅二维码", "Subscription QR code")} width={240} height={240} /> : <span className="loading loading-spinner" />}
+          <p className="text-center text-xs text-base-content/60">
+            {t("用客户端扫码导入。不要截图发给别人：别人拿到就能用你的流量", "Scan it with your app to import. Don't share screenshots: anyone who has it can use your data")}
+          </p>
           <code className="w-full break-all text-center text-xs text-base-content/60">{url}</code>
         </div>
       )}
@@ -59,11 +63,14 @@ export default function SubscriptionLink({ username, url }: { username: string; 
       <form
         action={resetSubscriptionLink}
         onSubmit={(e) => {
-          confirmSubmit(e, "重置后旧链接立刻失效，所有设备都要重新导入。确定吗？", { ok: "重置", danger: true });
+          confirmSubmit(e, t("重置后旧链接立刻失效，所有设备都要重新导入。确定吗？", "The old link stops working immediately and every device must import again. Continue?"), {
+            ok: t("重置", "Reset"),
+            danger: true,
+          });
         }}
       >
         <input type="hidden" name="username" value={username} />
-        <button className="btn btn-ghost btn-xs text-base-content/60">链接泄露了？重置订阅链接</button>
+        <button className="btn btn-ghost btn-xs text-base-content/60">{t("链接泄露了？重置订阅链接", "Link leaked? Reset subscription link")}</button>
       </form>
     </div>
   );

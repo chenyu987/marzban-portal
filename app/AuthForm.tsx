@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import Brand from "./Brand";
+import { useT } from "./LangContext";
 import type { FormState } from "./actions";
 import type { AuthAside } from "@/lib/public-site";
 
@@ -22,6 +23,7 @@ type Props = {
 
 export default function AuthForm({ title, submitLabel, action, passwordAutoComplete, footer, referral, forgotLink, aside }: Props) {
   const [state, formAction, pending] = useActionState(action, undefined);
+  const t = useT();
   return (
     <main className="grid min-h-screen lg:grid-cols-2">
       {/* 左边：品牌和卖点（大屏才有）。品牌在左上角，卖点在这半边正中间 */}
@@ -55,38 +57,38 @@ export default function AuthForm({ title, submitLabel, action, passwordAutoCompl
           <Brand size={36} className="text-2xl lg:hidden" />
           <h1 className="text-2xl font-bold">{title}</h1>
           <label className="floating-label">
-            <span>邮箱</span>
+            <span>{t("邮箱", "Email")}</span>
             <input
               name="email"
               type="email"
               required
               autoComplete="email"
-              placeholder="邮箱"
+              placeholder={t("邮箱", "Email")}
               defaultValue={state?.email}
               className="input w-full"
             />
           </label>
           <label className="floating-label">
-            <span>密码</span>
+            <span>{t("密码", "Password")}</span>
             <input
               name="password"
               type="password"
               required
               minLength={passwordAutoComplete === "new-password" ? 8 : undefined}
               autoComplete={passwordAutoComplete}
-              placeholder={passwordAutoComplete === "new-password" ? "密码（至少 8 位）" : "密码"}
+              placeholder={passwordAutoComplete === "new-password" ? t("密码（至少 8 位）", "Password (at least 8 characters)") : t("密码", "Password")}
               className="input w-full"
             />
           </label>
           {forgotLink && (
             <Link href="/forgot" className="link link-hover -mt-2 self-end text-sm text-base-content/60">
-              忘记密码？
+              {t("忘记密码？", "Forgot password?")}
             </Link>
           )}
           {referral && (
             <div>
               <label className="floating-label">
-                <span>微信号</span>
+                <span>{t("微信号", "WeChat ID")}</span>
                 <input
                   name="wechat"
                   type="text"
@@ -95,24 +97,24 @@ export default function AuthForm({ title, submitLabel, action, passwordAutoCompl
                   autoComplete="off"
                   autoCapitalize="none"
                   spellCheck={false}
-                  placeholder="微信号"
+                  placeholder={t("微信号", "WeChat ID")}
                   defaultValue={state?.wechat}
                   className="input w-full"
                 />
               </label>
-              <p className="mt-1 text-xs text-base-content/60">为了方便客服联系你，提供必要的支持和更新</p>
+              <p className="mt-1 text-xs text-base-content/60">{t("为了方便客服联系你，提供必要的支持和更新", "So our support team can reach you with help and updates")}</p>
             </div>
           )}
           {referral && (
             <label className="floating-label">
-              <span>推荐码（选填）</span>
+              <span>{t("推荐码（选填）", "Referral code (optional)")}</span>
               <input
                 name="ref"
                 type="text"
                 autoComplete="off"
                 autoCapitalize="characters"
                 spellCheck={false}
-                placeholder="推荐码（选填）"
+                placeholder={t("推荐码（选填）", "Referral code (optional)")}
                 defaultValue={state?.ref ?? referral.defaultValue}
                 className="input w-full uppercase"
               />

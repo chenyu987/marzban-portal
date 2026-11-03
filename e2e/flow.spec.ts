@@ -143,6 +143,24 @@ test("打错网址：带品牌的 404，能回首页", async ({ page }) => {
   await expect(page.locator("footer")).toContainText("安装教程");
 });
 
+test("页面底部切换中英文：记住选择，登录页和报错跟着换", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: "登录客户中心" })).toBeVisible();
+  await page.locator("footer").getByRole("button", { name: "English" }).click();
+  await expect(page.getByRole("heading", { name: "Log in" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+  // 服务器返回的报错也是英文
+  await page.getByPlaceholder("Email").fill("nobody@example.com");
+  await page.getByPlaceholder("Password").fill("wrong-password");
+  await page.getByRole("button", { name: "Log in" }).click();
+  await expect(page.getByText("Wrong email or password")).toBeVisible();
+  // 换页面、刷新后还是英文
+  await page.goto("/forgot");
+  await expect(page.getByRole("button", { name: "Send reset link" })).toBeVisible();
+  await page.locator("footer").getByRole("button", { name: "中文" }).click();
+  await expect(page.getByRole("button", { name: "发送重置链接" })).toBeVisible();
+});
+
 test("客人从注册到续费、忘记密码，管理员确认订单", async ({ page }) => {
   const email = `e2e-${Date.now()}@example.test`;
   const password = "E2eTest-1234";
@@ -222,10 +240,15 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   expect(created.inbounds).toEqual({ vless: ["VLESS TCP REALITY", "VLESS NODE2", "VLESS NODE3"] });
   expect(created.note).toMatch(/^ip=\d+$/);
 
-  // 改成还剩 3 天：出现续费提醒，点续费到套餐页并选好这个订阅
-  await setMockExpire(username, Math.floor(Date.now() / 1000) + 3 * 86400);
+  // 还剩 5 天：只有续费按钮，不弹提醒
+  await setMockExpire(username, Math.floor(Date.now() / 1000) + 5 * 86400);
   await page.reload();
-  await expect(page.getByText("记得续费")).toBeVisible();
+  await expect(page.getByRole("link", { name: "续费", exact: true })).toBeVisible();
+  await expect(page.getByText("记得续费")).toHaveCount(0);
+  // 最后 3 天：黄色提醒「记得续费」，点续费到套餐页并选好这个订阅
+  await setMockExpire(username, Math.floor(Date.now() / 1000) + 2 * 86400);
+  await page.reload();
+  await expect(page.getByText(/这个订阅还剩 .*到期，记得续费/)).toBeVisible();
   await page.getByRole("link", { name: "续费", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/plans\\?renew=${username}`));
   await expect(page.locator(`input[name="target"][value="${username}"]`)).toBeChecked();

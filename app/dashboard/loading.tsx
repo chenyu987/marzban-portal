@@ -1,7 +1,7 @@
 // 订阅页要去 Marzban 查到期和流量，等的时候先放骨架，不白屏
 export default function Loading() {
   return (
-    <div className="mx-auto max-w-2xl px-4 pt-20 pb-16" aria-busy="true" aria-label="加载中">
+    <div className="mx-auto max-w-2xl px-4 pt-20 pb-16" aria-busy="true" aria-label="Loading">
       <div className="skeleton mb-2 h-4 w-28" />
       <div className="skeleton mb-6 h-8 w-40" />
       <div className="card bg-base-100 shadow-sm">

@@ -15,8 +15,9 @@ export function forSale(plans: Plan[]): Plan[] {
 }
 
 // 一句话说清流量，套餐页和订阅卡片共用
-export function describePlan(p: Plan): string {
-  return p.dataGB === null ? "不限流量" : `${p.dataGB} GB${p.dataReset === "month" ? "/月" : ""}`;
+export function describePlan(p: Plan, lang: "zh" | "en" = "zh"): string {
+  if (p.dataGB === null) return lang === "en" ? "Unlimited data" : "不限流量";
+  return `${p.dataGB} GB${p.dataReset === "month" ? (lang === "en" ? "/mo" : "/月") : ""}`;
 }
 
 // 续期从原到期时间往后加；已经过期的从现在算，免得客人白白损失过期那几天之后的时间

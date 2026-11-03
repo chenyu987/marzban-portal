@@ -4,16 +4,24 @@ export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const WECHAT_RE = /^[A-Za-z0-9_-]{5,30}$/;
 export const PASSWORD_MIN = 8;
 
-export function emailError(email: string): string | null {
-  return EMAIL_RE.test(email) ? null : "邮箱格式不对";
+// lang 不传就是中文
+type Lang = "zh" | "en";
+
+export function emailError(email: string, lang: Lang = "zh"): string | null {
+  return EMAIL_RE.test(email) ? null : lang === "en" ? "That doesn't look like a valid email" : "邮箱格式不对";
 }
 
-export function wechatError(wechat: string): string | null {
-  if (!wechat) return "请填微信号，方便客服联系你";
-  if (!WECHAT_RE.test(wechat)) return "微信号格式不对：只能是字母、数字、下划线或减号，也可以填微信绑定的手机号";
+export function wechatError(wechat: string, lang: Lang = "zh"): string | null {
+  const en = lang === "en";
+  if (!wechat) return en ? "Please enter your WeChat ID so support can reach you" : "请填微信号，方便客服联系你";
+  if (!WECHAT_RE.test(wechat))
+    return en
+      ? "Invalid WeChat ID: use only letters, numbers, underscores or hyphens, or the phone number linked to your WeChat"
+      : "微信号格式不对：只能是字母、数字、下划线或减号，也可以填微信绑定的手机号";
   return null;
 }
 
-export function passwordError(password: string): string | null {
-  return password.length < PASSWORD_MIN ? `密码至少 ${PASSWORD_MIN} 位` : null;
+export function passwordError(password: string, lang: Lang = "zh"): string | null {
+  if (password.length >= PASSWORD_MIN) return null;
+  return lang === "en" ? `Password must be at least ${PASSWORD_MIN} characters` : `密码至少 ${PASSWORD_MIN} 位`;
 }

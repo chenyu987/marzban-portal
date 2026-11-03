@@ -1,32 +1,45 @@
 import { requireCustomer } from "@/lib/session";
 import { EmailForm, PasswordForm, PrefsForm, WechatForm } from "./AccountForms";
 import CustomerNav from "../CustomerNav";
+import { getT } from "@/lib/lang";
 
 export const dynamic = "force-dynamic";
 
 // 客人自己的账户：改微信号、登录邮箱、密码，到期提醒
 export default async function AccountPage() {
   const customer = await requireCustomer();
+  const { t } = await getT();
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16">
       <CustomerNav />
 
-      <h1 className="mt-4 mb-6 text-2xl font-bold">账户</h1>
+      <h1 className="mt-4 mb-6 text-2xl font-bold">{t("账户", "Account")}</h1>
 
       <div className="flex flex-col gap-4">
-        <Section title="微信号" desc="客服有事会加你这个微信，比如节点更新。">
+        <Section title={t("微信号", "WeChat ID")} desc={t("客服有事会加你这个微信，比如节点更新。", "Support will add you on WeChat when needed, e.g. for server updates.")}>
           <WechatForm current={customer.wechat ?? ""} />
         </Section>
-        <Section title="登录邮箱" desc={`现在是 ${customer.email}。改的时候要输一次密码。`}>
+        <Section
+          title={t("登录邮箱", "Login email")}
+          desc={t(`现在是 ${customer.email}。改的时候要输一次密码。`, `Currently ${customer.email}. You'll need your password to change it.`)}
+        >
           <EmailForm />
         </Section>
-        <Section title="密码" desc="改完以后，别的设备上的登录会自动退出，这台不用重新登录。">
+        <Section
+          title={t("密码", "Password")}
+          desc={t("改完以后，别的设备上的登录会自动退出，这台不用重新登录。", "After changing it, other devices are logged out; this one stays logged in.")}
+        >
           <PasswordForm />
         </Section>
-        <Section title="到期提醒">
+        <Section title={t("到期提醒", "Expiry reminders")}>
           <PrefsForm notify={!!customer.notify_expiry} />
         </Section>
-        <p className="text-sm text-base-content/50">要注销账号请联系客服：账号连着余额和订阅，注销前客服会和你确认怎么处理。</p>
+        <p className="text-sm text-base-content/50">
+          {t(
+            "要注销账号请联系客服：账号连着余额和订阅，注销前客服会和你确认怎么处理。",
+            "To delete your account, contact support. Your account holds your balance and subscriptions, so we'll confirm how to handle them first.",
+          )}
+        </p>
       </div>
     </div>
   );

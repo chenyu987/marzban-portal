@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
 import { getUser, type MarzbanUser } from "@/lib/marzban";
-import { formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, needsRenewal, RESET_LABEL, STATUS_LABEL, timeLeft } from "@/lib/format";
+import { formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, needsRenewal, resetLabel, statusLabel, timeLeft } from "@/lib/format";
 import { BALANCE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
 import { site } from "@/site.config";
 import { describePlan, findPlan } from "@/lib/plans";
@@ -13,12 +13,16 @@ import ContactSupport from "../ContactSupport";
 import Brand from "../Brand";
 import CustomerNav from "../CustomerNav";
 import { RENEW_REFRESH_HINT } from "@/lib/clients";
+import { getT } from "@/lib/lang";
+import { makeT, pick, type Lang } from "@/lib/i18n";
+import { groupName } from "@/lib/plan-text";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ renewed?: string }> }) {
   const customer = await requireCustomer();
   const { renewed } = await searchParams;
+  const { t, lang } = await getT();
   const { results } = await db()
     .prepare("SELECT marzban_username, code FROM subscriptions WHERE customer_id = ? ORDER BY id")
     .bind(customer.id)
@@ -34,7 +38,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     )
     .bind(customer.id)
     .all<{ email: string; wechat: string | null; created_at: number; earned: number }>();
-  const friend = (r: { email: string; wechat?: string | null }) => (r.wechat ? `微信 ${r.wechat}` : maskEmail(r.email));
+  const friend = (r: { email: string; wechat?: string | null }) => (r.wechat ? t(`微信 ${r.wechat}`, `WeChat ${r.wechat}`) : maskEmail(r.email));
   const balance = await db().prepare(BALANCE_SQL).bind(customer.id).first<{ balance: number }>();
   const { results: rewards } = await db().prepare(REFERRAL_REWARDS_SQL).bind(customer.id).all<RewardRow>();
   const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
@@ -65,16 +69,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
       {/* 还没订阅的新客人打个招呼；有订阅了就直接看订阅 */}
       <div className="mt-4 mb-4">
-        {subs.length === 0 && <p className="text-sm text-base-content/60">你好，{customer.wechat ?? customer.email.split("@")[0]}</p>}
-        <h1 className="text-2xl font-bold">我的订阅</h1>
+        {subs.length === 0 && <p className="text-sm text-base-content/60">{t("你好，", "Hi, ")}{customer.wechat ?? customer.email.split("@")[0]}</p>}
+        <h1 className="text-2xl font-bold">{t("我的订阅", "My subscription")}</h1>
       </div>
 
       {/* 「我已付款」续期成功后跳过来 */}
       {renewed && (
         <div role="alert" className="alert alert-success alert-soft mb-4" data-testid="renewed">
           <span>
-            <b>续期成功。</b>
-            {RENEW_REFRESH_HINT}。
+            <b>{t("续期成功。", "Renewed. ")}</b>
+            {RENEW_REFRESH_HINT[lang]}{t("。", ".")}
           </span>
         </div>
       )}
@@ -83,12 +87,27 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         {subs.length === 0 && (
           <div className="card bg-base-100 shadow-sm" data-testid="onboarding">
             <div className="card-body gap-4">
-              <h2 className="card-title">三步用上</h2>
+              <h2 className="card-title">{t("三步用上", "Get started in 3 steps")}</h2>
               <ol className="grid gap-3 sm:grid-cols-3">
                 {[
-                  { title: "选套餐付款", desc: "支付宝或微信扫码，付完点「我已付款」马上开通", href: "/plans", cta: "去选套餐" },
-                  { title: "装客户端", desc: "按你的设备装好 App，教程每一步都有截图", href: "/tutorial", cta: "看安装教程" },
-                  { title: "一键导入", desc: "开通后回到这里，点你用的客户端就能导入", href: null, cta: null },
+                  {
+                    title: t("选套餐付款", "Pick a plan and pay"),
+                    desc: t("支付宝或微信扫码，付完点「我已付款」马上开通", "Scan with Alipay or WeChat, then tap \"I've paid\" to activate instantly"),
+                    href: "/plans",
+                    cta: t("去选套餐", "Choose a plan"),
+                  },
+                  {
+                    title: t("装客户端", "Install an app"),
+                    desc: t("按你的设备装好 App，教程每一步都有截图", "Install the app for your device; the guide has a screenshot for every step"),
+                    href: "/tutorial",
+                    cta: t("看安装教程", "Open the setup guide"),
+                  },
+                  {
+                    title: t("一键导入", "Import"),
+                    desc: t("开通后回到这里，点你用的客户端就能导入", "Once it's active, come back here and tap your app to import"),
+                    href: null,
+                    cta: null,
+                  },
                 ].map((s, i) => (
                   <li key={s.title} className="flex flex-col gap-2 rounded-box bg-base-200 p-4">
                     <span className="brand-gradient flex h-8 w-8 items-center justify-center rounded-full font-bold text-white">{i + 1}</span>
@@ -102,15 +121,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   </li>
                 ))}
               </ol>
-              <p className="text-sm text-base-content/60">以前客服直接发过订阅链接给你的，在下面粘贴就能绑到这个账号。</p>
+              <p className="text-sm text-base-content/60">
+                {t("以前客服直接发过订阅链接给你的，在下面粘贴就能绑到这个账号。", "If support sent you a subscription link before, paste it below to link it to this account.")}
+              </p>
             </div>
           </div>
         )}
         {subs.map(({ username, code, user }) =>
           user ? (
-            <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} />
+            <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} lang={lang} />
           ) : (
-            <UnavailableCard key={username} code={code} />
+            <UnavailableCard key={username} code={code} lang={lang} />
           ),
         )}
         {subs.length === 0 && <BindForm />}
@@ -119,11 +140,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <div className="mt-8">
         <ReferralCard
           code={customer.referral_code}
-          referrals={referred.map((r) => ({ email: friend(r), createdAt: formatDate(r.created_at), earned: money(r.earned) }))}
+          referrals={referred.map((r) => ({ email: friend(r), createdAt: formatDate(r.created_at, lang), earned: money(r.earned) }))}
           balance={money(balance?.balance ?? 0)}
           rewards={rewards.map((r) => ({
             email: friend(r),
-            date: formatDate(r.created_at),
+            date: formatDate(r.created_at, lang),
             paid: money(r.paid),
             reward: money(r.reward),
           }))}
@@ -136,28 +157,36 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 }
 
 // 标题用套餐档位名（不带月付、季付：续费可能换周期）；副标题优先用价目表上那行说明，比如「单设备  20G流量/月」
-function planHeading(planId: string | undefined): { title: string; subtitle?: string } {
+function planHeading(planId: string | undefined, lang: Lang): { title: string; subtitle?: string } {
+  const t = makeT(lang);
   const plan = planId ? findPlan(site.plans, planId) : undefined;
-  if (!plan) return { title: "我的订阅" };
+  if (!plan) return { title: t("我的订阅", "My subscription") };
   const group = plan.group ?? plan.name;
+  const name = groupName(group, lang);
+  const line = site.planGroups?.[group]?.lines?.at(-1);
   // 免费体验在档位名后面标「（体验）」；在它上面续费后套餐就换成续费的那个，标题跟着变
-  return { title: plan.codeOnly && plan.price === 0 ? `${group}（体验）` : group, subtitle: site.planGroups?.[group]?.lines?.at(-1) ?? describePlan(plan) };
+  return {
+    title: plan.codeOnly && plan.price === 0 ? t(`${name}（体验）`, `${name} (trial)`) : name,
+    subtitle: line ? pick(line, lang) : describePlan(plan, lang),
+  };
 }
 
 // 订阅编号是随机的（7F3A-9C21），看不出是第几单；客人找客服时报这个，后台客人页能按它搜
-function SubscriptionId({ code }: { code: string | null }) {
+function SubscriptionId({ code, lang }: { code: string | null; lang: Lang }) {
   return (
     <p className="text-right text-xs text-base-content/50">
-      订阅编号 <span data-testid="sub-id">{formatSubCode(code)}</span>
+      {makeT(lang)("订阅编号", "Subscription ID")} <span data-testid="sub-id">{formatSubCode(code)}</span>
     </p>
   );
 }
 
-function SubscriptionCard({ user, code, planId }: { user: MarzbanUser; code: string | null; planId?: string }) {
-  const { title, subtitle } = planHeading(planId);
-  const status = STATUS_LABEL[user.status] ?? { text: user.status, badge: "badge-neutral" };
-  const left = timeLeft(user.expire);
-  const reset = user.data_limit ? RESET_LABEL[user.data_limit_reset_strategy ?? ""] : undefined;
+function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; code: string | null; planId?: string; lang: Lang }) {
+  const t = makeT(lang);
+  const { title, subtitle } = planHeading(planId, lang);
+  const status = statusLabel(user.status, lang);
+  const left = timeLeft(user.expire, undefined, lang);
+  const expired = !!user.expire && user.expire * 1000 <= Date.now();
+  const reset = user.data_limit ? resetLabel(user.data_limit_reset_strategy ?? "", lang) : undefined;
   const pct = user.data_limit ? Math.min(100, (user.used_traffic / user.data_limit) * 100) : null;
   // 剩余天数和这期套餐的总天数（不知道套餐就按 30 天画环）
   const daysLeft = user.expire ? Math.max(0, Math.ceil((user.expire * 1000 - Date.now()) / 86400_000)) : null;
@@ -180,46 +209,58 @@ function SubscriptionCard({ user, code, planId }: { user: MarzbanUser; code: str
           <div className="flex items-center gap-3">
             <Ring pct={daysPct} tone={left?.urgent ? "text-error" : "text-primary"}>
               <span className="text-lg leading-none font-bold">{daysLeft === null ? "∞" : daysLeft}</span>
-              <span className="text-[10px] text-base-content/60">{daysLeft === null ? "永久" : "天"}</span>
+              <span className="text-[10px] text-base-content/60">{daysLeft === null ? t("永久", "never") : t("天", daysLeft === 1 ? "day" : "days")}</span>
             </Ring>
             <div className="min-w-0">
-              <div className="text-sm text-base-content/60">到期时间</div>
-              <div className="font-medium">{formatExpire(user.expire)}</div>
+              <div className="text-sm text-base-content/60">{t("到期时间", "Expires")}</div>
+              <div className="font-medium">{formatExpire(user.expire, lang)}</div>
               {left && <div className={`text-sm ${left.urgent ? "text-error" : "text-base-content/60"}`}>{left.text}</div>}
             </div>
           </div>
           <div className="flex items-center gap-3">
             <Ring pct={pct ?? 0} tone={pct !== null && pct >= 90 ? "text-error" : "text-secondary"}>
               <span className="text-sm leading-none font-bold">{pct === null ? "∞" : `${Math.round(pct)}%`}</span>
-              <span className="text-[10px] text-base-content/60">{pct === null ? "不限" : "已用"}</span>
+              <span className="text-[10px] text-base-content/60">{pct === null ? t("不限", "unlimited") : t("已用", "used")}</span>
             </Ring>
             <div className="min-w-0">
-              <div className="text-sm text-base-content/60">流量</div>
+              <div className="text-sm text-base-content/60">{t("流量", "Data")}</div>
               <div className="font-medium">
-                {formatBytes(user.used_traffic)} / {user.data_limit ? formatBytes(user.data_limit) : "不限"}
+                {formatBytes(user.used_traffic)} / {user.data_limit ? formatBytes(user.data_limit) : t("不限", "Unlimited")}
               </div>
               {reset && <div className="text-sm text-base-content/60">{reset}</div>}
             </div>
           </div>
         </div>
 
-        {needsRenewal(user.expire) ? (
-          <div role="alert" className={`alert flex-wrap justify-between ${left?.text === "已到期" ? "alert-error" : "alert-warning"}`}>
-            <span>{left?.text === "已到期" ? "这个订阅已经到期了，续费后马上恢复。" : `这个订阅${left?.text ?? "快"}到期，记得续费。`}</span>
+        {/* 已到期：红色提示 + 续费；最后 3 天：黄色提醒 + 续费；7 天以内：只放一个续费按钮；其他时候放个「提前续费」小链接 */}
+        {expired ? (
+          <div role="alert" className="alert alert-error flex-wrap justify-between">
+            <span>{t("这个订阅已经到期了，续费后马上恢复。", "This subscription has expired. Renew to restore it right away.")}</span>
             <Link href={`/plans?renew=${encodeURIComponent(user.username)}`} className="btn btn-neutral btn-sm">
-              续费
+              {t("续费", "Renew")}
             </Link>
           </div>
+        ) : left?.urgent ? (
+          <div role="alert" className="alert alert-warning flex-wrap justify-between">
+            <span>{t(`这个订阅${left.text}到期，记得续费。`, `This subscription expires soon (${left.text}). Remember to renew.`)}</span>
+            <Link href={`/plans?renew=${encodeURIComponent(user.username)}`} className="btn btn-neutral btn-sm">
+              {t("续费", "Renew")}
+            </Link>
+          </div>
+        ) : needsRenewal(user.expire) ? (
+          <Link href={`/plans?renew=${encodeURIComponent(user.username)}`} className="btn btn-warning btn-sm self-start">
+            {t("续费", "Renew")}
+          </Link>
         ) : (
           user.expire && (
             <Link href={`/plans?renew=${encodeURIComponent(user.username)}`} className="link link-hover text-sm text-base-content/60">
-              提前续费
+              {t("提前续费", "Renew early")}
             </Link>
           )
         )}
 
         <SubscriptionLink username={user.username} url={user.subscription_url} />
-        <SubscriptionId code={code} />
+        <SubscriptionId code={code} lang={lang} />
       </div>
     </div>
   );
@@ -240,16 +281,20 @@ function Ring({ pct, tone, children }: { pct: number; tone: string; children: Re
   );
 }
 
-function UnavailableCard({ code }: { code: string | null }) {
+function UnavailableCard({ code, lang }: { code: string | null; lang: Lang }) {
+  const t = makeT(lang);
   return (
     <div className="card bg-base-100 shadow-sm">
       <div className="card-body">
-        <h2 className="card-title">我的订阅</h2>
+        <h2 className="card-title">{t("我的订阅", "My subscription")}</h2>
         <div role="alert" className="alert alert-warning alert-soft">
-          暂时查不到这个订阅的信息，请稍后刷新。一直这样的话请联系客服，报上下面的订阅编号。
+          {t(
+            "暂时查不到这个订阅的信息，请稍后刷新。一直这样的话请联系客服，报上下面的订阅编号。",
+            "Can't load this subscription right now. Please refresh in a moment; if it keeps happening, contact support with the subscription ID below.",
+          )}
         </div>
         <ContactSupport />
-        <SubscriptionId code={code} />
+        <SubscriptionId code={code} lang={lang} />
       </div>
     </div>
   );

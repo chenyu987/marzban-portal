@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { site } from "@/site.config";
+import { pick } from "@/lib/i18n";
 
 // 手机「添加到主屏幕」后像 App 一样打开，直接进我的订阅
 export default function manifest(): MetadataRoute.Manifest {
@@ -10,7 +11,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: site.brand,
     short_name: site.brand,
-    description: site.description,
+    description: pick(site.description, "zh"),
     start_url: "/dashboard",
     display: "standalone",
     background_color: "#f5f7fb",

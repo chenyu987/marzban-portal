@@ -10,6 +10,9 @@ import PendingOrder from "./PendingOrder";
 import RedeemForm from "./RedeemForm";
 import Brand from "../Brand";
 import CustomerNav from "../CustomerNav";
+import { getT } from "@/lib/lang";
+import { pick } from "@/lib/i18n";
+import { periodLabel, planName } from "@/lib/plan-text";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +22,7 @@ const price = (fen: number) => `${site.currency}${formatMoney(fen).replace(/\.00
 export default async function PlansPage({ searchParams }: { searchParams: Promise<{ renew?: string | string[] }> }) {
   const customer = await requireCustomer();
   const { renew } = await searchParams;
+  const { t, p: tx, lang } = await getT();
   const [{ results: subs }, { results: open }, balanceRow] = await Promise.all([
     db()
       .prepare("SELECT marzban_username, code FROM subscriptions WHERE customer_id = ? ORDER BY id")
@@ -49,6 +53,8 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
   const renewSub = typeof renew === "string" ? subscriptions.find((s) => s.username === renew) : undefined;
   const renewTarget = renewSub?.username;
   const canTransfer = site.payments.length > 0;
+  // value 是中文名：后台对账按它显示
+  const payments = site.payments.map((p) => ({ value: pick(p.name, "zh"), name: tx(p.name), qr: p.qr }));
 
   // 按 group 分组，保持配置里的顺序
   const byGroup = new Map<string, Plan[]>();
@@ -60,20 +66,23 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
     const show = site.planGroups?.[name];
     return {
       name,
-      title: show?.title ?? name,
-      lines: show?.lines ?? [describePlan(plans[0])],
+      title: show ? tx(show.title) : name,
+      lines: show?.lines?.map(tx) ?? [describePlan(plans[0], lang)],
       accent: show?.accent,
       highlight: show?.highlight,
-      plans: plans.map((p) => ({
-        id: p.id,
-        name: p.name,
-        label: p.name.replace(name, "").trim() || `${p.days} 天`,
-        price: price(p.price),
-        amount: formatMoney(p.price).replace(/\.00$/, ""),
-        fen: p.price,
-        days: p.days,
-        tag: show?.tags?.[p.id],
-      })),
+      plans: plans.map((p) => {
+        const tag = show?.tags?.[p.id];
+        return {
+          id: p.id,
+          name: planName(p, lang),
+          per: periodLabel(p.days, lang).per,
+          price: price(p.price),
+          amount: formatMoney(p.price).replace(/\.00$/, ""),
+          fen: p.price,
+          days: p.days,
+          tag: tag ? tx(tag) : undefined,
+        };
+      }),
     };
   });
 
@@ -81,24 +90,32 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
     <div className="mx-auto max-w-2xl px-4 pb-16">
       <CustomerNav />
 
-      <h1 className="mt-4 mb-4 text-2xl font-bold">购买套餐</h1>
+      <h1 className="mt-4 mb-4 text-2xl font-bold">{t("购买套餐", "Buy a plan")}</h1>
 
       {open.length > 0 && (
         <div className="mb-6 flex flex-col gap-4">
           {open.map((o) => (
             <PendingOrder
               key={o.id}
-              payments={site.payments}
+              payments={payments}
               order={{
                 id: o.id,
                 no: formatOrderNo(o.no),
-                planName: findPlan(site.plans, o.plan_id)?.name ?? o.plan_id,
+                planName: (() => {
+                  const plan = findPlan(site.plans, o.plan_id);
+                  return plan ? planName(plan, lang) : o.plan_id;
+                })(),
                 amount: price(o.amount - o.balance_used),
                 deducted: o.balance_used > 0 ? price(o.balance_used) : null,
-                target: o.marzban_username ? `给订阅 ${subscriptions.find((s) => s.username === o.marzban_username)?.label ?? "-"} 续期` : "新开订阅",
-                createdAt: formatDate(o.created_at),
+                target: o.marzban_username
+                  ? (() => {
+                      const label = subscriptions.find((s) => s.username === o.marzban_username)?.label ?? "-";
+                      return t(`给订阅 ${label} 续期`, `renew subscription ${label}`);
+                    })()
+                  : t("新开订阅", "new subscription"),
+                createdAt: formatDate(o.created_at, lang),
                 processing: o.status === "processing",
-                claimedAt: o.claimed_at === null ? null : formatExpire(o.claimed_at),
+                claimedAt: o.claimed_at === null ? null : formatExpire(o.claimed_at, lang),
               }}
             />
           ))}
@@ -106,11 +123,25 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
       )}
 
       {site.plans.length === 0 ? (
-        <p className="text-base-content/70">套餐还在准备中。</p>
+        <p className="text-base-content/70">{t("套餐还在准备中。", "Plans are coming soon.")}</p>
       ) : (
         <>
-          {canTransfer && <p className="mb-3 text-sm text-base-content/70">在价目表里点想买的价格，按提示扫码付款，付完点「我已付款」马上开通。有余额时可以直接抵扣。</p>}
-          {renewSub && <p className="mb-3 font-medium">给订阅 {renewSub.label} 续期：选一个套餐，续上的天数从原来的到期时间往后加。</p>}
+          {canTransfer && (
+            <p className="mb-3 text-sm text-base-content/70">
+              {t(
+                "在价目表里点想买的价格，按提示扫码付款，付完点「我已付款」马上开通。有余额时可以直接抵扣。",
+                "Tap a price in the table, scan to pay, then tap \"I've paid\" to activate instantly. Your balance can be applied too.",
+              )}
+            </p>
+          )}
+          {renewSub && (
+            <p className="mb-3 font-medium">
+              {t(
+                `给订阅 ${renewSub.label} 续期：选一个套餐，续上的天数从原来的到期时间往后加。`,
+                `Renewing subscription ${renewSub.label}: pick a plan; the new days are added after the current expiry date.`,
+              )}
+            </p>
+          )}
           <OrderForm
             groups={groups}
             subscriptions={subscriptions}
@@ -124,13 +155,13 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
       {site.planNotes && site.planNotes.length > 0 && (
         <div className="mt-4 space-y-1 text-sm text-base-content/60">
           {site.planNotes.map((n) => (
-            <p key={n}>{n}</p>
+            <p key={tx(n)}>{tx(n)}</p>
           ))}
         </div>
       )}
 
       <div className="mt-8">
-        <RedeemForm note={site.purchaseNote} subscriptions={subscriptions} defaultTarget={renewTarget} />
+        <RedeemForm note={tx(site.purchaseNote)} subscriptions={subscriptions} defaultTarget={renewTarget} />
       </div>
     </div>
   );

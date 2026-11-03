@@ -3,6 +3,7 @@ import { db, nowSec } from "@/lib/env";
 import { hashResetToken } from "@/lib/reset";
 import ResetForm from "./ResetForm";
 import Brand from "../Brand";
+import { getT } from "@/lib/lang";
 
 export const dynamic = "force-dynamic";
 
@@ -17,14 +18,15 @@ export default async function ResetPage({ searchParams }: { searchParams: Promis
       .first());
 
   if (valid) return <ResetForm token={token as string} />;
+  const { t } = await getT();
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="card w-full max-w-sm bg-base-100 shadow-md">
         <div className="card-body gap-4">
           <Brand size={36} className="text-2xl" />
-          <p>这个链接已经失效了（用过了或者过期了）。</p>
+          <p>{t("这个链接已经失效了（用过了或者过期了）。", "This link no longer works (it was already used or has expired).")}</p>
           <Link href="/forgot" className="btn btn-primary">
-            重新申请
+            {t("重新申请", "Request a new link")}
           </Link>
         </div>
       </div>
