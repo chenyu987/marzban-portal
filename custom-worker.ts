@@ -2,9 +2,10 @@
 // 定时任务在同一个 Worker 里直接调 /api/cron/expiry，带一个这次现生成的口令，路由只认这个口令，外面打不进来
 // @ts-ignore .open-next/worker.js 是 opennextjs-cloudflare build 时生成的
 import { default as handler } from "./.open-next/worker.js";
+import { httpsRedirect } from "./lib/https-redirect";
 
 export default {
-  fetch: handler.fetch,
+  fetch: (request: Request, env: CloudflareEnv, ctx: ExecutionContext) => httpsRedirect(request) ?? handler.fetch(request, env, ctx),
   async scheduled(_event: ScheduledController, env: CloudflareEnv, ctx: ExecutionContext) {
     const token = crypto.randomUUID();
     (globalThis as { __cronToken?: string }).__cronToken = token;
