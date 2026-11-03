@@ -56,6 +56,13 @@ async function register(page: Page, email: string, password: string) {
   await expect(page).toHaveURL(/\/dashboard/);
 }
 
+// 客人页面的确认框是页面里自己画的（不是浏览器的 confirm），点里面的确定按钮
+async function confirmOk(page: Page) {
+  const dialog = page.locator("dialog[open]");
+  await dialog.locator(".modal-action button").last().click();
+  await expect(dialog).toHaveCount(0);
+}
+
 async function logout(page: Page) {
   await page.goto("/dashboard");
   await page.getByRole("button", { name: "退出" }).click();
@@ -154,9 +161,16 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   // 还没订阅：绑定框整张卡片显示
   await expect(page.getByRole("heading", { name: "绑定已有订阅" })).toBeVisible();
 
-  // 下单：页面上有订单号、金额和收款码
+  // 下单：先点价格弹出页面里的确认框，点「取消」什么都不发生
   await page.goto("/plans");
   await page.locator('button[value="p1-month"]').click();
+  await page.locator("dialog[open]").getByRole("button", { name: "取消" }).click();
+  await expect(page.locator("dialog[open]")).toHaveCount(0);
+  await expect(page.locator(".card.border")).toHaveCount(0);
+  // 再点一次确定：页面上有订单号、金额和收款码
+  await page.locator('button[value="p1-month"]').click();
+  await expect(page.locator("dialog[open]")).toContainText("普通版 月付");
+  await confirmOk(page);
   const card = page.locator(".card.border").first();
   await expect(card).toContainText("等你付款");
   await expect(card.getByAltText("支付宝收款码")).toBeVisible();
@@ -196,6 +210,7 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await expect(page.locator(`input[name="target"][value="${username}"]`)).toBeChecked();
   // 续期付款：开通后回到订阅页，提醒客人在客户端里刷新订阅
   await page.locator('button[value="p1-month"]').click();
+  await confirmOk(page);
   const renewCard = page.locator(".card.border").first();
   await renewCard.getByLabel("支付宝", { exact: true }).check();
   await renewCard.getByRole("button", { name: "我已付款" }).click();
@@ -305,6 +320,7 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   await page.goto("/plans");
   await expect(page.getByLabel("用余额抵扣（剩 ¥30）")).toBeChecked();
   await page.locator('button[value="p1-month"]').click();
+  await confirmOk(page);
   await expect(page.getByText("用余额开通成功")).toBeVisible();
 
   // 订阅页有了新订阅，余额剩 ¥5
@@ -319,6 +335,7 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   // 余额不够付全款：抵扣 ¥5，还要转 ¥20；管理员列表里显示的也是 ¥20
   await page.goto("/plans");
   await page.locator('button[value="p1-month"]').click();
+  await confirmOk(page);
   const card = page.locator(".card.border").first();
   await expect(card).toContainText("请转账 ¥20");
   await expect(card).toContainText("已用余额抵扣 ¥5");
@@ -330,6 +347,7 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   // 客人取消：抵扣的余额退回
   await page.goto("/plans");
   await card.getByRole("button", { name: "取消这张单" }).click();
+  await confirmOk(page);
   await expect(page.locator(".card.border")).toHaveCount(0);
   await page.goto("/dashboard");
   await expect(page.getByText("¥5.00")).toBeVisible();
@@ -367,13 +385,16 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await register(page, customer, "E2eTest-1234");
   await page.goto("/plans");
   await page.locator('button[value="p1-month"]').click();
+  await confirmOk(page);
   const first = await claim("支付宝", "付款人甲");
   await page.goto("/plans");
   await page.locator('button[value="p1-quarter"]').click();
+  await confirmOk(page);
   await expect(page.locator(".card.border")).toHaveCount(1);
   const second = (await page.locator(".card.border .card-title").first().innerText()).match(/\d{6}-\d{5}/)![0];
   await page.getByRole("radio", { name: /新开一个订阅/ }).check();
   await page.locator('button[value="p1-month"]').click();
+  await confirmOk(page);
   await expect(page.locator(".card.border")).toHaveCount(2);
   const third = await claim("微信", "付款人乙");
   await expect(page.getByTestId("sub-id")).toHaveCount(2);

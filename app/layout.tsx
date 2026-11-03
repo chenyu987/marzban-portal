@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { site } from "@/site.config";
 import Link from "next/link";
 import ContactSupport from "./ContactSupport";
+import ConfirmHost from "./ConfirmDialog";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             © {new Date().getFullYear()} {site.brand}
           </p>
         </footer>
+        <ConfirmHost />
       </body>
     </html>
   );

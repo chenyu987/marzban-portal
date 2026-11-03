@@ -3,6 +3,7 @@
 import { Fragment, useActionState, useState } from "react";
 import { createOrder } from "../actions";
 import ContactSupport from "../ContactSupport";
+import { confirmSubmit } from "../ConfirmDialog";
 
 export type PlanGroup = {
   name: string;
@@ -48,6 +49,7 @@ export default function OrderForm({
     <form
       action={action}
       onSubmit={(e) => {
+        if (e.currentTarget.dataset.confirmed === "1") return confirmSubmit(e, "");
         const btn = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
         if (!btn) return e.preventDefault();
         const fen = Number(btn.dataset.fen);
@@ -59,7 +61,7 @@ export default function OrderForm({
             : deduct > 0
               ? `余额抵扣 ${money(deduct)}，还要转账 ${money(fen - deduct)}`
               : "下单后转账";
-        if (!confirm(`${btn.dataset.name}，${btn.dataset.price}，${what}。${how}。确定吗？`)) e.preventDefault();
+        confirmSubmit(e, `${btn.dataset.name}，${btn.dataset.price}\n${what}。${how}。`, { ok: "确定下单" });
       }}
       className="flex flex-col gap-4"
     >

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { clashVergeImport, hiddifyImport, shadowrocketImport } from "@/lib/clients";
 import { resetSubscriptionLink } from "../actions";
+import { confirmSubmit } from "../ConfirmDialog";
 
 // 大部分客人用 iPhone，Shadowrocket 固定放导入按钮的第一个
 const IMPORTS: { id: string; label: string; href: (url: string) => string }[] = [
@@ -56,7 +57,7 @@ export default function SubscriptionLink({ username, url }: { username: string; 
       <form
         action={resetSubscriptionLink}
         onSubmit={(e) => {
-          if (!confirm("重置后旧链接立刻失效，所有设备都要重新导入。确定吗？")) e.preventDefault();
+          confirmSubmit(e, "重置后旧链接立刻失效，所有设备都要重新导入。确定吗？", { ok: "重置", danger: true });
         }}
       >
         <input type="hidden" name="username" value={username} />

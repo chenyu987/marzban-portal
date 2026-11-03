@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { cancelOrder, claimPaid } from "../actions";
+import { confirmSubmit } from "../ConfirmDialog";
 
 export type OpenOrder = {
   no: string; // 给客人看的订单号，转账备注填这个
@@ -110,7 +111,7 @@ export default function PendingOrder({ order, payments }: { order: OpenOrder; pa
             <form
               action={cancelOrder}
               onSubmit={(e) => {
-                if (!confirm(`已经付过款的单不要取消。确定取消这张单吗？${order.deducted ? "抵扣的余额会退回。" : ""}`)) e.preventDefault();
+                confirmSubmit(e, `已经付过款的单不要取消。确定取消这张单吗？${order.deducted ? "抵扣的余额会退回。" : ""}`, { ok: "取消这张单", danger: true });
               }}
             >
               <input type="hidden" name="id" value={order.id} />
