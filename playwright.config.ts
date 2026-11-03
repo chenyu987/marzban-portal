@@ -9,7 +9,8 @@ const PORT = Number(process.env.E2E_PORT ?? 3000);
 export default defineConfig({
   testDir: "e2e",
   globalSetup: "./e2e/setup.ts",
-  timeout: 120_000,
+  // 每条测试最长 4 分钟：管理后台那条在 CI 上要将近 2 分钟（本地不到 1 分钟），原来的 2 分钟限制会偶尔超时
+  timeout: 240_000,
   expect: { timeout: 15_000 },
   workers: 1,
   reporter: "list",

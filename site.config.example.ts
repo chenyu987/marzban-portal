@@ -56,6 +56,8 @@ export type SiteConfig = {
   };
   // 教程截图放在 public/site/tutorial/ 下（不同步到公开仓库）。true 才在教程里显示截图
   tutorialShots?: boolean;
+  // true：没选过语言的人按浏览器（系统）语言显示，首选中文的看中文、别的语言看英文。不填就一律先显示中文，客人自己在页面底部或「账户」页切
+  autoLang?: boolean;
   // 每个页面底部「联系我们」的邮箱，不填就不显示
   contactEmail?: string;
   // 客服微信号：页面底部和「请联系客服」的提示旁边放一个「复制客服微信」按钮，不填就只显示邮箱

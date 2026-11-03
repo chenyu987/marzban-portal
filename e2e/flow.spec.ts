@@ -161,16 +161,15 @@ test("页面底部切换中英文：记住选择，登录页和报错跟着换",
   await expect(page.getByRole("button", { name: "发送重置链接" })).toBeVisible();
 });
 
-test("没选过语言时按浏览器语言：英文系统一打开就是英文", async ({ browser }) => {
+test("没选过语言默认中文（site.config 没开 autoLang）：英文系统打开也是中文，自己切了才是英文", async ({ browser }) => {
   const ctx = await browser.newContext({ locale: "en-US" });
   const page = await ctx.newPage();
   await page.goto("/login");
+  await expect(page.getByRole("heading", { name: "登录客户中心" })).toBeVisible();
+  await page.locator("footer").getByRole("button", { name: "English" }).click();
   await expect(page.getByRole("heading", { name: "Log in" })).toBeVisible();
-  // 自己选了中文以后就按选的来
-  await page.locator("footer").getByRole("button", { name: "中文" }).click();
-  await expect(page.getByRole("heading", { name: "登录客户中心" })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("heading", { name: "登录客户中心" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Log in" })).toBeVisible();
   await ctx.close();
 });
 
