@@ -882,6 +882,13 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
 
   await admin.goto(`/admin/users?q=${mzUser}`);
   await expect(admin.getByTestId("marzban-user")).toHaveCount(1);
+  // 用户名前的在线圆点，照 Marzban：没连过是空心，连上了是绿的「在线」
+  await expect(admin.getByTestId("marzban-user").locator("[data-online]")).toHaveAttribute("data-online", "never");
+  await expect(admin.getByTestId("marzban-user")).toContainText("没连过");
+  await mockMarzban("PUT", `/user/${mzUser}`, { online_at: new Date().toISOString().slice(0, 19) });
+  await admin.reload();
+  await expect(admin.getByTestId("marzban-user").locator("[data-online]")).toHaveAttribute("data-online", "online");
+  await expect(admin.getByTestId("marzban-user")).toContainText("在线");
   await admin.getByRole("link", { name: mzUser }).click();
   admin.removeAllListeners("dialog");
   admin.on("dialog", (d) => (d.type() === "prompt" ? d.accept(mzUser) : d.accept()));

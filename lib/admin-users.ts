@@ -94,16 +94,24 @@ export function parseOnHoldDays(v: string): { days: number | null } | { error: s
   return Number.isInteger(n) && n >= 1 && n <= 3650 ? { days: n } : { error: "首次连上后有效天数要写 1 到 3650 的整数" };
 }
 
-// 「3 分钟前」这种。Marzban 的 online_at 是 UTC 但不带时区
-export function onlineText(onlineAt: string | null | undefined, nowMs: number): string {
-  if (!onlineAt) return "没连过";
+// 在线状态，照 Marzban 列表：在线（2 分钟内连过）/ 连过 / 没连过。Marzban 的 online_at 是 UTC 但不带时区
+export type OnlineState = "online" | "offline" | "never";
+export function onlineState(onlineAt: string | null | undefined, nowMs: number): { state: OnlineState; text: string } {
+  if (!onlineAt) return { state: "never", text: "没连过" };
   const ms = Date.parse(/[zZ]|[+-]\d{2}:?\d{2}$/.test(onlineAt) ? onlineAt : `${onlineAt}Z`);
-  if (Number.isNaN(ms)) return "-";
+  if (Number.isNaN(ms)) return { state: "offline", text: "-" };
   const min = Math.floor((nowMs - ms) / 60000);
-  if (min < 2) return "在线";
-  if (min < 60) return `${min} 分钟前`;
-  if (min < 24 * 60) return `${Math.floor(min / 60)} 小时前`;
-  return `${Math.floor(min / (24 * 60))} 天前`;
+  if (min < 2) return { state: "online", text: "在线" };
+  // 最多写两级，比如「1 小时 55 分钟前」「3 天 2 小时前」
+  const d = Math.floor(min / (24 * 60));
+  const h = Math.floor(min / 60) % 24;
+  const m = min % 60;
+  const parts = d ? [`${d} 天`, h ? `${h} 小时` : ""] : h ? [`${h} 小时`, m ? `${m} 分钟` : ""] : [`${m} 分钟`];
+  return { state: "offline", text: `${parts.filter(Boolean).join(" ")}前` };
+}
+
+export function onlineText(onlineAt: string | null | undefined, nowMs: number): string {
+  return onlineState(onlineAt, nowMs).text;
 }
 
 // 编辑前后对比，写进操作日志

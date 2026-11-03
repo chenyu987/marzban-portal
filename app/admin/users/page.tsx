@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
 import { getSystem, listUsers, type MarzbanUser, type SystemStats, type UserStatus } from "@/lib/marzban";
 import { formatBytes, formatExpire, RESET_LABEL, STATUS_LABEL } from "@/lib/format";
-import { onlineText, SORTS, STATUS_FILTERS } from "@/lib/admin-users";
+import { onlineState, SORTS, STATUS_FILTERS } from "@/lib/admin-users";
 import AdminHeader from "../AdminHeader";
 import { CustomerLink } from "../Links";
 import { findPlan } from "@/lib/plans";
@@ -156,13 +156,26 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
               {data.users.map((u) => {
                 const owner = owners.get(u.username);
                 const st = STATUS_LABEL[u.status] ?? { text: u.status, badge: "badge-neutral" };
+                const online = onlineState(u.online_at, now);
                 return (
                   <tr key={u.username} className="hover" data-testid="marzban-user">
                     <td>
-                      <Link href={`/admin/users/${encodeURIComponent(u.username)}`} className="link link-primary">
-                        {u.username}
-                      </Link>
-                      <div className="text-xs text-base-content/50">{onlineText(u.online_at, now)}</div>
+                      <div className="flex items-center gap-2 whitespace-nowrap" data-online={online.state}>
+                        <span
+                          aria-hidden
+                          className={`size-2.5 shrink-0 rounded-full ${
+                            online.state === "online"
+                              ? "bg-success/70"
+                              : online.state === "offline"
+                                ? "bg-base-content/30"
+                                : "border border-base-content/40"
+                          }`}
+                        />
+                        <Link href={`/admin/users/${encodeURIComponent(u.username)}`} className="link link-primary">
+                          {u.username}
+                        </Link>
+                        <span className="text-xs text-base-content/60">{online.text}</span>
+                      </div>
                     </td>
                     <td>
                       {owner ? (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseOnHoldDays, createUserBody, describeChanges, fromBeijingInput, monthStartBeijing, onlineText, parseExpiredDays, parseNodeForm, validateHosts, parseUserForm, toBeijingInput } from "./admin-users";
+import { parseOnHoldDays, createUserBody, describeChanges, fromBeijingInput, monthStartBeijing, onlineState, onlineText, parseExpiredDays, parseNodeForm, validateHosts, parseUserForm, toBeijingInput } from "./admin-users";
 
 const GB = 1024 ** 3;
 const form = (o: Record<string, string>) => (k: string) => o[k] ?? "";
@@ -57,7 +57,12 @@ describe("其他", () => {
     expect(onlineText(at(1), now * 1000)).toBe("在线");
     expect(onlineText(at(30), now * 1000)).toBe("30 分钟前");
     expect(onlineText(at(180), now * 1000)).toBe("3 小时前");
+    expect(onlineText(at(115), now * 1000)).toBe("1 小时 55 分钟前");
     expect(onlineText(at(3 * 24 * 60), now * 1000)).toBe("3 天前");
+    expect(onlineText(at(3 * 24 * 60 + 125), now * 1000)).toBe("3 天 2 小时前");
+    expect(onlineState(null, now * 1000).state).toBe("never");
+    expect(onlineState(at(1), now * 1000).state).toBe("online");
+    expect(onlineState(at(30), now * 1000).state).toBe("offline");
   });
   it("改了什么", () => {
     const after = { data_limit: 0, data_limit_reset_strategy: "no_reset" as const, expire: 100, note: "ip=2", status: "active" as const };
