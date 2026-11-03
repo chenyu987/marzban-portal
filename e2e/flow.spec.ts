@@ -109,8 +109,14 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   // 套餐页：直接在价目表里选，每个价格格子都能点；鼠标移上去浮出「下单」
   await page.goto("/plans");
   await expect(page.getByTestId("plan-table").locator('button[name="plan"]').first()).toBeVisible();
-  await page.locator('button[value="p1-year"]').hover();
-  await expect(page.locator('button[value="p1-year"]')).toContainText("下单");
+  // 悬停只有动画，格子大小不变（表格不会跳）
+  const yearCell = page.locator('button[value="p1-year"]');
+  const before = await yearCell.boundingBox();
+  await yearCell.hover();
+  await expect(yearCell).toContainText("下单");
+  await page.waitForTimeout(300);
+  const after = await yearCell.boundingBox();
+  expect([after?.width, after?.height]).toEqual([before?.width, before?.height]);
   await page.goto("/dashboard");
 
   // 还没订阅：绑定框整张卡片显示
@@ -156,6 +162,13 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await page.getByRole("link", { name: "续费", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/plans\\?renew=${username}`));
   await expect(page.locator(`input[name="target"][value="${username}"]`)).toBeChecked();
+  // 续期付款：开通后回到订阅页，提醒客人在 VPN 软件里刷新订阅
+  await page.locator('button[value="p1-month"]').click();
+  const renewCard = page.locator(".card.border").first();
+  await renewCard.getByLabel("支付宝", { exact: true }).check();
+  await renewCard.getByRole("button", { name: "我已付款" }).click();
+  await expect(page).toHaveURL(/\/dashboard\?renewed=1/);
+  await expect(page.getByTestId("renewed")).toContainText("刷新");
 
   // 忘记密码页面能提交（本地只打印邮件）
   await logout(page);
@@ -296,6 +309,7 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   await expect(page.locator('form:has(input[name="code"]) select[name="target"]')).toHaveValue(username);
   await page.getByRole("button", { name: "兑换" }).click();
   await expect(page.getByText("续期成功")).toBeVisible();
+  await expect(page.getByText(/刷新（更新）一下订阅/)).toBeVisible();
 });
 
 test("管理后台：登录、确认和取消订单、客人管理、兑换码、日志", async ({ page, browser }) => {

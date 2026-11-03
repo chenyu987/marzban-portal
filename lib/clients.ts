@@ -12,6 +12,9 @@ export function shadowrocketImport(url: string): string {
   return `shadowrocket://add/sub://${btoa(url)}?remark=${encodeURIComponent(IMPORT_NAME)}`;
 }
 
+// 续期后订阅链接不变，节点照样能连；客户端里显示的到期时间要刷新订阅才更新，之前过期连不上的也是刷新一下就好
+export const RENEW_REFRESH_HINT = "已经导入过的不用重新导入，打开 VPN 软件刷新（更新）一下订阅，到期时间就会更新";
+
 // Clash Verge Rev 注册了 clash:// 协议
 export function clashVergeImport(url: string): string {
   return `clash://install-config?url=${encodeURIComponent(url)}&name=${encodeURIComponent(IMPORT_NAME)}`;

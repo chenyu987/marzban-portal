@@ -20,7 +20,7 @@ const per = (label: string) => (label.endsWith("付") ? `/${label.slice(0, -1)}`
 // 价目表照 Canva 上的原版：一行一档，名字、说明、四个价格各占一格，格子之间有线。
 // 手机上放不下六列，名字和说明占一行，四个价格排在下一行
 
-// 套餐价目表。能买时每个价格格子都是一个按钮：鼠标移上去变色、浮出「下单」，点了先确认再下单。
+// 套餐价目表。能买时每个价格格子都是一个按钮：鼠标移上去变色、价格放大、底部浮出「下单」；只用 transform 和绝对定位，不改格子大小，表格不会跳，点了先确认再下单。
 // 有余额时默认勾选「用余额抵扣」：余额够付全款就马上开通；不够就抵扣一部分，剩下的转账。
 // 没配收款码时只能靠余额付全款；既没收款码也没余额时只是价目表
 export default function OrderForm({
@@ -164,12 +164,12 @@ export default function OrderForm({
                     data-fen={p.fen}
                     disabled={pending || (!canTransfer && deduct < p.fen)}
                     title={`${p.name} ${p.price}，点击下单`}
-                    className={`group ${cell} cursor-pointer transition-colors duration-200 hover:bg-primary hover:text-primary-content focus-visible:bg-primary focus-visible:text-primary-content focus-visible:outline-none active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-base-100 disabled:hover:text-inherit`}
+                    className={`group relative ${cell} cursor-pointer transition-colors duration-200 hover:bg-primary hover:text-primary-content focus-visible:bg-primary focus-visible:text-primary-content focus-visible:outline-none active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-base-100 disabled:hover:text-inherit`}
                   >
-                    <span className="flex flex-col items-center transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-110 group-focus-visible:scale-110 group-disabled:transform-none group-hover:[&_*]:text-inherit group-focus-visible:[&_*]:text-inherit">
+                    <span className="flex flex-col items-center transition-transform duration-200 group-hover:-translate-y-1.5 group-hover:scale-115 group-focus-visible:-translate-y-1.5 group-focus-visible:scale-115 group-disabled:transform-none group-hover:[&_*]:text-inherit group-focus-visible:[&_*]:text-inherit">
                       {inner}
                     </span>
-                    <span className="max-h-0 overflow-hidden text-xs font-semibold opacity-0 transition-all duration-200 group-hover:mt-0.5 group-hover:max-h-4 group-hover:opacity-100 group-focus-visible:max-h-4 group-focus-visible:opacity-100 group-disabled:hidden">
+                    <span className="pointer-events-none absolute inset-x-0 bottom-1 translate-y-1 text-[11px] leading-none font-semibold opacity-0 transition duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100 group-disabled:hidden">
                       {deduct >= p.fen ? "余额付 →" : "下单 →"}
                     </span>
                   </button>

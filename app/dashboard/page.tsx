@@ -12,11 +12,13 @@ import ReferralCard from "./ReferralCard";
 import ContactSupport from "../ContactSupport";
 import Brand from "../Brand";
 import CustomerNav from "../CustomerNav";
+import { RENEW_REFRESH_HINT } from "@/lib/clients";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ renewed?: string }> }) {
   const customer = await requireCustomer();
+  const { renewed } = await searchParams;
   const { results } = await db()
     .prepare("SELECT marzban_username, code FROM subscriptions WHERE customer_id = ? ORDER BY id")
     .bind(customer.id)
@@ -66,6 +68,16 @@ export default async function DashboardPage() {
         {subs.length === 0 && <p className="text-sm text-base-content/60">你好，{customer.wechat ?? customer.email.split("@")[0]}</p>}
         <h1 className="text-2xl font-bold">我的订阅</h1>
       </div>
+
+      {/* 「我已付款」续期成功后跳过来 */}
+      {renewed && (
+        <div role="alert" className="alert alert-success alert-soft mb-4" data-testid="renewed">
+          <span>
+            <b>续期成功。</b>
+            {RENEW_REFRESH_HINT}。
+          </span>
+        </div>
+      )}
 
       <div className="flex flex-col gap-4">
         {subs.length === 0 && (

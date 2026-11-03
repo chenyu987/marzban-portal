@@ -11,11 +11,10 @@ export default async function AccountPage() {
     <div className="mx-auto max-w-2xl px-4 pb-16">
       <CustomerNav />
 
-      <h1 className="mt-4 mb-1 text-2xl font-bold">账户</h1>
-      <p className="mb-6 text-sm text-base-content/60">改了马上生效。</p>
+      <h1 className="mt-4 mb-6 text-2xl font-bold">账户</h1>
 
       <div className="flex flex-col gap-4">
-        <Section title="微信号" desc="客服有事会加你这个微信，比如线路调整、续费提醒。">
+        <Section title="微信号" desc="客服有事会加你这个微信，比如节点更新。">
           <WechatForm current={customer.wechat ?? ""} />
         </Section>
         <Section title="登录邮箱" desc={`现在是 ${customer.email}。改的时候要输一次密码。`}>

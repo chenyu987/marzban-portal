@@ -13,6 +13,7 @@ import { type ProvisionResult } from "@/lib/provision";
 import { provisionTarget } from "@/lib/orders";
 import { confirmTransferOrder, orderLabel } from "@/lib/admin-orders";
 import { site } from "@/site.config";
+import { RENEW_REFRESH_HINT } from "@/lib/clients";
 import { BALANCE_SQL } from "@/lib/balance";
 import { canSendMail, sendMail } from "@/lib/mail";
 import { hashResetToken, newResetToken, RESET_MAX_PER_HOUR, RESET_TTL_SELF, resetLink } from "@/lib/reset";
@@ -234,7 +235,8 @@ export async function redeem(_: FormState, form: FormData): Promise<FormState> {
   revalidatePath("/plans");
   return {
     ok:
-      `${target === "new" ? "开通" : "续期"}成功：${plan.name}，${username} 到期时间 ${formatExpire(expire)}。回到「我的订阅」就能导入使用` +
+      `${target === "new" ? "开通" : "续期"}成功：${plan.name}，${username} 到期时间 ${formatExpire(expire)}。` +
+      (target === "new" ? "回到「我的订阅」就能导入使用" : RENEW_REFRESH_HINT) +
       (result.warning ? "。已用流量还没清零，管理员会帮你处理" : ""),
   };
 }
@@ -332,6 +334,7 @@ export async function claimPaid(_: FormState, form: FormData): Promise<FormState
     .bind(nowSec(), method, payer, id, customer.id)
     .run();
   if (r.meta.changes !== 1) return { error: "这张单已经处理过了，请刷新页面" };
+  const order = await db().prepare("SELECT marzban_username FROM orders WHERE id = ?").bind(id).first<{ marzban_username: string | null }>();
 
   const result = await confirmTransferOrder(id, { customerId: customer.id });
   revalidatePath("/plans");
@@ -340,8 +343,8 @@ export async function claimPaid(_: FormState, form: FormData): Promise<FormState
     console.error(`claimPaid: 自动开通失败 order=${id} customer=${customer.id} ${result.error}`);
     return { error: "已经记下你付了款，但自动开通没成功。管理员会尽快帮你开通，不用重新下单" };
   }
-  // 开通好了，直接去「我的订阅」拿订阅
-  redirect("/dashboard");
+  // 开通好了，直接去「我的订阅」拿订阅；续期的提醒客人在客户端里刷新订阅
+  redirect(order?.marzban_username ? "/dashboard?renewed=1" : "/dashboard");
 }
 
 // 忘记密码：给这个邮箱发一封带重置链接的邮件。不管邮箱有没有注册过都给同样的提示，不让人试探哪些邮箱注册过
@@ -504,7 +507,8 @@ export async function buyWithBalance(_: FormState, form: FormData): Promise<Form
   revalidatePath("/plans");
   return {
     ok:
-      `用余额${target === "new" ? "开通" : "续期"}成功：${plan.name}，${username} 到期时间 ${formatExpire(result.expire)}。回到「我的订阅」就能导入使用` +
+      `用余额${target === "new" ? "开通" : "续期"}成功：${plan.name}，${username} 到期时间 ${formatExpire(result.expire)}。` +
+      (target === "new" ? "回到「我的订阅」就能导入使用" : RENEW_REFRESH_HINT) +
       (result.warning ? "。已用流量还没清零，管理员会帮你处理" : ""),
   };
 }
