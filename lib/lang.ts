@@ -1,10 +1,12 @@
-// 只在服务器上用：从 cookie 读客人选的语言
-import { cookies } from "next/headers";
+// 只在服务器上用：客人选过语言就用 cookie 里的，没选过按浏览器语言
+import { cookies, headers } from "next/headers";
 import type { Text } from "../site.config.example";
-import { LANG_COOKIE, makeT, parseLang, pick, type Lang } from "./i18n";
+import { LANG_COOKIE, langFromAcceptLanguage, makeT, parseLang, pick, type Lang } from "./i18n";
 
 export async function getLang(): Promise<Lang> {
-  return parseLang((await cookies()).get(LANG_COOKIE)?.value);
+  const chosen = (await cookies()).get(LANG_COOKIE)?.value;
+  if (chosen) return parseLang(chosen);
+  return langFromAcceptLanguage((await headers()).get("accept-language"));
 }
 
 // const { t, p, lang } = await getT()：t("中文", "English") 选文案，p(site.xxx) 取配置里对应语言的那句

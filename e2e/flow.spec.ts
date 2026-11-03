@@ -161,6 +161,19 @@ test("页面底部切换中英文：记住选择，登录页和报错跟着换",
   await expect(page.getByRole("button", { name: "发送重置链接" })).toBeVisible();
 });
 
+test("没选过语言时按浏览器语言：英文系统一打开就是英文", async ({ browser }) => {
+  const ctx = await browser.newContext({ locale: "en-US" });
+  const page = await ctx.newPage();
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: "Log in" })).toBeVisible();
+  // 自己选了中文以后就按选的来
+  await page.locator("footer").getByRole("button", { name: "中文" }).click();
+  await expect(page.getByRole("heading", { name: "登录客户中心" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "登录客户中心" })).toBeVisible();
+  await ctx.close();
+});
+
 test("客人从注册到续费、忘记密码，管理员确认订单", async ({ page }) => {
   const email = `e2e-${Date.now()}@example.test`;
   const password = "E2eTest-1234";
@@ -346,6 +359,13 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await otherPage.goto("/dashboard");
   await expect(otherPage).toHaveURL(/\/login/);
   await other.close();
+
+  // 账户页也能切语言，选的语言记到账号上（提醒邮件按它写）
+  await page.getByTestId("account-lang").getByRole("button", { name: "English" }).click();
+  await expect(page.getByRole("heading", { name: "Account", level: 1 })).toBeVisible();
+  expect(query(`SELECT lang FROM customers WHERE email = '${newEmail}'`)).toEqual([{ lang: "en" }]);
+  await page.getByTestId("account-lang").getByRole("button", { name: "中文" }).click();
+  await expect(page.getByRole("heading", { name: "账户", level: 1 })).toBeVisible();
 
   // 用新邮箱、新密码登录
   await logout(page);

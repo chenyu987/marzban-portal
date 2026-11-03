@@ -13,7 +13,8 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   workers: 1,
   reporter: "list",
-  use: { baseURL: `http://localhost:${PORT}`, trace: "retain-on-failure" },
+  // 浏览器语言设成中文：没选过语言时页面按浏览器语言显示，测试按中文写
+  use: { baseURL: `http://localhost:${PORT}`, trace: "retain-on-failure", locale: "zh-CN" },
   webServer: [
     { command: "node dev/mock-marzban.mjs", port: 8010, reuseExistingServer: true },
     { command: `npx next dev -p ${PORT}`, port: PORT, reuseExistingServer: PORT === 3000, timeout: 180_000 },

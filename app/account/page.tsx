@@ -1,6 +1,7 @@
 import { requireCustomer } from "@/lib/session";
 import { EmailForm, PasswordForm, PrefsForm, WechatForm } from "./AccountForms";
 import CustomerNav from "../CustomerNav";
+import LangSwitch from "../LangSwitch";
 import { getT } from "@/lib/lang";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,11 @@ export default async function AccountPage() {
           )}
         >
           <PrefsForm notify={!!customer.notify_expiry} />
+        </Section>
+        <Section title={t("语言", "Language")} desc={t("网站和提醒邮件用的语言。", "Used for the website and reminder emails.")}>
+          <div data-testid="account-lang">
+            <LangSwitch size="sm" />
+          </div>
         </Section>
         <p className="text-sm text-base-content/50">
           {t(

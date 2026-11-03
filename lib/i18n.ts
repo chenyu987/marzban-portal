@@ -10,6 +10,14 @@ export const LANG_COOKIE = "lang";
 
 export const parseLang = (v: string | null | undefined): Lang => (v === "en" ? "en" : "zh");
 
+// 没选过语言的人按浏览器（系统）语言来：首选中文的看中文，首选别的语言（英语、法语……）的看英文，读不到就中文。
+// 用 Accept-Language 里排第一的那个，比如 "en-US,en;q=0.9,zh-CN;q=0.8" 是英文
+export function langFromAcceptLanguage(header: string | null | undefined): Lang {
+  const first = (header ?? "").split(",")[0].trim().toLowerCase();
+  if (!first || first === "*") return "zh";
+  return first.startsWith("zh") ? "zh" : "en";
+}
+
 export const makeT =
   (lang: Lang): T =>
   (zh, en) =>

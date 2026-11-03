@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db, nowSec } from "./env";
-import { LANG_COOKIE, parseLang } from "./i18n";
+import { getLang } from "./lang";
 
 const COOKIE = "sid";
 const TTL = 30 * 86400;
@@ -21,9 +21,8 @@ export async function createSession(customerId: number) {
     .bind(await sha256(token), customerId, now + TTL, now)
     .run();
   const jar = await cookies();
-  // 记下客人现在用的语言，到期提醒邮件按它写（以后在页面底部切换也会更新）
-  const lang = jar.get(LANG_COOKIE)?.value;
-  if (lang) await db().prepare("UPDATE customers SET lang = ? WHERE id = ?").bind(parseLang(lang), customerId).run();
+  // 记下客人现在用的语言（选过的，或者按浏览器语言自动选的），到期提醒邮件按它写；以后切换语言也会更新
+  await db().prepare("UPDATE customers SET lang = ? WHERE id = ?").bind(await getLang(), customerId).run();
   jar.set(COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

@@ -11,8 +11,9 @@ const OPTIONS: { lang: Lang; label: string }[] = [
   { lang: "en", label: "English" },
 ];
 
-// 页面底部的语言切换。记一年（登录着的也记到账号上，提醒邮件用），换了以后整页按新语言重新渲染。管理后台只有中文，不显示
-export default function LangSwitch() {
+// 语言切换：页面底部一个（小），「账户」页一个（size="sm"）。记一年（登录着的也记到账号上，提醒邮件用），
+// 换了以后整页按新语言重新渲染。管理后台只有中文，不显示
+export default function LangSwitch({ size = "xs" }: { size?: "xs" | "sm" }) {
   const lang = useLang();
   const router = useRouter();
   const path = usePathname();
@@ -32,7 +33,7 @@ export default function LangSwitch() {
           type="button"
           aria-pressed={o.lang === lang}
           disabled={pending}
-          className={`btn join-item btn-xs ${o.lang === lang ? "btn-active" : "btn-ghost"}`}
+          className={`btn join-item ${size === "sm" ? "btn-sm" : "btn-xs"} ${o.lang === lang ? "btn-active btn-primary" : "btn-ghost"}`}
           onClick={() => choose(o.lang)}
         >
           {o.label}
