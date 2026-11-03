@@ -9,6 +9,9 @@
   "triggers": { "crons": ["0 2 * * *"] },
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "marzban-portal" }],
+  // 可选：让 Worker 在你的 Marzban 面板附近跑（填面板所在的云区域，比如东京是 aws:ap-northeast-1）。
+  // 每个页面要查好几次数据库、调好几次 Marzban，Worker 离它们近，页面就快
+  // "placement": { "region": "aws:ap-northeast-1" },
   "d1_databases": [
     {
       "binding": "DB",

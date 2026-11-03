@@ -195,6 +195,8 @@ function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; cod
   // 免费体验前几天不放续费按钮，最后 3 天的黄色提醒和到期后的红色提示照常
   const trial = !!plan?.codeOnly && plan.price === 0;
   const daysPct = daysLeft === null ? 100 : Math.min(100, (daysLeft / period) * 100);
+  // 买了还没连过（没有上线时间、也没用过流量）：多半是还不会装 App，卡片最上面放「下一步」引导，连上过一次就不再显示
+  const neverUsed = !expired && !user.online_at && !(user.lifetime_used_traffic ?? user.used_traffic);
 
   return (
     <div className="card bg-base-100 shadow-sm">
@@ -206,6 +208,19 @@ function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; cod
           </div>
           <span className={`badge ${status.badge}`}>{status.text}</span>
         </div>
+
+        {neverUsed && (
+          <div className="flex flex-col gap-3 rounded-box border border-primary/30 bg-primary/5 p-4" data-testid="next-step">
+            <b>{t("下一步：装好 App，把这个订阅导进去", "Next: install an app and import this subscription")}</b>
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-base-content/70">
+              <li>{t("按你的设备装 App（iPhone 用 Shadowrocket），教程每一步都有截图", "Install the app for your device (Shadowrocket on iPhone); every step in the guide has a screenshot")}</li>
+              <li>{t("装好后回到这里，点下面的「导入」按钮", "Then come back here and tap an Import button below")}</li>
+            </ol>
+            <Link href="/tutorial" className="btn btn-primary">
+              {t("看安装教程", "Open the setup guide")}
+            </Link>
+          </div>
+        )}
 
         {/* 两个圆环：剩余天数（占这期套餐天数的多少）、已用流量。手机上上下排 */}
         <div className="grid gap-4 sm:grid-cols-2">

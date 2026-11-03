@@ -87,3 +87,10 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* 手机上有底部标签栏（CustomerNav）时，页面底部留出它的高度，页脚不会被挡住 */
+@media (width < 40rem) {
+  body:has(.tab-bar) {
+    padding-bottom: calc(3.75rem + env(safe-area-inset-bottom));
+  }
+}

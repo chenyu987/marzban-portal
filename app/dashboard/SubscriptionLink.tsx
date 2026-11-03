@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { clashVergeImport, hiddifyImport, shadowrocketImport } from "@/lib/clients";
@@ -55,6 +56,14 @@ export default function SubscriptionLink({ username, url }: { username: string; 
           </a>
         ))}
       </div>
+      {/* 新手最容易卡在「还没装 App」，导入按钮旁边就给教程入口 */}
+      <p className="text-sm text-base-content/60">
+        {t("还没装 App？", "Haven't installed an app yet? ")}
+        <Link href="/tutorial" className="link link-primary">
+          {t("看安装教程", "Open the setup guide")}
+        </Link>
+        {t("，每一步都有截图。", " — every step has a screenshot.")}
+      </p>
       <p className="text-xs text-base-content/60">
         {t(
           "Clash 配置文件已经带好分流规则，适合 FlClash、ClashX 这类要手动导入文件的客户端。文件不会自动更新，节点有变化要重新下载；能一键导入的客户端优先用导入。",

@@ -207,6 +207,8 @@ const server = http.createServer(async (req, res) => {
       for (const k of ["expire", "data_limit", "note", "status", "data_limit_reset_strategy"]) {
         if (k in body) u[k] = (k === "expire" || k === "data_limit") && body[k] === 0 ? null : body[k];
       }
+      // 只有假 Marzban 认：e2e 用来模拟「客人连上过」（真 Marzban 的这个字段是只读的）
+      if ("online_at" in body) u.online_at = body.online_at;
       log(200);
       return send(res, 200, toResponse(u));
     }
