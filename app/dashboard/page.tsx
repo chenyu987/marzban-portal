@@ -8,7 +8,8 @@ import { site } from "@/site.config";
 import { describePlan, findPlan } from "@/lib/plans";
 import BindForm from "./BindForm";
 import HideButton from "./HideButton";
-import SubscriptionLink from "./SubscriptionLink";
+import CopyCode from "./CopyCode";
+import SubscriptionLink, { ResetLinkButton } from "./SubscriptionLink";
 import ReferralCard from "./ReferralCard";
 import ContactSupport from "../ContactSupport";
 import Brand from "../Brand";
@@ -215,7 +216,7 @@ function planHeading(planId: string | undefined, lang: Lang): { title: string; s
 function SubscriptionId({ code, lang }: { code: string | null; lang: Lang }) {
   return (
     <p className="text-right text-xs text-base-content/50">
-      {makeT(lang)("订阅编号", "Subscription ID")} <span data-testid="sub-id">{formatSubCode(code)}</span>
+      {makeT(lang)("订阅编号", "Subscription ID")} {code ? <CopyCode text={formatSubCode(code)} /> : <span data-testid="sub-id">-</span>}
     </p>
   );
 }
@@ -315,8 +316,12 @@ function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; cod
         )}
 
         <SubscriptionLink username={user.username} url={user.subscription_url} />
-        <div className="flex items-center justify-between gap-2">
-          {expired ? <HideButton username={user.username} /> : <span />}
+        {/* 最底下一行：左边重置链接（过期了再加隐藏），右边订阅编号 */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1">
+            <ResetLinkButton username={user.username} />
+            {expired && <HideButton username={user.username} />}
+          </div>
           <SubscriptionId code={code} lang={lang} />
         </div>
       </div>

@@ -78,18 +78,25 @@ export default function SubscriptionLink({ username, url }: { username: string; 
         </div>
       )}
 
-      <form
-        action={resetSubscriptionLink}
-        onSubmit={(e) => {
-          confirmSubmit(e, t("重置后旧链接立刻失效，所有设备都要重新导入。确定吗？", "The old link stops working immediately and every device must import again. Continue?"), {
-            ok: t("重置", "Reset"),
-            danger: true,
-          });
-        }}
-      >
-        <input type="hidden" name="username" value={username} />
-        <button className="btn btn-ghost btn-xs text-base-content/60">{t("链接泄露了？重置订阅链接", "Link leaked? Reset subscription link")}</button>
-      </form>
     </div>
+  );
+}
+
+// 「链接泄露了？重置订阅链接」，放在卡片最底下一行左边，和订阅编号对齐
+export function ResetLinkButton({ username }: { username: string }) {
+  const t = useT();
+  return (
+    <form
+      action={resetSubscriptionLink}
+      onSubmit={(e) => {
+        confirmSubmit(e, t("重置后旧链接立刻失效，所有设备都要重新导入。确定吗？", "The old link stops working immediately and every device must import again. Continue?"), {
+          ok: t("重置", "Reset"),
+          danger: true,
+        });
+      }}
+    >
+      <input type="hidden" name="username" value={username} />
+      <button className="btn btn-ghost btn-xs text-base-content/60">{t("链接泄露了？重置订阅链接", "Link leaked? Reset subscription link")}</button>
+    </form>
   );
 }

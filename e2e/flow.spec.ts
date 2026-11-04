@@ -285,6 +285,19 @@ test("过期、被删掉的订阅能从主页隐藏，记录留着；又续上�
   await expect(page).toHaveURL(/\/dashboard/);
   const confirm = page.getByRole("dialog", { name: "确认" });
 
+  // 订阅编号点一下就复制，过一会儿换回编号；重置链接和编号在最底下同一行
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const subId = page.getByTestId("sub-id");
+  const code = (await subId.getAttribute("data-code"))!;
+  expect(code).toMatch(/^[0-9A-Z]{4}-[0-9A-Z]{4}$/);
+  await subId.click();
+  await expect(subId).toHaveText("已复制 ✓");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(code);
+  await expect(subId).toHaveText(code);
+  const resetBox = await page.getByRole("button", { name: "链接泄露了？重置订阅链接" }).boundingBox();
+  const idBox = await subId.boundingBox();
+  expect(Math.abs(resetBox!.y + resetBox!.height / 2 - (idBox!.y + idBox!.height / 2))).toBeLessThan(12);
+
   // 过期的：卡片底下有「从主页隐藏」，确认后不显示，底部能重新显示
   await page.getByRole("button", { name: "从主页隐藏" }).click();
   await confirm.getByRole("button", { name: "隐藏" }).click();
@@ -293,6 +306,12 @@ test("过期、被删掉的订阅能从主页隐藏，记录留着；又续上�
   await expect(hidden).toContainText("已隐藏 1 个");
   await expect(hidden).toContainText("已过期");
   expect(query(`SELECT hidden_at FROM subscriptions WHERE marzban_username = '${wechat}'`)[0].hidden_at).toBeTruthy();
+  // 隐藏了的，购买/续费页也不能选它续期（客人只剩新开一个订阅）
+  await page.goto("/plans");
+  await expect(page.getByRole("heading", { name: "购买套餐" })).toBeVisible();
+  await expect(page.locator(`[name="target"][value="${wechat}"], [name="target"] option[value="${wechat}"]`)).toHaveCount(0);
+  await expect(page.getByText("买给哪个订阅")).toHaveCount(0);
+  await page.goto("/dashboard");
   await hidden.locator("summary").click();
   await hidden.getByRole("button", { name: "重新显示" }).click();
   await expect(page.getByTestId("sub-id")).toBeVisible();
@@ -305,6 +324,10 @@ test("过期、被删掉的订阅能从主页隐藏，记录留着；又续上�
   await mockMarzban("PUT", `/user/${wechat}`, { expire: now + 30 * 86400, status: "active" });
   await page.goto("/dashboard");
   await expect(page.getByTestId("sub-id")).toBeVisible();
+  // 续上了，续费页又能选它
+  await page.goto("/plans");
+  await expect(page.locator(`[name="target"][value="${wechat}"], [name="target"] option[value="${wechat}"]`).first()).toBeAttached();
+  await page.goto("/dashboard");
   // 没过期的订阅没有隐藏按钮
   await expect(page.getByRole("button", { name: "从主页隐藏" })).toHaveCount(0);
 

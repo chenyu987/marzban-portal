@@ -25,7 +25,8 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
   const { t, p: tx, lang } = await getT();
   const [{ results: subs }, { results: open }, balanceRow] = await Promise.all([
     db()
-      .prepare("SELECT marzban_username, code FROM subscriptions WHERE customer_id = ? ORDER BY id")
+      // 客人在主页隐藏了的（过期或已删除）不列出来；又续上了主页会自动取消隐藏
+      .prepare("SELECT marzban_username, code FROM subscriptions WHERE customer_id = ? AND hidden_at IS NULL ORDER BY id")
       .bind(customer.id)
       .all<{ marzban_username: string; code: string | null }>(),
     db()
