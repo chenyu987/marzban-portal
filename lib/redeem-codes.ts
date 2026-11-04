@@ -25,14 +25,20 @@ export function withCodeDays(plan: Plan, days: number | null | undefined): Plan 
   };
 }
 
+function headName(plan: Plan): string {
+  const name = plan.name.replace(/\s*体验$/, "");
+  return name.includes("天") ? name : `${name}（${plan.days} 天）`;
+}
+
 // 生成后给管理员两段直接复制发给客人的话：短的只有兑换码；长的带怎么用
 export function codeMessages(codes: string[], plan: Plan, brand: string, siteUrl: string): { short: string; long: string } {
   const list = codes.map(formatRedeemCode);
   const one = list.length === 1;
   const short = one ? `兑换码：${list[0]}` : `兑换码（${list.length} 个）：\n${list.join("\n")}`;
   const long = [
+    // 开头写「支付完成」（体验码也这么写，名字里的「体验」去掉：「普通版 8天 支付完成」）。
     // 名字里已经有天数（「高速版 10天体验」「月付（35 天）」）就不再写一遍
-    `${brand} ${plan.name}${plan.name.includes("天") ? "" : `（${plan.days} 天）`} 兑换码${one ? "" : `（${list.length} 个，每个只能用一次）`}：`,
+    `${brand} ${headName(plan)} 支付完成，兑换码${one ? "" : `（${list.length} 个，每个只能用一次）`}：`,
     ...list,
     "",
     "用法：",
@@ -40,7 +46,7 @@ export function codeMessages(codes: string[], plan: Plan, brand: string, siteUrl
     "2. 进「购买/续费」，在最下面「输入兑换码」粘贴，点兑换就开通了",
     "3. 回「我的订阅」，按「安装教程」装好 App，点「一键导入」就能用",
     "",
-    "兑换码只能用一次，别转给别人。",
+    "兑换码只能用一次。",
   ].join("\n");
   return { short, long };
 }

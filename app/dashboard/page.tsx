@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
 import { findUser, type MarzbanUser } from "@/lib/marzban";
-import { formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, canRenewEarly, isExpiredSub, needsRenewal, resetLabel, statusLabel, timeLeft } from "@/lib/format";
+import { sortSubs, formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, canRenewEarly, isExpiredSub, needsRenewal, resetLabel, statusLabel, timeLeft } from "@/lib/format";
 import { AVAILABLE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
 import { site } from "@/site.config";
 import { describePlan, findPlan } from "@/lib/plans";
@@ -19,13 +19,17 @@ import { RENEW_REFRESH_HINT, detectPlatform, primaryApp, type ImportApp } from "
 import { headers } from "next/headers";
 import { getT } from "@/lib/lang";
 import { makeT, pick, type Lang } from "@/lib/i18n";
-import { groupName } from "@/lib/plan-text";
+import { groupName, planName } from "@/lib/plan-text";
+import { withCodeDays } from "@/lib/redeem-codes";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ renewed?: string }> }) {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ renewed?: string; opened?: string; days?: string }> }) {
   const customer = await requireCustomer();
-  const { renewed } = await searchParams;
+  const { renewed, opened, days: openedDays } = await searchParams;
+  // 兑换码新开了订阅跳过来：标出是什么套餐（码上改过天数的按码上的天数叫，比如「高速版 10天体验」）
+  const openedBase = opened ? findPlan(site.plans, opened) : undefined;
+  const openedPlan = openedBase && withCodeDays(openedBase, Number(openedDays) || null);
   const { t, lang } = await getT();
   // 大的「一键导入」按钮按客人现在用的设备选 App（iPhone Shadowrocket、Mac Clash Verge、Windows 和安卓 Hiddify）
   const app = primaryApp(detectPlatform((await headers()).get("user-agent") ?? ""));
@@ -82,7 +86,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       revived.map((s) => db().prepare("UPDATE subscriptions SET hidden_at = NULL WHERE customer_id = ? AND marzban_username = ?").bind(customer.id, s.username)),
     );
   }
-  const subs = all.filter((s) => !isHidden(s));
+  // 能用的排最上面，过期的、删掉的往下放（客人新开一个后不用翻过一张过期卡才看到）
+  const subs = sortSubs(all.filter((s) => !isHidden(s)), now);
   const hidden = all.filter(isHidden);
 
   return (
@@ -95,7 +100,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <h1 className="text-2xl font-bold">{t("我的订阅", "My subscription")}</h1>
       </div>
 
-      {/* 「我已付款」续期成功后跳过来 */}
+      {openedPlan && (
+        <div role="alert" className="alert alert-success alert-soft mb-4" data-testid="opened">
+          <span>
+            <b>{t(`开通成功：${openedPlan.name}。`, `Activated: ${planName(openedPlan, lang)}. `)}</b>
+            {t("装好 App，点下面的「一键导入」就能用", "Install an app, then tap \"Import\" below to start")}
+          </span>
+        </div>
+      )}
+
+      {/* 「我已付款」或兑换码续期成功后跳过来 */}
       {renewed && (
         <div role="alert" className="alert alert-success alert-soft mb-4" data-testid="renewed">
           <span>
@@ -153,9 +167,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           user ? (
             <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} lang={lang} app={app} />
           ) : gone ? (
-            <GoneCard key={username} username={username} code={code} lang={lang} />
+            <GoneCard key={username} username={username} code={code} planId={planOf.get(username)} lang={lang} />
           ) : (
-            <UnavailableCard key={username} code={code} lang={lang} />
+            <UnavailableCard key={username} code={code} planId={planOf.get(username)} lang={lang} />
           ),
         )}
         {subs.length === 0 && <BindForm />}
@@ -288,10 +302,16 @@ function SubscriptionCard({ user, code, planId, lang, app }: { user: MarzbanUser
             免费体验只有前两种 */}
         {expired ? (
           <div role="alert" className="alert alert-error flex-wrap justify-between">
-            <span>{t("这个订阅已经到期了，续费后马上恢复。", "This subscription has expired. Renew to restore it right away.")}</span>
-            <Link href={`/plans?renew=${encodeURIComponent(user.username)}`} className="btn btn-neutral btn-sm">
-              {t("续费", "Renew")}
-            </Link>
+            <span>{t("这个订阅已经到期了，续费后从现在开始计算。", "This subscription has expired. If you renew, the new period starts now.")}</span>
+            {/* 续费：原来的订阅链接接着用，App 里不用重新导入；也可以新开一个（要重新导入） */}
+            <div className="flex flex-wrap gap-2">
+              <Link href={`/plans?renew=${encodeURIComponent(user.username)}`} className="btn btn-neutral btn-sm">
+                {t("续费", "Renew")}
+              </Link>
+              <Link href="/plans?new=1" className="btn btn-ghost btn-sm text-error-content">
+                {t("新开一个", "Start a new one")}
+              </Link>
+            </div>
           </div>
         ) : left?.urgent ? (
           <div role="alert" className="alert alert-warning flex-wrap justify-between">
@@ -313,12 +333,11 @@ function SubscriptionCard({ user, code, planId, lang, app }: { user: MarzbanUser
         )}
 
         <SubscriptionLink username={user.username} url={user.subscription_url} primary={app} />
-        {/* 最底下一行：左边重置链接（过期了再加隐藏），右边订阅编号。和上面的按钮隔开一点，不然挤 */}
+        {/* 最底下一行：左边重置链接（过期了换成显眼的「从主页隐藏」：过期的链接没什么好重置的），右边订阅编号 */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-base-content/10 pt-3">
           {/* -ml-2 抵掉小按钮自带的左内边距，文字和卡片左边对齐 */}
-          <div className="-ml-2 flex flex-wrap items-center gap-1">
-            <ResetLinkButton username={user.username} />
-            {expired && <HideButton username={user.username} />}
+          <div className={expired ? "flex flex-wrap items-center gap-1" : "-ml-2 flex flex-wrap items-center gap-1"}>
+            {expired ? <HideButton username={user.username} prominent /> : <ResetLinkButton username={user.username} />}
           </div>
           <SubscriptionId code={code} lang={lang} />
         </div>
@@ -343,20 +362,39 @@ function Ring({ pct, tone, children }: { pct: number; tone: string; children: Re
 }
 
 // Marzban 上已经没有这个用户了（管理员删了）。直说，客人可以把它从主页隐藏，记录留着
-function GoneCard({ username, code, lang }: { username: string; code: string | null; lang: Lang }) {
+// 删掉 / 查不到的卡片标题：知道是什么套餐就写套餐名（和正常卡片一样），右上角标状态；不知道就写「已删除的订阅」之类。
+// 以前写「我的订阅」，和整页标题一样，看不出是哪一个
+function DeadCardHeader({ planId, fallback, badge, badgeClass, lang }: { planId?: string; fallback: string; badge: string; badgeClass: string; lang: Lang }) {
+  const { title, subtitle } = planHeading(planId, lang);
+  const known = !!planId && findPlan(site.plans, planId);
+  return (
+    <div className="flex items-start justify-between gap-2">
+      <div>
+        <h2 className="card-title">{known ? title : fallback}</h2>
+        {known && subtitle && <p className="mt-1.5 text-sm text-base-content/60">{subtitle}</p>}
+      </div>
+      <span className={`badge ${badgeClass}`}>{badge}</span>
+    </div>
+  );
+}
+
+function GoneCard({ username, code, planId, lang }: { username: string; code: string | null; planId?: string; lang: Lang }) {
   const t = makeT(lang);
   return (
     <div className="card bg-base-100 shadow-sm" data-testid="sub-gone">
       <div className="card-body">
-        <h2 className="card-title">{t("我的订阅", "My subscription")}</h2>
+        <DeadCardHeader planId={planId} fallback={t("已删除的订阅", "Removed subscription")} badge={t("已删除", "Removed")} badgeClass="badge-neutral" lang={lang} />
         <div role="alert" className="alert alert-soft">
           {t("查不到这个订阅了，可能已经删除。如需联系客服，请报上下方订阅编号。", "This subscription no longer exists; it may have been removed. If you contact support, please give the subscription ID below.")}
         </div>
+        {/* 删掉的续不了，引导重新开一个 */}
+        <Link href="/plans?new=1" className="btn btn-primary btn-sm self-start">
+          {t("重新开一个订阅", "Get a new subscription")}
+        </Link>
         <ContactSupport />
         <div className="flex items-center justify-between gap-2">
-          <div className="-ml-2">
-            <HideButton username={username} />
-          </div>
+          {/* Marzban 上已经删掉的：和过期的一样，做成显眼的按钮 */}
+          <HideButton username={username} prominent />
           <SubscriptionId code={code} lang={lang} />
         </div>
       </div>
@@ -365,12 +403,12 @@ function GoneCard({ username, code, lang }: { username: string; code: string | n
 }
 
 // Marzban 暂时连不上（不是删了）：只能等
-function UnavailableCard({ code, lang }: { code: string | null; lang: Lang }) {
+function UnavailableCard({ code, planId, lang }: { code: string | null; planId?: string; lang: Lang }) {
   const t = makeT(lang);
   return (
     <div className="card bg-base-100 shadow-sm">
       <div className="card-body">
-        <h2 className="card-title">{t("我的订阅", "My subscription")}</h2>
+        <DeadCardHeader planId={planId} fallback={t("订阅", "Subscription")} badge={t("暂时查不到", "Unavailable")} badgeClass="badge-warning" lang={lang} />
         <div role="alert" className="alert alert-warning alert-soft">
           {t(
             "暂时连不上服务器，查不到这个订阅的信息，请稍后刷新。如需联系客服，请报上下方订阅编号。",

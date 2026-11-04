@@ -296,7 +296,9 @@ export async function redeem(_: FormState, form: FormData): Promise<FormState> {
   }
   revalidatePath("/dashboard");
   revalidatePath("/plans");
-  return { ok: doneMessage(lang, target === "new", false, planName(plan, lang), username, expire, !!result.warning) };
+  // 流量没清零这种要提醒客人的，留在兑换页把话说完；其余直接跳到「我的订阅」，客人马上看到新开 / 续上的订阅
+  if (result.warning) return { ok: doneMessage(lang, target === "new", false, planName(plan, lang), username, expire, true) };
+  redirect(target === "new" ? `/dashboard?opened=${encodeURIComponent(row.plan_id)}${row.days ? `&days=${row.days}` : ""}` : "/dashboard?renewed=1");
 }
 
 // 同一个客人最多同时挂几张没处理完的单，免得有人乱点堆一堆单

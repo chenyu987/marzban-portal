@@ -18,10 +18,11 @@ export const dynamic = "force-dynamic";
 
 const price = (fen: number) => `${site.currency}${formatMoney(fen).replace(/\.00$/, "")}`;
 
-// ?renew=<用户名>：从订阅页的「续费」按钮过来，默认选好给这个订阅续期
-export default async function PlansPage({ searchParams }: { searchParams: Promise<{ renew?: string | string[] }> }) {
+// ?renew=<用户名>：从订阅页的「续费」按钮过来，默认选好给这个订阅续期；
+// ?new=1：从过期 / 删掉的订阅卡片上的「新开一个」过来，默认选好「新开一个订阅」
+export default async function PlansPage({ searchParams }: { searchParams: Promise<{ renew?: string | string[]; new?: string }> }) {
   const customer = await requireCustomer();
-  const { renew } = await searchParams;
+  const { renew, new: wantNew } = await searchParams;
   const { t, p: tx, lang } = await getT();
   const [{ results: subs }, { results: open }, balanceRow] = await Promise.all([
     db()
@@ -53,7 +54,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
   // 下拉框的值是 Marzban 用户名（后端用），给客人看的是订阅编号
   const subscriptions = subs.map((r) => ({ username: r.marzban_username, label: formatSubCode(r.code) }));
   const renewSub = typeof renew === "string" ? subscriptions.find((s) => s.username === renew) : undefined;
-  const renewTarget = renewSub?.username;
+  const renewTarget = renewSub?.username ?? (wantNew && subscriptions.length > 0 ? "new" : undefined);
   const canTransfer = site.payments.length > 0;
   // value 是中文名：后台对账按它显示
   const payments = site.payments.map((p) => ({ value: pick(p.name, "zh"), name: tx(p.name), qr: p.qr }));
@@ -139,9 +140,14 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
           {renewSub && (
             <p className="mb-3 font-medium">
               {t(
-                `给订阅 ${renewSub.label} 续期：选一个套餐，续上的天数从原来的到期时间往后加。`,
-                `Renewing subscription ${renewSub.label}: pick a plan; the new days are added after the current expiry date.`,
+                `给订阅 ${renewSub.label} 续期：选一个套餐，续上的天数从原来的到期时间往后加（已经过期的从现在开始算）。`,
+                `Renewing subscription ${renewSub.label}: pick a plan; the new days are added after the current expiry date (or from now if it has expired).`,
               )}
+            </p>
+          )}
+          {!renewSub && renewTarget === "new" && (
+            <p className="mb-3 font-medium" data-testid="new-sub-hint">
+              {t("新开一个订阅：选一个套餐，开通后在「我的订阅」里导入新的订阅。", "New subscription: pick a plan, then import the new subscription from My subscription.")}
             </p>
           )}
           <OrderForm

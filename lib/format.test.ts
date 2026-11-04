@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatDate, formatExpire, isExpiredSub, formatMoney, maskEmail, formatRedeemCode, canRenewEarly, needsRenewal, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft, formatOrderNo, parseOrderNo } from "./format";
+import { formatBytes, formatDate, formatExpire, isExpiredSub, formatMoney, maskEmail, formatRedeemCode, canRenewEarly, needsRenewal, sortSubs, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft, formatOrderNo, parseOrderNo } from "./format";
 import { hashPassword, verifyPassword } from "./password";
 
 describe("parseSubToken", () => {
@@ -58,6 +58,21 @@ describe("到期时间", () => {
     expect(needsRenewal(-86400, 0)).toBe(true);
     expect(needsRenewal(null, 0)).toBe(false);
   });
+  it("sortSubs：能用的在上，然后查不到的、过期的、删掉的；同一类保持原顺序", () => {
+    const now = 1000 * 1000;
+    const ok = (n: string) => ({ n, user: { status: "active", expire: 2000 }, gone: false });
+    const subs = [
+      { n: "gone", user: null, gone: true },
+      { n: "expired", user: { status: "active", expire: 500 }, gone: false },
+      ok("a"),
+      { n: "down", user: null, gone: false },
+      { n: "status-expired", user: { status: "expired", expire: 2000 }, gone: false },
+      ok("b"),
+      { n: "never", user: { status: "active", expire: null }, gone: false },
+    ];
+    expect(sortSubs(subs, now).map((s) => s.n)).toEqual(["a", "b", "never", "down", "expired", "status-expired", "gone"]);
+  });
+
   it("canRenewEarly：15 天以内才放「提前续费」，月付刚买（30 天）不放", () => {
     expect(canRenewEarly(15 * 86400, 0)).toBe(true);
     expect(canRenewEarly(10 * 86400, 0)).toBe(true);

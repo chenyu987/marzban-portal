@@ -69,14 +69,19 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
       .bind(...binds, PAGE_SIZE, (page - 1) * PAGE_SIZE)
       .all<Row>(),
   ]);
-  const plans = site.plans.map((p) => ({ id: p.id, name: p.name, price: `${site.currency}${formatMoney(p.price)}`, free: p.price === 0, days: p.days }));
+  // 生成兑换码先选档位（group）再选时长（名字去掉档位剩下的「月付」「7天体验」）
+  const plans = site.plans.map((p) => {
+    const group = p.group ?? p.name;
+    return { id: p.id, name: p.name, group, period: p.name.slice(group.length).trim() || p.name, price: p.price === 0 ? "免费" : `${site.currency}${formatMoney(p.price)}`, free: p.price === 0, days: p.days };
+  });
   const params = { state, plan: group, q };
 
   return (
     <div className="mx-auto max-w-5xl px-4 pb-16">
       <AdminHeader email={admin.email} />
       <h1 className="mt-4 mb-4 text-2xl font-bold">兑换码</h1>
-      <CreateCodes plans={plans} />
+      {/* 默认停在第一个 Pro 档位（分档时）：最常发的是它；不分档就是第一个 */}
+      <CreateCodes plans={plans} defaultGroup={site.plans.find((p) => p.pro)?.group} />
 
       <h2 className="mt-8 mb-2 text-lg font-bold">
         兑换码 <span className="text-sm font-normal text-base-content/60">（筛出 {count?.n ?? 0} 个，其中没用过 {count?.unused ?? 0} 个）</span>

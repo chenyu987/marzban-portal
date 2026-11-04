@@ -304,7 +304,7 @@ test("过期、被删掉的订阅能从主页隐藏，记录留着；又续上�
   await expect(page).toHaveURL(/\/dashboard/);
   const confirm = page.getByRole("dialog", { name: "确认" });
 
-  // 订阅编号点一下就复制，过一会儿换回编号；重置链接和编号在最底下同一行
+  // 订阅编号点一下就复制，过一会儿换回编号
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   const subId = page.getByTestId("sub-id");
   const code = (await subId.getAttribute("data-code"))!;
@@ -313,9 +313,6 @@ test("过期、被删掉的订阅能从主页隐藏，记录留着；又续上�
   await expect(subId).toHaveText("已复制 ✓");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(code);
   await expect(subId).toHaveText(code);
-  const resetBox = await page.getByRole("button", { name: "链接泄露了？重置订阅链接" }).boundingBox();
-  const idBox = await subId.boundingBox();
-  expect(Math.abs(resetBox!.y + resetBox!.height / 2 - (idBox!.y + idBox!.height / 2))).toBeLessThan(12);
 
   // 过期的：卡片底下有「从主页隐藏」，确认后不显示，底部能重新显示
   await page.getByRole("button", { name: "从主页隐藏" }).click();
@@ -827,17 +824,21 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   await page.getByPlaceholder("XXXX-XXXX-XXXX-XXXX").fill(code);
   await expect(page.locator('form:has(input[name="code"]) select[name="target"]')).toHaveValue(username);
   await page.getByRole("button", { name: "兑换" }).click();
-  await expect(page.getByText("续期成功")).toBeVisible();
+  // 兑换成功直接跳到「我的订阅」，顶上写续期成功
+  await expect(page).toHaveURL(/\/dashboard\?renewed=1/);
+  await expect(page.getByTestId("renewed")).toContainText("续期成功");
   await expect(page.getByText(/刷新（更新）一下订阅/)).toBeVisible();
 
   // 免费体验：价目表上没有，只能用兑换码开；开出来的订阅标「（体验）」
+  await page.goto("/plans");
   await expect(page.locator('button[value="p3-trial"]')).toHaveCount(0);
   const trial = run(["codes:create", "--", "p3-trial"]).match(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}/)![0];
   await page.getByPlaceholder("XXXX-XXXX-XXXX-XXXX").fill(trial);
   await page.locator('form:has(input[name="code"]) select[name="target"]').selectOption("new");
   await page.getByRole("button", { name: "兑换" }).click();
-  await expect(page.getByText(/开通成功：高速版 7天体验/)).toBeVisible();
-  await page.goto("/dashboard");
+  // 新开的也直接跳到「我的订阅」，顶上写开通了什么，下面就是新订阅
+  await expect(page).toHaveURL(/\/dashboard\?opened=p3-trial/);
+  await expect(page.getByTestId("opened")).toContainText("开通成功：高速版 7天体验");
   await expect(page.getByRole("heading", { name: "高速版（体验）" })).toBeVisible();
   // 免费体验前几天不放续费按钮和「提前续费」
   const trialCard = page.locator(".card", { has: page.getByRole("heading", { name: "高速版（体验）" }) });
@@ -968,24 +969,21 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
 
   // 兑换码：生成 2 个，作废一个，客人用另一个
   await admin.goto("/admin/codes");
-  // 页面上还有筛选用的套餐下拉框，限定在「生成兑换码」的表单里
-  const planSelect = admin.locator('form:has(input[name="count"]) select[name="plan"]');
-  // 免费体验排在最前面，最常发
-  await expect(planSelect.locator("optgroup").first()).toHaveAttribute("label", "免费体验");
-  await expect(planSelect.locator("option:not([disabled])").first()).toHaveText(/7天体验/);
-  await planSelect.selectOption("p1-month");
-  // 选了套餐，天数自动填成套餐的天数
-  await expect(admin.getByLabel("天数")).toHaveValue("30");
-  await admin.locator('input[name="count"]').fill("2");
-  await admin.getByPlaceholder("备注，比如「微信转账 张三」").fill("e2e 测试");
-  await admin.getByRole("button", { name: "生成" }).click();
-  // 生成后两段话：短的只有兑换码，长的带注册网址和用法，各自能复制
-  const short = await admin.getByTestId("code-short").locator("textarea").inputValue();
-  const codes = short.match(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}/g)!;
+  // 生成：先点档位，再点时长；天数自动填成套餐的天数，数量用 + 加
+  const create = admin.getByTestId("create-codes");
+  const pickPlan = async (tier: string, period: string) => {
+    await create.getByRole("group", { name: "档位" }).getByRole("button", { name: tier, exact: true }).click();
+    await create.getByRole("group", { name: "时长" }).getByRole("button", { name: new RegExp(`^${period}`) }).click();
+  };
+  await pickPlan("普通版", "月付");
+  await expect(create.getByLabel("天数", { exact: true })).toHaveValue("30");
+  await create.getByRole("button", { name: "数量加一" }).click();
+  await create.getByPlaceholder("比如「微信转账 张三」").fill("e2e 测试");
+  await create.getByRole("button", { name: "生成 2 个「普通版 月付」" }).click();
+  // 生成后两段话：短的只有兑换码，长的带注册网址和用法
+  const codes = (await admin.getByTestId("code-short").locator("pre").innerText()).match(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}/g)!;
   expect(codes).toHaveLength(2);
-  const long = admin.getByTestId("code-long").locator("textarea");
-  await expect(long).toHaveValue(new RegExp(`${codes[0]}[\\s\\S]*/register[\\s\\S]*输入兑换码`));
-  await expect(admin.getByTestId("code-short").getByRole("button", { name: "复制" })).toBeVisible();
+  await expect(admin.getByTestId("code-long").locator("pre")).toHaveText(new RegExp(`${codes[0]}[\\s\\S]*/register[\\s\\S]*输入兑换码`));
   await admin.locator("tr", { hasText: codes[0] }).getByRole("button", { name: "作废" }).click();
   await expect(admin.locator("tr", { hasText: codes[0] })).toContainText("已作废");
 
@@ -1012,26 +1010,20 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
 
   // 生成时加减天数：7 天体验点三下 + 变成 10 天，客人兑换后按 10 天开通
   await admin.goto("/admin/codes");
-  await planSelect.selectOption("p3-trial");
-  await expect(admin.getByLabel("天数")).toHaveValue("7");
-  for (let i = 0; i < 3; i++) await admin.getByRole("button", { name: "多一天" }).click();
-  await expect(admin.getByLabel("天数")).toHaveValue("10");
-  await expect(admin.getByTestId("days-changed")).toContainText("这次生成的是 10 天");
-  await admin.getByRole("button", { name: "生成" }).click();
-  const tenDay = (await admin.getByTestId("code-short").locator("textarea").inputValue()).match(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}/)![0];
-  await expect(admin.getByTestId("code-long").locator("textarea")).toHaveValue(/高速版 10天体验/);
-  // 生成完套餐和天数还留着，接着能再生成
-  await expect(planSelect).toHaveValue("p3-trial");
-  await expect(admin.getByLabel("天数")).toHaveValue("10");
+  await pickPlan("高速版", "7天体验");
+  await expect(create.getByLabel("天数", { exact: true })).toHaveValue("7");
+  for (let i = 0; i < 3; i++) await create.getByRole("button", { name: "天数加一" }).click();
+  await create.getByRole("button", { name: "生成 1 个「高速版 10天体验」" }).click();
+  const tenDay = (await admin.getByTestId("code-short").locator("pre").innerText()).match(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}/)![0];
+  await expect(admin.getByTestId("code-long").locator("pre")).toHaveText(/高速版 10天 支付完成，兑换码/);
   await expect(admin.locator("tr", { hasText: tenDay })).toContainText("高速版 10天体验");
   await page.goto("/plans");
   await page.getByPlaceholder("XXXX-XXXX-XXXX-XXXX").fill(tenDay);
   await page.locator('form:has(input[name="code"]) select[name="target"]').selectOption("new");
   const before10 = Math.floor(Date.now() / 1000);
   await page.getByRole("button", { name: "兑换" }).click();
-  const done10 = page.getByText(/开通成功：高速版 10天体验/);
-  await expect(done10).toBeVisible();
-  const tenUser = (await done10.innerText()).match(/，(\S+) 到期时间/)![1];
+  await expect(page.getByTestId("opened")).toContainText("开通成功：高速版 10天体验");
+  const tenUser = String(query(`SELECT marzban_username FROM subscriptions ORDER BY id DESC LIMIT 1`)[0].marzban_username);
   const tenExpire = ((await mockMarzban("GET", `/user/${tenUser}`)) as { expire: number }).expire;
   expect(tenExpire - before10).toBeGreaterThanOrEqual(10 * 86400 - 5);
   expect(tenExpire - before10).toBeLessThan(10 * 86400 + 120);

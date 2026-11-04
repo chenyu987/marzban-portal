@@ -3,19 +3,28 @@
 import { startTransition, useActionState, useState } from "react";
 import { adminCreateCodes, adminVoidCode } from "../actions";
 
-// 生成兑换码：选套餐后天数自动填成套餐的天数，可以加减（比如 7 天体验改成 10 天）。下拉框里免费体验排最前面，最常发。
-// 生成后给两段直接发给客人的话：只有兑换码的短的，和带用法的长的，各自一键复制
-type PlanOption = { id: string; name: string; price: string; free: boolean; days: number };
+// 生成兑换码。分两步选：先选档位（普通版、高速版…），再选时长（7 天体验、月付…，下面写着价格），
+// 不用在几十个选项的下拉框里找。天数默认是这个套餐的天数，− / + 加减（比如 7 天体验改成 10 天）；数量同样用 − / +。
+// 生成按钮上写清这次要生成什么。生成后给两段直接发给客人的话：只有兑换码的短的，和带用法的长的，各自一键复制
+type PlanOption = { id: string; name: string; group: string; period: string; price: string; free: boolean; days: number };
 
-export function CreateCodes({ plans }: { plans: PlanOption[] }) {
+export function CreateCodes({ plans, defaultGroup }: { plans: PlanOption[]; defaultGroup?: string }) {
   const [state, action, pending] = useActionState(adminCreateCodes, undefined);
+  const groups = [...new Set(plans.map((p) => p.group))];
+  const [group, setGroup] = useState(defaultGroup && groups.includes(defaultGroup) ? defaultGroup : (groups[0] ?? ""));
   const [planId, setPlanId] = useState("");
-  const [days, setDays] = useState("");
+  const [days, setDays] = useState(0);
+  const [count, setCount] = useState(1);
   const plan = plans.find((p) => p.id === planId);
-  const n = Number(days);
-  const step = (d: number) => setDays(String(Math.max(1, (Number.isInteger(n) && n > 0 ? n : (plan?.days ?? 1)) + d)));
+  // 体验排在最前面，最常发
+  const periods = plans.filter((p) => p.group === group).sort((a, b) => Number(b.free) - Number(a.free));
+  const pick = (p: PlanOption) => {
+    setPlanId(p.id);
+    setDays(p.days);
+  };
+  const label = plan ? (days === plan.days ? plan.name : plan.free ? `${plan.group} ${days}天体验` : `${plan.name}（${days} 天）`) : "";
   return (
-    // 不用 form action：那样生成完表单会被清空，下拉框变回「选套餐」、天数却还留着，对不上。留着刚才的选择，方便接着再生成
+    // 不用 form action：那样生成完表单会被清空。留着刚才的选择，方便接着再生成
     <form
       onSubmit={(e) => {
         e.preventDefault();
@@ -23,78 +32,118 @@ export function CreateCodes({ plans }: { plans: PlanOption[] }) {
         startTransition(() => action(f));
       }}
       className="card bg-base-100 shadow-sm"
+      data-testid="create-codes"
     >
-      <div className="card-body gap-3 p-4">
-        <h2 className="font-bold">生成兑换码</h2>
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto_6rem]">
-          <select
-            name="plan"
-            required
-            value={planId}
-            onChange={(e) => {
-              setPlanId(e.target.value);
-              setDays(String(plans.find((p) => p.id === e.target.value)?.days ?? ""));
-            }}
-            aria-label="套餐"
-            className="select select-sm w-full"
-          >
-            <option value="" disabled>
-              选套餐
-            </option>
-            {[
-              { label: "免费体验", list: plans.filter((p) => p.free) },
-              { label: "付费套餐", list: plans.filter((p) => !p.free) },
-            ].map(
-              (g) =>
-                g.list.length > 0 && (
-                  <optgroup key={g.label} label={g.label}>
-                    {g.list.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}（{p.price}）
-                      </option>
-                    ))}
-                  </optgroup>
-                ),
-            )}
-          </select>
-          {/* 天数：默认是套餐的天数，− / + 一次一天，也能直接改 */}
-          <div className="join">
-            <button type="button" className="btn btn-sm join-item" disabled={!plan} onClick={() => step(-1)} aria-label="少一天">
-              −
-            </button>
-            <label className="input input-sm join-item w-24">
-              <input name="days" type="number" min={1} max={3650} value={days} onChange={(e) => setDays(e.target.value)} disabled={!plan} aria-label="天数" />
-              <span className="text-base-content/50">天</span>
-            </label>
-            <button type="button" className="btn btn-sm join-item" disabled={!plan} onClick={() => step(1)} aria-label="多一天">
-              +
-            </button>
+      <input type="hidden" name="plan" value={planId} />
+      <input type="hidden" name="days" value={plan ? days : ""} />
+      <input type="hidden" name="count" value={count} />
+      <div className="card-body gap-5 p-5">
+        <h2 className="text-lg font-bold">生成兑换码</h2>
+
+        <Field label="档位">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="档位">
+            {groups.map((g) => (
+              <button
+                key={g}
+                type="button"
+                aria-pressed={g === group}
+                onClick={() => {
+                  setGroup(g);
+                  setPlanId("");
+                }}
+                className={`btn btn-sm rounded-full ${g === group ? "btn-primary" : "btn-ghost bg-base-200 font-normal"}`}
+              >
+                {g}
+              </button>
+            ))}
           </div>
-          <label className="input input-sm w-full">
-            <input name="count" type="number" min={1} max={100} defaultValue={1} required aria-label="数量" />
-            <span className="text-base-content/50">个</span>
-          </label>
+        </Field>
+
+        <Field label="时长">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(6rem,1fr))] gap-2" role="group" aria-label="时长">
+            {periods.map((p) => {
+              const on = p.id === planId;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => pick(p)}
+                  className={`flex flex-col items-center gap-0.5 rounded-box border px-2 py-2.5 transition ${
+                    on ? "border-primary bg-primary/10 text-primary ring-1 ring-primary" : "border-base-300 hover:border-primary/50 hover:bg-base-200"
+                  }`}
+                >
+                  <span className="text-sm font-medium">{p.period}</span>
+                  <span className={`text-xs ${on ? "text-primary/80" : p.free ? "text-success" : "text-base-content/50"}`}>{p.price}</span>
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
+          <Field label="天数">
+            <Stepper value={days} setValue={setDays} min={1} max={3650} unit="天" disabled={!plan} name="天数" />
+          </Field>
+          <Field label="数量">
+            <Stepper value={count} setValue={setCount} min={1} max={100} unit="个" name="数量" />
+          </Field>
+          <Field label="备注（选填）" grow>
+            <input name="note" maxLength={100} placeholder="比如「微信转账 张三」" className="input input-sm w-full" />
+          </Field>
         </div>
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-          <input name="note" maxLength={100} placeholder="备注，比如「微信转账 张三」" className="input input-sm w-full" />
-          <button className="btn btn-primary btn-sm" disabled={pending}>
-            生成
-          </button>
-        </div>
-        {plan && Number(days) !== plan.days && days !== "" && (
-          <p className="text-sm text-base-content/60" data-testid="days-changed">
-            套餐默认 {plan.days} 天，这次生成的是 {days} 天，客人兑换后按 {days} 天开通或续期。
-          </p>
-        )}
+
+        <button className="btn btn-primary" disabled={pending || !plan}>
+          {pending && <span className="loading loading-spinner loading-sm" />}
+          {plan ? `生成 ${count} 个「${label}」` : "先选时长"}
+        </button>
+
         {state?.error && <div role="alert" className="alert alert-error alert-soft text-sm">{state.error}</div>}
         {state?.ok && (
-          <div className="mt-1 grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <CopyBox title="只发兑换码" text={state.short ?? state.ok} testId="code-short" />
             <CopyBox title="带用法的完整说明" text={state.long ?? state.ok} testId="code-long" />
           </div>
         )}
       </div>
     </form>
+  );
+}
+
+function Field({ label, grow, children }: { label: string; grow?: boolean; children: React.ReactNode }) {
+  return (
+    <div className={`flex flex-col gap-1.5 ${grow ? "min-w-48 flex-1" : ""}`}>
+      <span className="text-xs font-medium text-base-content/50">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+// − 数字 + 的小加减器，数字也能直接改。输入框自带的上下小箭头藏掉，只留 − / + 一套
+function Stepper({ value, setValue, min, max, unit, disabled, name }: { value: number; setValue: (n: number) => void; min: number; max: number; unit: string; disabled?: boolean; name: string }) {
+  const clamp = (n: number) => Math.min(max, Math.max(min, n));
+  return (
+    <div className="join">
+      <button type="button" className="btn btn-sm join-item w-8 px-0" disabled={disabled || value <= min} onClick={() => setValue(clamp(value - 1))} aria-label={`${name}减一`}>
+        −
+      </button>
+      <label className="input input-sm join-item w-[4.5rem] gap-1 px-2">
+        <input
+          type="number"
+          min={min}
+          max={max}
+          value={disabled ? "" : value}
+          onChange={(e) => setValue(clamp(Math.round(Number(e.target.value)) || min))}
+          disabled={disabled}
+          aria-label={name}
+          className="text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+        <span className="text-base-content/40">{unit}</span>
+      </label>
+      <button type="button" className="btn btn-sm join-item w-8 px-0" disabled={disabled || value >= max} onClick={() => setValue(clamp(value + 1))} aria-label={`${name}加一`}>
+        +
+      </button>
+    </div>
   );
 }
 
@@ -120,7 +169,7 @@ function CopyBoxInner({ title, text, testId }: { title: string; text: string; te
           {copied ? "已复制 ✓" : "复制"}
         </button>
       </div>
-      <textarea readOnly value={text} rows={Math.min(12, text.split("\n").length)} className="textarea textarea-sm w-full font-mono text-sm" />
+      <pre className="max-h-64 overflow-auto rounded-field bg-base-100 p-3 font-mono text-sm leading-relaxed whitespace-pre-wrap select-all">{text}</pre>
     </div>
   );
 }

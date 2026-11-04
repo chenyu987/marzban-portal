@@ -21,6 +21,13 @@ export function isExpiredSub(user: { status: string; expire: number | null }, no
   return user.status === "expired" || (!!user.expire && user.expire * 1000 <= nowMs);
 }
 
+// 「我的订阅」上订阅的排法：能用的在最上面，然后是暂时查不到的，再是过期的，最后是 Marzban 上已经删掉的。
+// 同一类里按原来的顺序（先买的在前）
+export function sortSubs<T extends { user: { status: string; expire: number | null } | null; gone: boolean }>(subs: T[], nowMs: number): T[] {
+  const rank = (s: T) => (s.gone ? 3 : !s.user ? 1 : isExpiredSub(s.user, nowMs) ? 2 : 0);
+  return subs.map((s, i) => ({ s, i })).sort((a, b) => rank(a.s) - rank(b.s) || a.i - b.i).map((x) => x.s);
+}
+
 export function formatExpire(expire: number | null, lang: Lang = "zh"): string {
   if (!expire) return lang === "en" ? "Never" : "永不到期";
   return new Date(expire * 1000).toLocaleString(LOCALE[lang], {
