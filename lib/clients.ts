@@ -54,6 +54,15 @@ export const CLASH_RULES = `rules:
 
 export type Platform = "ios" | "mac" | "windows" | "android";
 
+// 订阅页上那个大的「一键导入」按钮给哪个 App：和安装教程一致，iPhone 用 Shadowrocket，Mac 用 Clash Verge，
+// Windows 和安卓用 Hiddify。看不出是什么设备（比如 Linux）就给 Shadowrocket（大部分客人用 iPhone）
+export type ImportApp = "shadowrocket" | "clash" | "hiddify";
+export function primaryApp(platform: Platform | null): ImportApp {
+  if (platform === "mac") return "clash";
+  if (platform === "windows" || platform === "android") return "hiddify";
+  return "shadowrocket";
+}
+
 export function detectPlatform(ua: string): Platform | null {
   if (/iPhone|iPad|iPod/.test(ua)) return "ios";
   if (/Android/.test(ua)) return "android";

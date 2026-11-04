@@ -9,12 +9,14 @@ import { describePlan, findPlan } from "@/lib/plans";
 import BindForm from "./BindForm";
 import HideButton from "./HideButton";
 import CopyCode from "./CopyCode";
+import NextStep from "./NextStep";
 import SubscriptionLink, { ResetLinkButton } from "./SubscriptionLink";
 import ReferralCard from "./ReferralCard";
 import ContactSupport from "../ContactSupport";
 import Brand from "../Brand";
 import CustomerNav from "../CustomerNav";
-import { RENEW_REFRESH_HINT } from "@/lib/clients";
+import { RENEW_REFRESH_HINT, detectPlatform, primaryApp, type ImportApp } from "@/lib/clients";
+import { headers } from "next/headers";
 import { getT } from "@/lib/lang";
 import { makeT, pick, type Lang } from "@/lib/i18n";
 import { groupName } from "@/lib/plan-text";
@@ -25,6 +27,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const customer = await requireCustomer();
   const { renewed } = await searchParams;
   const { t, lang } = await getT();
+  // 大的「一键导入」按钮按客人现在用的设备选 App（iPhone Shadowrocket、Mac Clash Verge、Windows 和安卓 Hiddify）
+  const app = primaryApp(detectPlatform((await headers()).get("user-agent") ?? ""));
   const { results } = await db()
     .prepare("SELECT marzban_username, code, hidden_at FROM subscriptions WHERE customer_id = ? ORDER BY id")
     .bind(customer.id)
@@ -147,7 +151,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         )}
         {subs.map(({ username, code, user, gone }) =>
           user ? (
-            <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} lang={lang} />
+            <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} lang={lang} app={app} />
           ) : gone ? (
             <GoneCard key={username} username={username} code={code} lang={lang} />
           ) : (
@@ -221,7 +225,7 @@ function SubscriptionId({ code, lang }: { code: string | null; lang: Lang }) {
   );
 }
 
-function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; code: string | null; planId?: string; lang: Lang }) {
+function SubscriptionCard({ user, code, planId, lang, app }: { user: MarzbanUser; code: string | null; planId?: string; lang: Lang; app: ImportApp }) {
   const t = makeT(lang);
   const { title, subtitle } = planHeading(planId, lang);
   const status = statusLabel(user.status, lang);
@@ -245,19 +249,12 @@ function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; cod
         <div className="flex items-start justify-between gap-2">
           <div>
             <h2 className="card-title">{title}</h2>
-            {subtitle && <p className="text-sm text-base-content/60">{subtitle}</p>}
+            {subtitle && <p className="mt-1.5 text-sm text-base-content/60">{subtitle}</p>}
           </div>
           <span className={`badge ${status.badge}`}>{status.text}</span>
         </div>
 
-        {neverUsed && (
-          <div className="flex flex-col gap-3 rounded-box border border-primary/30 bg-primary/5 p-4" data-testid="next-step">
-            <b>{t("下一步：装好 App，把这个订阅导进去", "Next: install an app and import this subscription")}</b>
-            <Link href="/tutorial" className="btn btn-primary">
-              {t("看安装教程", "Open the setup guide")}
-            </Link>
-          </div>
-        )}
+        {neverUsed && <NextStep username={user.username} />}
 
         {/* 两个圆环：剩余天数（占这期套餐天数的多少）、已用流量。手机上上下排 */}
         <div className="grid gap-4 sm:grid-cols-2">
@@ -287,7 +284,7 @@ function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; cod
           </div>
         </div>
 
-        {/* 已到期：红色提示 + 续费；最后 3 天：黄色提醒 + 续费；7 天以内：只放一个续费按钮；30 天以内放个「提前续费」小链接；再久就什么都不放。
+        {/* 已到期：红色提示 + 续费；最后 3 天：黄色提醒 + 续费；7 天以内：只放一个续费按钮；15 天以内放个「提前续费」小链接；再久就什么都不放。
             免费体验只有前两种 */}
         {expired ? (
           <div role="alert" className="alert alert-error flex-wrap justify-between">
@@ -315,10 +312,11 @@ function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; cod
           )
         )}
 
-        <SubscriptionLink username={user.username} url={user.subscription_url} />
+        <SubscriptionLink username={user.username} url={user.subscription_url} primary={app} />
         {/* 最底下一行：左边重置链接（过期了再加隐藏），右边订阅编号。和上面的按钮隔开一点，不然挤 */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-base-content/10 pt-3">
+          {/* -ml-2 抵掉小按钮自带的左内边距，文字和卡片左边对齐 */}
+          <div className="-ml-2 flex flex-wrap items-center gap-1">
             <ResetLinkButton username={user.username} />
             {expired && <HideButton username={user.username} />}
           </div>
@@ -356,7 +354,9 @@ function GoneCard({ username, code, lang }: { username: string; code: string | n
         </div>
         <ContactSupport />
         <div className="flex items-center justify-between gap-2">
-          <HideButton username={username} />
+          <div className="-ml-2">
+            <HideButton username={username} />
+          </div>
           <SubscriptionId code={code} lang={lang} />
         </div>
       </div>

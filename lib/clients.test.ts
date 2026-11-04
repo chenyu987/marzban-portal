@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AUTO_GROUP, CLASH_RULES, clashVergeImport, hiddifyImport, detectPlatform, shadowrocketImport, shadowrocketQr } from "./clients";
+import { AUTO_GROUP, CLASH_RULES, clashVergeImport, hiddifyImport, detectPlatform, primaryApp, shadowrocketImport, shadowrocketQr } from "./clients";
 
 describe("客户端", () => {
   it("Shadowrocket 导入链接里是订阅链接的 base64", () => {
@@ -33,6 +33,12 @@ describe("客户端", () => {
 
   it("按 User-Agent 认设备", () => {
     expect(detectPlatform("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)")).toBe("ios");
+    // 订阅页的大按钮跟着设备换：iPhone Shadowrocket、Mac Clash Verge、Windows 和安卓 Hiddify，看不出来给 Shadowrocket
+    expect(primaryApp("ios")).toBe("shadowrocket");
+    expect(primaryApp("mac")).toBe("clash");
+    expect(primaryApp("windows")).toBe("hiddify");
+    expect(primaryApp("android")).toBe("hiddify");
+    expect(primaryApp(null)).toBe("shadowrocket");
     expect(detectPlatform("Mozilla/5.0 (Linux; Android 14)")).toBe("android");
     expect(detectPlatform("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")).toBe("windows");
     expect(detectPlatform("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")).toBe("mac");

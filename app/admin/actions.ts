@@ -15,6 +15,7 @@ import { createUserBody, describeChanges, parseOnHoldDays, parseExpiredDays, par
 import { formatBytes, formatExpire, RESET_LABEL } from "@/lib/format";
 import { findPlan } from "@/lib/plans";
 import { formatRedeemCode, newRedeemCode } from "@/lib/format";
+import { codeMessages, parseCodeDays, withCodeDays } from "@/lib/redeem-codes";
 import { hashResetToken, newResetToken, RESET_TTL_ADMIN, resetLink } from "@/lib/reset";
 import { site } from "@/site.config";
 
@@ -172,24 +173,31 @@ export async function adminBindSubscription(_: FormState, form: FormData): Promi
   return { ok: `已把 ${username} 绑到 ${c.email} 名下` };
 }
 
-// 生成兑换码：选套餐、数量（1～100）、备注。生成的码只在这次返回里显示全，方便一次复制；日志只记数量
-export async function adminCreateCodes(_: FormState, form: FormData): Promise<FormState> {
+// 生成兑换码：选套餐、天数（默认按套餐，可以加减）、数量（1～100）、备注。生成的码只在这次返回里显示全，方便一次复制；日志只记数量。
+// 另外给两段直接发给客人的话（short 只有兑换码，long 带用法）
+export type CodesState = (FormState & { short?: string; long?: string }) | undefined;
+export async function adminCreateCodes(_: CodesState, form: FormData): Promise<CodesState> {
   const admin = await requireAdmin();
-  const plan = findPlan(site.plans, String(form.get("plan") ?? ""));
+  const base = findPlan(site.plans, String(form.get("plan") ?? ""));
   const count = Number(form.get("count"));
   const note = String(form.get("note") ?? "").trim();
-  if (!plan) return { error: "请选套餐" };
+  if (!base) return { error: "请选套餐" };
   if (!Number.isInteger(count) || count < 1 || count > 100) return { error: "数量是 1 到 100" };
+  const parsed = parseCodeDays(String(form.get("days") ?? ""), base);
+  if ("error" in parsed) return { error: parsed.error };
+  const plan = withCodeDays(base, parsed.days);
   const codes = Array.from({ length: count }, newRedeemCode);
   const now = nowSec();
   await db().batch(
     codes.map((c) =>
-      db().prepare("INSERT INTO redeem_codes (code, plan_id, note, created_at) VALUES (?, ?, ?, ?)").bind(c, plan.id, note || null, now),
+      db()
+        .prepare("INSERT INTO redeem_codes (code, plan_id, days, note, created_at) VALUES (?, ?, ?, ?, ?)")
+        .bind(c, plan.id, parsed.days, note || null, now),
     ),
   );
   await logAdmin(admin, "codes.create", plan.name, `${count} 个${note ? `：${note}` : ""}`);
   revalidatePath("/admin/codes");
-  return { ok: codes.map(formatRedeemCode).join("\n") };
+  return { ok: codes.map(formatRedeemCode).join("\n"), ...codeMessages(codes, plan, site.brand, site.siteUrl) };
 }
 
 // 作废还没用过的兑换码（比如发错了人）。用过的不能作废

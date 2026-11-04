@@ -58,10 +58,11 @@ describe("到期时间", () => {
     expect(needsRenewal(-86400, 0)).toBe(true);
     expect(needsRenewal(null, 0)).toBe(false);
   });
-  it("canRenewEarly：30 天以内才放「提前续费」", () => {
-    expect(canRenewEarly(30 * 86400, 0)).toBe(true);
+  it("canRenewEarly：15 天以内才放「提前续费」，月付刚买（30 天）不放", () => {
+    expect(canRenewEarly(15 * 86400, 0)).toBe(true);
     expect(canRenewEarly(10 * 86400, 0)).toBe(true);
-    expect(canRenewEarly(30 * 86400 + 1, 0)).toBe(false);
+    expect(canRenewEarly(15 * 86400 + 1, 0)).toBe(false);
+    expect(canRenewEarly(30 * 86400, 0)).toBe(false);
     expect(canRenewEarly(60 * 86400, 0)).toBe(false);
     expect(canRenewEarly(null, 0)).toBe(false);
   });

@@ -1,5 +1,6 @@
 "use server";
 
+import { withCodeDays } from "@/lib/redeem-codes";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -190,12 +191,14 @@ export async function redeem(_: FormState, form: FormData): Promise<FormState> {
   if (!code) return { error: t("兑换码格式不对，是 16 位字母和数字", "Invalid redeem code: it's 16 letters and numbers") };
 
   const row = await db()
-    .prepare("SELECT plan_id, used_by FROM redeem_codes WHERE code = ?")
+    .prepare("SELECT plan_id, days, used_by FROM redeem_codes WHERE code = ?")
     .bind(code)
-    .first<{ plan_id: string; used_by: number | null }>();
+    .first<{ plan_id: string; days: number | null; used_by: number | null }>();
   if (!row) return { error: t("没有这个兑换码，请检查有没有输错", "That redeem code doesn't exist. Please check for typos") };
   if (row.used_by !== null) return { error: t("这个兑换码已经用过了", "This redeem code has already been used") };
-  const plan = findPlan(site.plans, row.plan_id);
+  const base = findPlan(site.plans, row.plan_id);
+  // 后台生成时改过天数的兑换码，开通 / 续期按码上的天数算
+  const plan = base && withCodeDays(base, row.days);
   if (!plan) return { error: t("这个兑换码对应的套餐已经下架了，请联系客服", "The plan for this code is no longer available. Please contact support"), support: true };
 
   const { results } = await db()

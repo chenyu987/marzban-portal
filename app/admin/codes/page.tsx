@@ -1,3 +1,4 @@
+import { withCodeDays } from "@/lib/redeem-codes";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
@@ -14,6 +15,7 @@ export const dynamic = "force-dynamic";
 type Row = {
   code: string;
   plan_id: string;
+  days: number | null;
   note: string | null;
   used_by: number | null;
   used_at: number | null;
@@ -63,11 +65,11 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
   const [count, { results }] = await Promise.all([
     db().prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(r.used_by IS NULL), 0) AS unused ${FROM} ${W}`).bind(...binds).first<{ n: number; unused: number }>(),
     db()
-      .prepare(`SELECT r.code, r.plan_id, r.note, r.used_by, r.used_at, r.order_id, o.no AS order_no, c.email, c.wechat, r.created_at ${FROM} ${W} ORDER BY r.created_at DESC, r.code LIMIT ? OFFSET ?`)
+      .prepare(`SELECT r.code, r.plan_id, r.days, r.note, r.used_by, r.used_at, r.order_id, o.no AS order_no, c.email, c.wechat, r.created_at ${FROM} ${W} ORDER BY r.created_at DESC, r.code LIMIT ? OFFSET ?`)
       .bind(...binds, PAGE_SIZE, (page - 1) * PAGE_SIZE)
       .all<Row>(),
   ]);
-  const plans = site.plans.map((p) => ({ id: p.id, name: p.name, price: `${site.currency}${formatMoney(p.price)}`, free: p.price === 0 }));
+  const plans = site.plans.map((p) => ({ id: p.id, name: p.name, price: `${site.currency}${formatMoney(p.price)}`, free: p.price === 0, days: p.days }));
   const params = { state, plan: group, q };
 
   return (
@@ -116,7 +118,11 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
               return (
                 <tr key={r.code}>
                   <td className="font-mono">{label}</td>
-                  <td>{findPlan(site.plans, r.plan_id)?.name ?? `${r.plan_id}（已下架）`}</td>
+                  <td>{(() => {
+                    const p = findPlan(site.plans, r.plan_id);
+                    // 生成时改过天数的，名字跟着天数改（「高速版 10天体验」）
+                    return p ? withCodeDays(p, r.days).name : `${r.plan_id}（已下架）`;
+                  })()}</td>
                   <td className="text-base-content/60">{r.note ?? ""}</td>
                   <td>
                     {r.used_by === null ? (

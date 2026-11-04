@@ -228,8 +228,9 @@ test("老客人注册：微信号对上的订阅自动绑过来，改微信号�
   await ctx.close();
 });
 
-test("手机上：右上角菜单能切页面、能退出；买了还没连过的订阅顶上有「看安装教程」，连上过就不显示", async ({ browser }) => {
-  const ctx = await browser.newContext({ viewport: { width: 402, height: 874 }, isMobile: true, hasTouch: true });
+const IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+test("手机上：右上角菜单能切页面、能退出；买了还没连过的订阅顶上有「看安装教程」，能关掉，连上过就不显示", async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 402, height: 874 }, isMobile: true, hasTouch: true, userAgent: IPHONE_UA });
   const page = await ctx.newPage();
   const stamp = Date.now();
   const wechat = `e2e_mobile_${stamp}`;
@@ -244,10 +245,28 @@ test("手机上：右上角菜单能切页面、能退出；买了还没连过�
 
   const next = page.getByTestId("next-step");
   await expect(next).toBeVisible();
+  // iPhone 上大的「一键导入」是 Shadowrocket，别的 App 在「其他方式」里
+  await expect(page.getByTestId("main-import")).toHaveText("一键导入 Shadowrocket");
+  await expect(page.getByRole("link", { name: "导入 Clash Verge" })).toBeVisible();
+  // 点了大按钮（没装 App 时什么反应都没有）：下面提示先看安装教程
+  await expect(page.getByTestId("import-hint")).toHaveCount(0);
+  await page.getByTestId("main-import").click();
+  await expect(page.getByTestId("import-hint")).toContainText("可能还没装 Shadowrocket");
+  await page.getByTestId("import-hint").getByRole("link", { name: "先看安装教程装好" }).click();
+  await expect(page).toHaveURL(/\/tutorial/);
+  await page.goto("/dashboard");
   await next.getByRole("link", { name: "看安装教程" }).click();
   await expect(page).toHaveURL(/\/tutorial/);
+  // 不想看可以点 × 关掉，刷新也不再出现
+  await page.goto("/dashboard");
+  await next.getByRole("button", { name: "关闭提示" }).click();
+  await expect(next).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId("sub-id")).toBeVisible();
+  await expect(next).toHaveCount(0);
 
-  // 连上过一次：引导不再显示
+  // 连上过一次：引导不再显示（先清掉上面「关掉」的记录，确认是因为连上过才不显示）
+  await page.evaluate(() => localStorage.clear());
   await mockMarzban("PUT", `/user/${wechat}`, { online_at: new Date().toISOString().slice(0, 19) });
   await page.goto("/dashboard");
   await expect(page.getByTestId("sub-id")).toBeVisible();
@@ -955,11 +974,18 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await expect(planSelect.locator("optgroup").first()).toHaveAttribute("label", "免费体验");
   await expect(planSelect.locator("option:not([disabled])").first()).toHaveText(/7天体验/);
   await planSelect.selectOption("p1-month");
+  // 选了套餐，天数自动填成套餐的天数
+  await expect(admin.getByLabel("天数")).toHaveValue("30");
   await admin.locator('input[name="count"]').fill("2");
   await admin.getByPlaceholder("备注，比如「微信转账 张三」").fill("e2e 测试");
   await admin.getByRole("button", { name: "生成" }).click();
-  const codes = (await admin.locator("textarea").inputValue()).split("\n");
+  // 生成后两段话：短的只有兑换码，长的带注册网址和用法，各自能复制
+  const short = await admin.getByTestId("code-short").locator("textarea").inputValue();
+  const codes = short.match(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}/g)!;
   expect(codes).toHaveLength(2);
+  const long = admin.getByTestId("code-long").locator("textarea");
+  await expect(long).toHaveValue(new RegExp(`${codes[0]}[\\s\\S]*/register[\\s\\S]*输入兑换码`));
+  await expect(admin.getByTestId("code-short").getByRole("button", { name: "复制" })).toBeVisible();
   await admin.locator("tr", { hasText: codes[0] }).getByRole("button", { name: "作废" }).click();
   await expect(admin.locator("tr", { hasText: codes[0] })).toContainText("已作废");
 
@@ -983,6 +1009,32 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await expect(admin.locator("tr", { hasText: freeCode })).not.toContainText("卡住了");
   await admin.goto(`/admin/codes?state=stuck&q=${freeCode}`);
   await expect(admin.locator("tr", { hasText: freeCode })).toHaveCount(0);
+
+  // 生成时加减天数：7 天体验点三下 + 变成 10 天，客人兑换后按 10 天开通
+  await admin.goto("/admin/codes");
+  await planSelect.selectOption("p3-trial");
+  await expect(admin.getByLabel("天数")).toHaveValue("7");
+  for (let i = 0; i < 3; i++) await admin.getByRole("button", { name: "多一天" }).click();
+  await expect(admin.getByLabel("天数")).toHaveValue("10");
+  await expect(admin.getByTestId("days-changed")).toContainText("这次生成的是 10 天");
+  await admin.getByRole("button", { name: "生成" }).click();
+  const tenDay = (await admin.getByTestId("code-short").locator("textarea").inputValue()).match(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}/)![0];
+  await expect(admin.getByTestId("code-long").locator("textarea")).toHaveValue(/高速版 10天体验/);
+  // 生成完套餐和天数还留着，接着能再生成
+  await expect(planSelect).toHaveValue("p3-trial");
+  await expect(admin.getByLabel("天数")).toHaveValue("10");
+  await expect(admin.locator("tr", { hasText: tenDay })).toContainText("高速版 10天体验");
+  await page.goto("/plans");
+  await page.getByPlaceholder("XXXX-XXXX-XXXX-XXXX").fill(tenDay);
+  await page.locator('form:has(input[name="code"]) select[name="target"]').selectOption("new");
+  const before10 = Math.floor(Date.now() / 1000);
+  await page.getByRole("button", { name: "兑换" }).click();
+  const done10 = page.getByText(/开通成功：高速版 10天体验/);
+  await expect(done10).toBeVisible();
+  const tenUser = (await done10.innerText()).match(/，(\S+) 到期时间/)![1];
+  const tenExpire = ((await mockMarzban("GET", `/user/${tenUser}`)) as { expire: number }).expire;
+  expect(tenExpire - before10).toBeGreaterThanOrEqual(10 * 86400 - 5);
+  expect(tenExpire - before10).toBeLessThan(10 * 86400 + 120);
 
   // 试用：首次连上才开始计时（Marzban 的 on_hold），连上后有效 3 天；详情页能看到每个节点的连接链接
   const trialUser = `e2e_trial_${stamp}`.slice(0, 32);
@@ -1208,7 +1260,11 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
 
     // 日志页能按操作筛
   await admin.goto("/admin/logs?action=codes.create");
-  await expect(admin.locator("tbody tr", { hasText: adminEmail })).toContainText("2 个：e2e 测试");
+  // 生成过两次：p1 月付 2 个、改成 10 天的体验 1 个
+  await expect(admin.locator("tbody tr", { hasText: adminEmail })).toHaveCount(2);
+  const myCodeLogs = admin.locator("tbody tr", { hasText: adminEmail });
+  await expect(myCodeLogs.filter({ hasText: "2 个：e2e 测试" })).toHaveCount(1);
+  await expect(myCodeLogs.filter({ hasText: "高速版 10天体验" })).toContainText("1 个");
 
   // 操作日志：每一步都记了（扣钱失败的那次没有改数据，不记）
   const logs = query(`SELECT action, target FROM admin_logs WHERE admin_email = '${adminEmail}' ORDER BY id`);
@@ -1223,6 +1279,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
     "subscription.bind",
     "codes.create",
     "code.void",
+    "codes.create",
     "user.create",
     "subscription.bind",
     "user.create",

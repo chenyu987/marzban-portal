@@ -44,8 +44,8 @@ export function needsRenewal(expire: number | null, nowSec = Date.now() / 1000):
   return !!expire && expire - nowSec < RENEW_SOON_DAYS * 86400;
 }
 
-// 剩几天以内才放「提前续费」小链接：时间还长的订阅不用提续费
-export const RENEW_EARLY_DAYS = 30;
+// 剩几天以内才放「提前续费」小链接：时间还长的订阅不用提续费。15 天：月付刚买（正好 30 天）不显示，过了一半才出现
+export const RENEW_EARLY_DAYS = 15;
 
 export function canRenewEarly(expire: number | null, nowSec = Date.now() / 1000): boolean {
   return !!expire && expire - nowSec <= RENEW_EARLY_DAYS * 86400;
