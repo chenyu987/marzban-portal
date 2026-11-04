@@ -30,6 +30,7 @@ export default function OrderForm({
   balance,
   currency,
   defaultTarget,
+  openOrderIds,
 }: {
   groups: PlanGroup[];
   subscriptions: { username: string; label: string }[];
@@ -37,6 +38,8 @@ export default function OrderForm({
   balance: number;
   currency: string;
   defaultTarget?: string;
+  // 还没处理完的单。「下单成功」只在这张单还在时显示，取消或者付完就收掉
+  openOrderIds: number[];
 }) {
   const [state, action, pending] = useActionState(createOrder, undefined);
   const [useBalance, setUseBalance] = useState(balance > 0);
@@ -124,7 +127,7 @@ export default function OrderForm({
       )}
       {state?.error && <div role="alert" className="alert alert-error alert-soft">{state.error}</div>}
       {state?.support && <ContactSupport />}
-      {state?.ok && <div role="alert" className="alert alert-success alert-soft">{state.ok}</div>}
+      {state?.ok && (!state.orderId || openOrderIds.includes(state.orderId)) && <div role="alert" className="alert alert-success alert-soft">{state.ok}</div>}
 
       {canOrder && <p className="text-center text-sm text-base-content/60 sm:hidden">{t("点价格就能下单", "Tap a price to order")}</p>}
       <div data-testid="plan-table" className="grid grid-cols-4 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 max-sm:border-[1.5px] max-sm:border-base-content/45 sm:grid-cols-[6rem_1.7fr_repeat(4,1fr)]">

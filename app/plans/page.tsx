@@ -150,6 +150,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
             balance={balance}
             currency={site.currency}
             defaultTarget={renewTarget}
+            openOrderIds={open.map((o) => o.id)}
           />
         </>
       )}

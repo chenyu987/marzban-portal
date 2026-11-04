@@ -438,6 +438,17 @@ test("手机上下单：付款窗从底部弹出来，能关掉、刷新不再�
   await confirmOk(page);
   await expect(page.locator(".card.border")).toHaveCount(0);
 
+  // 取消后「下单成功」的提示跟着消失（不刷新页面）
+  const placed = page.getByText("下单成功，请按上面的说明付款");
+  await page.locator('button[value="p1-month"]').click();
+  await confirmOk(page);
+  await sheet.getByRole("button", { name: "关闭" }).click();
+  await expect(placed).toBeVisible();
+  await page.locator(".card.border").getByRole("button", { name: "取消这张单" }).click();
+  await confirmOk(page);
+  await expect(page.locator(".card.border")).toHaveCount(0);
+  await expect(placed).toHaveCount(0);
+
   // 再下一单，直接在弹窗里付
   await page.locator('button[value="p1-month"]').click();
   await confirmOk(page);
@@ -964,6 +975,26 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await expect(admin.getByTestId("order-row")).toHaveCount(1);
   await admin.getByTestId("order-row").getByRole("link", { name: customer }).click();
   await expect(admin.getByRole("heading", { name: customer })).toBeVisible();
+
+  // 手机上：和客人页一样是右上角的整屏菜单，顶部不放导航；点页面过去后菜单自己收起
+  const customerPage = admin.url();
+  await admin.setViewportSize({ width: 402, height: 874 });
+  await admin.goto("/admin");
+  const adminMenu = admin.getByRole("dialog", { name: "菜单" });
+  await expect(adminMenu).toHaveCount(0);
+  await expect(admin.getByRole("banner").getByRole("link", { name: "客人" })).toBeHidden();
+  await admin.getByRole("button", { name: "打开菜单" }).click();
+  for (const name of ["订单", "客人", "订阅", "兑换码", "节点", "Host", "日志", "账户"]) await expect(adminMenu.getByRole("link", { name })).toBeVisible();
+  await expect(adminMenu.getByRole("button", { name: "退出" })).toBeVisible();
+  await expect(adminMenu.getByRole("link", { name: "订单" })).toHaveAttribute("aria-current", "page");
+  await adminMenu.getByRole("link", { name: "兑换码" }).click();
+  await expect(admin).toHaveURL(/\/admin\/codes/);
+  await expect(adminMenu).toHaveCount(0);
+  await admin.getByRole("button", { name: "打开菜单" }).click();
+  await adminMenu.getByRole("button", { name: "关闭菜单" }).click();
+  await expect(adminMenu).toHaveCount(0);
+  await admin.setViewportSize({ width: 1280, height: 720 });
+  await admin.goto(customerPage);
 
   // 老订阅：微信号和这个客人一样（大小写不同也算），客人页提示一键绑定
   const legacyUser = `e2e_legacy_${stamp}`.slice(0, 32);
