@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import type { FormState } from "../../../actions";
 import { adminChangePlan } from "../../actions";
 
 type Option = { id: string; name: string; desc: string };
 
-// 订阅现在的套餐，和「改成别的套餐」。改了马上按新套餐改 Marzban 的流量、设备数，到期时间不动；客人订阅页标题跟着变
-export default function PlanCard({ username, current, options }: { username: string; current: Option | null; options: Option[] }) {
-  const [pick, setPick] = useState(current?.id ?? "");
+// 订阅现在的套餐，和「改成别的套餐」。改了马上按新套餐改 Marzban 的流量、设备数，到期时间不动；客人订阅页标题跟着变。
+// 转圈和「现在的套餐」只看服务器返回，不等整页刷新：线上整页刷新有时一直不结束，按钮旁边就一直转、上面还写着旧套餐
+export default function PlanCard({ username, current: fromServer, options }: { username: string; current: Option | null; options: Option[] }) {
+  const [pick, setPick] = useState(fromServer?.id ?? "");
   const [result, setResult] = useState<FormState>();
-  const [pending, start] = useTransition();
+  const [pending, setPending] = useState(false);
+  const [changed, setChanged] = useState<Option | null>(null);
+  const current = changed ?? fromServer;
   const chosen = options.find((o) => o.id === pick);
   return (
     <div className="mb-4 rounded-box bg-base-100 p-4 shadow-sm" data-testid="plan-card">
@@ -37,7 +40,14 @@ export default function PlanCard({ username, current, options }: { username: str
             const f = new FormData();
             f.set("username", username);
             f.set("plan", chosen.id);
-            start(async () => setResult(await adminChangePlan(undefined, f)));
+            setPending(true);
+            adminChangePlan(undefined, f)
+              .then((r) => {
+                setResult(r);
+                if (r?.ok) setChanged(chosen);
+              })
+              .catch(() => setResult({ error: "没连上服务器，刷新页面看看改没改成" }))
+              .finally(() => setPending(false));
           }}
         >
           改成这个套餐

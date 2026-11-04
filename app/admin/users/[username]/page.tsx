@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
 import { findUser, userUsage, type MarzbanUser } from "@/lib/marzban";
-import { formatBytes, formatExpire, RESET_LABEL, STATUS_LABEL, timeLeft } from "@/lib/format";
+import { formatBytes, formatExpire, formatSubCode, RESET_LABEL, STATUS_LABEL, timeLeft } from "@/lib/format";
 import { monthStartBeijing, onlineText, toBeijingInput } from "@/lib/admin-users";
 import AdminHeader from "../../AdminHeader";
 import { adminEditUser } from "../../actions";
@@ -16,6 +16,7 @@ import { pick } from "@/lib/i18n";
 import BindToCustomer from "./BindToCustomer";
 import BindButton from "../../BindButton";
 import { CustomerLink } from "../../Links";
+import CopyCode from "../../../dashboard/CopyCode";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,8 @@ export default async function UserPage({ params }: { params: Promise<{ username:
         )
         .bind(username)
         .first<{ wechat: string; match_id: number | null; match_email: string | null }>();
+  // 订阅编号（客人订阅页上那个 7F3A-9C21）；后台手动建、没绑客人的订阅没有
+  const code = (await db().prepare("SELECT code FROM subscriptions WHERE marzban_username = ?").bind(username).first<{ code: string | null }>())?.code;
   const planRow = await db().prepare("SELECT plan_id FROM subscription_plans WHERE marzban_username = ?").bind(username).first<{ plan_id: string }>();
   // 套餐说明：价目表上那行（比如「单设备  20G流量/月」），没配就写流量
   const desc = (id: string) => {
@@ -78,6 +81,11 @@ export default async function UserPage({ params }: { params: Promise<{ username:
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <h1 className="text-2xl font-bold">{user.username}</h1>
         <span className={`badge ${st.badge}`}>{st.text}</span>
+        {code && (
+          <span className="text-sm text-base-content/60">
+            订阅编号 <b className="font-mono text-base-content"><CopyCode text={formatSubCode(code)} /></b>
+          </span>
+        )}
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-2 text-sm" data-testid="sub-owner">
         <span className="text-base-content/60">属于客人</span>

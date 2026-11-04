@@ -316,8 +316,8 @@ function SubscriptionCard({ user, code, planId, lang }: { user: MarzbanUser; cod
         )}
 
         <SubscriptionLink username={user.username} url={user.subscription_url} />
-        {/* 最底下一行：左边重置链接（过期了再加隐藏），右边订阅编号 */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* 最底下一行：左边重置链接（过期了再加隐藏），右边订阅编号。和上面的按钮隔开一点，不然挤 */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1">
             <ResetLinkButton username={user.username} />
             {expired && <HideButton username={user.username} />}

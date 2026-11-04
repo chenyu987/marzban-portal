@@ -1079,11 +1079,16 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
 
   // 改套餐：Marzban 上流量和设备数按新套餐改，到期不变；客人订阅页标题变成新套餐名
   const expireBefore = ((await mockMarzban("GET", `/user/${mzUser}`)) as { expire?: number }).expire;
+  // 订阅页标题旁边有订阅编号（和客人订阅页上的一样）
+  await expect(admin.getByTestId("sub-id")).toHaveText(usernameCode(mzUser));
   const planCard = admin.getByTestId("plan-card");
   await expect(planCard).toContainText("没记套餐");
   await planCard.getByLabel("换成哪个套餐").selectOption("p3-month");
   await planCard.getByRole("button", { name: "改成这个套餐" }).click();
   await expect(planCard.getByText("已改成 高速版 月付")).toBeVisible();
+  // 改完页面刷新出新套餐、转圈停下（线上出过：提示出来了，按钮旁边一直转圈、上面还写没记套餐）
+  await expect(planCard).not.toContainText("没记套餐");
+  await expect(planCard.locator(".loading")).toHaveCount(0);
   expect(await mockMarzban("GET", `/user/${mzUser}`)).toMatchObject({ data_limit: null, note: "ip=2", expire: expireBefore });
   await page.goto("/dashboard");
   await expect(page.locator(".card", { hasText: usernameCode(mzUser) }).locator(".card-title")).toHaveText("高速版");
