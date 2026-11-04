@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { RESET_STRATEGIES } from "@/lib/admin-users";
 import { RESET_LABEL } from "@/lib/format";
 import type { FormState } from "../../actions";
+import ExpireInput from "./ExpireInput";
 
 type Defaults = { dataGB: string; reset: string; expire: string; note: string; status: string; customer?: string };
 
@@ -57,10 +58,10 @@ export default function UserForm({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-sm text-base-content/70">到期时间（北京时间，留空永不到期）</span>
-          <input name="expire" type="datetime-local" defaultValue={defaults.expire} className="input input-sm w-full" />
-        </label>
+        <div className="flex flex-col gap-1">
+          <span className="text-sm text-base-content/70">到期时间（北京时间，不选就是永不到期）</span>
+          <ExpireInput defaultValue={defaults.expire} />
+        </div>
         {editing ? (
           <label className="flex flex-col gap-1">
             <span className="text-sm text-base-content/70">或者续期几天（填了就不看上面的到期时间）</span>

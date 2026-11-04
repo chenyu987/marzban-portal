@@ -592,6 +592,12 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   expect(notices()).toEqual([{ days: 3 }]);
   await page.request.post("/api/cron/expiry");
   expect(notices()).toHaveLength(1);
+  // 每 5 分钟的节点掉线检查能跑（判断逻辑在 lib/node-alerts.test.ts；节点状态别的测试会改，这里不对具体节点断言）
+  const t0 = Math.floor(Date.now() / 1000);
+  const nodesRun = await page.request.post(`/api/cron/nodes?now=${t0}`);
+  expect(nodesRun.ok()).toBe(true);
+  expect(await nodesRun.json()).toMatchObject({ down: expect.any(Number), sent: expect.any(Number) });
+  expect((await page.request.post(`/api/cron/nodes?now=${t0 + 300}`)).ok()).toBe(true);
   await page.getByRole("link", { name: "续费", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/plans\\?renew=${username}`));
   await expect(page.locator(`input[name="target"][value="${username}"]`)).toBeChecked();
@@ -1020,11 +1026,27 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await admin.locator('input[name="username"]').fill(mzUser);
   await admin.locator('input[name="customer"]').fill(customer);
   await admin.locator('input[name="dataGB"]').fill("50");
-  await admin.locator('select[name="resetStrategy"]').selectOption("month");
+  // 默认每月清零、到期留空（永不到期），点「1 个月后」选上日期
+  await expect(admin.locator('select[name="resetStrategy"]')).toHaveValue("month");
+  await expect(admin.getByLabel("到期日期")).toHaveValue("");
+  await expect(admin.getByRole("button", { name: "永不到期" })).toHaveAttribute("aria-pressed", "true");
+  await admin.getByRole("button", { name: "1 个月后" }).click();
+  await expect(admin.getByLabel("到期日期")).not.toHaveValue("");
   await admin.getByRole("button", { name: "新建" }).click();
   await expect(admin).toHaveURL(new RegExp(`/admin/users/${mzUser}$`));
   await expect(admin.getByText(customer)).toBeVisible();
-  expect((await mockMarzban("GET", `/user/${mzUser}`)) as { data_limit?: number }).toMatchObject({ data_limit: 50 * 1024 ** 3 });
+  const createdMz = (await mockMarzban("GET", `/user/${mzUser}`)) as { data_limit?: number; expire?: number; data_limit_reset_strategy?: string };
+  expect(createdMz).toMatchObject({ data_limit: 50 * 1024 ** 3, data_limit_reset_strategy: "month" });
+  // 选的是 30 天后那天的 23:59（北京时间）
+  expect(createdMz.expire! - Date.now() / 1000).toBeGreaterThan(29 * 86400);
+  expect(createdMz.expire! - Date.now() / 1000).toBeLessThan(31 * 86400);
+  // 编辑时点「永不到期」清掉到期时间
+  await admin.getByRole("button", { name: "永不到期" }).click();
+  await admin.getByRole("button", { name: "保存修改" }).click();
+  await expect(admin.getByText("已保存到 Marzban")).toBeVisible();
+  expect(((await mockMarzban("GET", `/user/${mzUser}`)) as { expire?: number | null }).expire ?? null).toBeNull();
+  // 刷新掉「已保存」的提示，下一步才等得到自己那次保存
+  await admin.reload();
 
   await admin.locator('input[name="dataGB"]').fill("");
   await admin.locator('input[name="addDays"]').fill("30");
@@ -1177,6 +1199,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
     "subscription.bind",
     "user.create",
     "user.edit",
+    "user.edit",
     "user.change_plan",
     "user.reset_usage",
     "user.revoke_sub",
@@ -1192,11 +1215,27 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
     "hosts.save",
   ]);
 
-  // 我的账户：点右上角邮箱进去；偏好、登录中的设备、改密码、我的操作
+  // ⌘K 全局搜索：搜客人邮箱，回车跳到客人详情；不输字时能当页面跳转用
   await admin.goto("/admin");
-  await admin.getByRole("link", { name: "我的账户" }).click();
+  await admin.keyboard.press("ControlOrMeta+k");
+  const palette = admin.getByRole("dialog", { name: "全局搜索" });
+  await expect(palette.getByTestId("search-results")).toContainText("我的账户");
+  await palette.getByLabel("搜索内容").fill(customer);
+  await expect(palette.getByTestId("search-results")).toContainText("客人");
+  await expect(palette.getByRole("option").first()).toContainText(customer);
+  await admin.keyboard.press("Enter");
+  await expect(admin).toHaveURL(/\/admin\/customers\/\d+$/);
+  await admin.getByRole("button", { name: "搜索" }).click();
+  await palette.getByLabel("搜索内容").fill(first);
+  await expect(palette.getByTestId("search-results")).toContainText(`订单 ${first}`);
+
+  // 我的账户：点右上角「账户」进去；偏好、登录中的设备、改密码、我的操作
+  await admin.goto("/admin");
+  await admin.getByRole("link", { name: "账户", exact: true }).click();
   await expect(admin).toHaveURL(/\/admin\/account/);
   await expect(admin.getByTestId("admin-theme").getByRole("button", { name: "深色" })).toBeVisible();
+  await expect(admin.getByTestId("admin-profile")).toContainText(adminEmail);
+  await expect(admin.getByRole("link", { name: "账户", exact: true })).toHaveAttribute("aria-current", "page");
   // 后台页脚不放给客人的链接和联系客服
   await expect(admin.locator("footer").getByRole("link", { name: "购买套餐" })).toHaveCount(0);
   await expect(admin.locator("footer").getByText("联系客服")).toHaveCount(0);

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { adminPrefs, requireAdmin } from "@/lib/admin";
 import { db, nowSec } from "@/lib/env";
-import { formatExpire } from "@/lib/format";
+import { formatDate, formatExpire } from "@/lib/format";
 import { describeDevice, LOG_ACTIONS } from "@/lib/admin-account";
 import { PAGE_SIZES, SORTS } from "@/lib/admin-users";
 import { THEME_COOKIE, parseTheme } from "@/lib/theme";
@@ -46,16 +46,31 @@ export default async function AdminAccountPage() {
   const others = sessions.filter((s) => s.id !== admin.sid).length;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 pb-16">
+    // 外框和别的后台页一样宽（顶栏不挤），内容收窄到 3xl
+    <div className="mx-auto max-w-5xl px-4 pb-16">
       <AdminHeader email={admin.email} />
-      <div className="mt-4 mb-4">
-        <h1 className="text-2xl font-bold">我的账户</h1>
-        <p className="text-sm text-base-content/60">
-          {admin.email}
-          {me && <> · 账号建于 {formatExpire(me.created_at)}</>}
-          {me?.last_login_at && <> · 这次登录 {formatExpire(me.last_login_at)}</>}
-        </p>
-      </div>
+      <div className="mx-auto max-w-3xl">
+      <h1 className="mt-4 mb-4 text-2xl font-bold">我的账户</h1>
+      {/* 顶上一张名片：头像字母、邮箱、身份；下面两格写账号哪天建的、这次什么时候登录的 */}
+      <section className="card mb-4 bg-base-100 shadow-sm" data-testid="admin-profile">
+        <div className="card-body gap-4 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-1 items-center gap-4">
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xl font-bold text-primary" aria-hidden>
+              {admin.email.slice(0, 1).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <div className="truncate text-lg font-semibold">{admin.email}</div>
+              <span className="badge badge-soft badge-primary badge-sm mt-1">管理员</span>
+            </div>
+          </div>
+          <dl className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm sm:text-right">
+            <dt className="text-xs text-base-content/50">账号创建</dt>
+            <dt className="text-xs text-base-content/50">这次登录</dt>
+            <dd className="tabular-nums">{me ? formatDate(me.created_at) : "-"}</dd>
+            <dd className="tabular-nums">{me?.last_login_at ? formatExpire(me.last_login_at) : "-"}</dd>
+          </dl>
+        </div>
+      </section>
 
       <div className="flex flex-col gap-4">
         <Section title="外观" desc="只对这台设备上的后台生效，客人那边不受影响。">
@@ -112,6 +127,7 @@ export default async function AdminAccountPage() {
             看我的全部操作
           </Link>
         </Section>
+      </div>
       </div>
     </div>
   );

@@ -6,8 +6,9 @@ import { nowSec } from "@/lib/env";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  const token = (globalThis as { __cronToken?: string }).__cronToken;
-  const ok = process.env.NODE_ENV === "development" || (!!token && req.headers.get("x-cron-token") === token);
+  const tokens = (globalThis as { __cronTokens?: Set<string> }).__cronTokens;
+  const given = req.headers.get("x-cron-token");
+  const ok = process.env.NODE_ENV === "development" || (!!given && !!tokens?.has(given));
   if (!ok) return new Response("Not found", { status: 404 });
   // e2e 可以传 ?now= 模拟某个时间
   const nowParam = Number(new URL(req.url).searchParams.get("now"));

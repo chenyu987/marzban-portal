@@ -7,7 +7,7 @@ import { db, nowSec } from "@/lib/env";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { createSession, currentCustomer, destroyOtherSessions, destroySession, requireCustomer } from "@/lib/session";
 import { findUser, lookupSubscription, revokeSubscription } from "@/lib/marzban";
-import { formatExpire, isExpiredSub, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
+import { formatExpire, formatMoney, isExpiredSub, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
 import { findPlan, forSale } from "@/lib/plans";
 import { type ProvisionResult } from "@/lib/provision";
 import { provisionTarget } from "@/lib/orders";
@@ -16,6 +16,7 @@ import { site } from "@/site.config";
 import { RENEW_REFRESH_HINT } from "@/lib/clients";
 import { AVAILABLE_SQL, LEDGER_SQL, RESERVED_SQL } from "@/lib/balance";
 import { canSendMail, sendMail } from "@/lib/mail";
+import { notifyClaimedOrder } from "@/lib/admin-alerts";
 import { hashResetToken, newResetToken, RESET_MAX_PER_HOUR, RESET_TTL_SELF, resetLink } from "@/lib/reset";
 import { getT } from "@/lib/lang";
 import { planName } from "@/lib/plan-text";
@@ -383,9 +384,18 @@ export async function claimPaid(_: FormState, form: FormData): Promise<FormState
     .bind(nowSec(), method, payer, id, customer.id)
     .run();
   if (r.meta.changes !== 1) return { error: t("这张单已经处理过了，请刷新页面", "This order has already been processed. Please refresh the page") };
-  const order = await db().prepare("SELECT marzban_username FROM orders WHERE id = ?").bind(id).first<{ marzban_username: string | null }>();
+  const order = await db().prepare("SELECT marzban_username, amount FROM orders WHERE id = ?").bind(id).first<{ marzban_username: string | null; amount: number }>();
 
   const result = await confirmTransferOrder(id, { customerId: customer.id });
+  // 提醒管理员去对账（发到客服邮箱）；发不出去不影响客人
+  await notifyClaimedOrder({
+    label: await orderLabel(id),
+    amount: `${site.currency}${formatMoney(order?.amount ?? 0)}`,
+    method,
+    payer,
+    customer: customer.wechat ? `${customer.wechat}（${customer.email}）` : customer.email,
+    activated: !("error" in result),
+  }).catch((e) => console.error("claimPaid: 提醒邮件没发出去", e));
   revalidatePath("/plans");
   revalidatePath("/dashboard");
   if ("error" in result) {

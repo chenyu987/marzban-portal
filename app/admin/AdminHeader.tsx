@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { adminLogout } from "./actions";
 import { Logo } from "../Brand";
 import { MenuButton, MenuSheet, useMenuOpen } from "../MobileMenu";
+import CommandPalette from "./CommandPalette";
 
 // 后台导航按用途分三组：日常（订单、客人、Marzban 用户、兑换码）、线路（节点、Host）、记录（日志）。
 // 当前页高亮；宽屏摆在顶部，太窄时横向滑动不换行；手机上和客人页一样是右上角的整屏菜单（见 MobileMenu.tsx）
@@ -54,10 +55,15 @@ export default function AdminHeader({ email }: { email: string }) {
           ))}
         </nav>
         <span className="flex-1 sm:hidden" />
-        {/* 点邮箱进「我的账户」；窄屏不放邮箱，写「账户」 */}
-        <Link href="/admin/account" className="btn btn-ghost btn-sm shrink-0 font-normal text-base-content/70 max-sm:hidden" aria-label="我的账户">
-          <span className="hidden lg:inline">{email}</span>
-          <span className="lg:hidden">账户</span>
+        <CommandPalette />
+        {/* 右上角「账户」，和客人那边一样；在账户页时高亮，鼠标停上去显示登录的邮箱。手机上在菜单里 */}
+        <Link
+          href="/admin/account"
+          title={email}
+          aria-current={active("/admin/account") ? "page" : undefined}
+          className={`btn btn-sm shrink-0 max-sm:hidden ${active("/admin/account") ? "btn-soft btn-primary" : "btn-ghost"}`}
+        >
+          账户
         </Link>
         <form action={adminLogout} className="hidden shrink-0 sm:block">
           <button className="btn btn-ghost btn-sm">退出</button>

@@ -90,7 +90,9 @@ export type SiteConfig = {
   // 管理后台（/admin）。前面要挡一层 Cloudflare Access：accessTeamDomain 是团队域名（xxx.cloudflareaccess.com），
   // accessAud 是 Access 里后台那个应用的 AUD。两个都填了后台才开放，没填时 /admin 一律 404。
   // emails：能进后台的邮箱，Access 也要放行同样的邮箱；管理员账号（npm run admin:create）的邮箱要和 Access 登录的一样
-  admin: { accessTeamDomain: string | null; accessAud: string | null; emails: string[] };
+  // url：后台网址（比如 https://admin.example.com），发给管理员的提醒邮件里放链接；不填就不放。
+  // 提醒邮件（节点掉线、客人说已付款）发到 contactEmail，要配好发信（lib/mail.ts）才会发
+  admin: { accessTeamDomain: string | null; accessAud: string | null; emails: string[]; url?: string | null };
 };
 
 export const site: SiteConfig = {
