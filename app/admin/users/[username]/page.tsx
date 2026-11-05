@@ -17,12 +17,14 @@ import BindToCustomer from "./BindToCustomer";
 import BindButton from "../../BindButton";
 import { CustomerLink } from "../../Links";
 import CopyCode from "../../../dashboard/CopyCode";
+import { getTz } from "@/lib/tz-server";
 
 export const dynamic = "force-dynamic";
 
 // 一个 Marzban 用户：看状态、改流量/到期/状态/备注、清零流量、重置订阅链接、删除。都是直接改 Marzban
 export default async function UserPage({ params }: { params: Promise<{ username: string }> }) {
   const admin = await requireAdmin();
+  const tz = await getTz();
   const username = decodeURIComponent((await params).username);
   let user: MarzbanUser | null;
   try {
@@ -117,7 +119,7 @@ export default async function UserPage({ params }: { params: Promise<{ username:
           <div className="font-medium">
             {user.status === "on_hold" && user.on_hold_expire_duration
               ? `首次连上后 ${Math.round(user.on_hold_expire_duration / 86400)} 天`
-              : formatExpire(user.expire)}
+              : formatExpire(user.expire, "zh", tz)}
           </div>
           {user.status === "on_hold" ? <div className="text-sm text-base-content/60">还没连过，连上才开始计时</div> : left && <div className="text-sm text-base-content/60">{left.text}</div>}
         </div>

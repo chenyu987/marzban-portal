@@ -6,6 +6,7 @@ import AdminHeader from "../AdminHeader";
 import { SubLink } from "../Links";
 import { FilterBar, Pager, pageOf, param } from "../ui";
 import { LOG_ACTIONS as ACTIONS } from "@/lib/admin-account";
+import { getTz } from "@/lib/tz-server";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,7 @@ function Target({ action, target }: { action: string; target: string | null }) {
 
 export default async function LogsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const me = await requireAdmin();
+  const tz = await getTz();
   const sp = await searchParams;
   const admin = param(sp, "admin");
   const action = param(sp, "action") in ACTIONS ? param(sp, "action") : "";
@@ -84,7 +86,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           <tbody>
             {results.map((l) => (
               <tr key={l.id} className={l.action === "login.fail" ? "text-error" : ""}>
-                <td className="whitespace-nowrap">{formatExpire(l.created_at)}</td>
+                <td className="whitespace-nowrap">{formatExpire(l.created_at, "zh", tz)}</td>
                 <td>{l.admin_email}</td>
                 <td className="whitespace-nowrap">{ACTIONS[l.action] ?? l.action}</td>
                 <td>

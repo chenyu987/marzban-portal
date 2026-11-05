@@ -14,6 +14,7 @@ import HideOnAdmin from "./HideOnAdmin";
 import LangSwitch from "./LangSwitch";
 import WechatHint from "./WechatHint";
 import "./globals.css";
+import TzSync from "./TzSync";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { p } = await getT();
@@ -35,6 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="flex min-h-screen flex-col bg-base-200">
         <SiteProvider value={publicSite}>
         <LangProvider value={lang}>
+        <TzSync />
         <WechatHint />
         <div className="flex-1">{children}</div>
         <footer className="flex flex-col items-center gap-3 border-t border-base-300/60 px-4 py-8 text-sm text-base-content/60">

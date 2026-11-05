@@ -1,7 +1,8 @@
-// 到期提醒的入口。线上由 custom-worker.ts 的定时任务（每天北京时间 10 点）在同一个 Worker 里直接调用，
+// 到期提醒（顺便算上个月最高用量）的入口。线上由 custom-worker.ts 的定时任务（每天北京时间 10 点）在同一个 Worker 里直接调用，
 // 带上它刚生成的一次性口令；外面的请求拿不到口令，一律 404。本地开发（next dev）不用口令，e2e 直接调
 import { runExpiryReminders } from "@/lib/expiry-reminders";
 import { nowSec } from "@/lib/env";
+import { runUsagePeak } from "@/lib/usage-peak";
 
 export const dynamic = "force-dynamic";
 
@@ -15,5 +16,8 @@ export async function POST(req: Request) {
   const now = process.env.NODE_ENV === "development" && nowParam > 0 ? nowParam : nowSec();
   const result = await runExpiryReminders(now);
   console.log(`expiry: 查了 ${result.checked} 个订阅，发了 ${result.sent} 封，失败 ${result.failed} 封`);
-  return Response.json(result);
+  // 顺便：上个月用量最多的那个订阅还没算就算一次（客人订阅页不限流量的圆环按它当满圈）。出错不影响提醒
+  const peak = await runUsagePeak(now * 1000).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
+  console.log(`usage peak: ${JSON.stringify(peak)}`);
+  return Response.json({ ...result, peak });
 }

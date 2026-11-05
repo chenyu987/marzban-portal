@@ -4,6 +4,7 @@ import { fromBeijingInput } from "@/lib/admin-users";
 import { site } from "@/site.config";
 import { CustomerLink, SubLink } from "./Links";
 import { FilterBar, ORDER_METHOD, ORDER_STATUS, Pager, pageOf, param } from "./ui";
+import { getTz } from "@/lib/tz-server";
 
 const PAGE_SIZE = 30;
 const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
@@ -35,6 +36,7 @@ const planName = (id: string | null) => (id ? (site.plans.find((p) => p.id === i
 
 // 全部订单：搜订单号 / 客人 / 订阅 / 付款人，按状态、怎么付、套餐、下单日期筛，翻页；顶上汇总筛出来的单
 export default async function OrdersTable({ sp }: { sp: Record<string, string | string[] | undefined> }) {
+  const tz = await getTz();
   const q = param(sp, "q");
   const status = param(sp, "status") in ORDER_STATUS ? param(sp, "status") : "";
   const method = param(sp, "method") in ORDER_METHOD ? param(sp, "method") : "";
@@ -165,7 +167,7 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
               return (
                 <tr key={o.id} className="hover" data-testid="order-row">
                   <td className="font-mono whitespace-nowrap">{formatOrderNo(o.no)}</td>
-                  <td className="whitespace-nowrap text-base-content/70">{formatExpire(o.created_at)}</td>
+                  <td className="whitespace-nowrap text-base-content/70">{formatExpire(o.created_at, "zh", tz)}</td>
                   <td>
                     <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} />
                   </td>

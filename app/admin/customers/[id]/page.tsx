@@ -11,6 +11,7 @@ import CustomerActions, { DeleteCustomer } from "./CustomerActions";
 import { CustomerLink, SubLink } from "../../Links";
 import { ORDER_METHOD, ORDER_STATUS } from "../../ui";
 import BindButton from "../../BindButton";
+import { getTz } from "@/lib/tz-server";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ const KIND: Record<string, string> = { referral_reward: "推荐奖励", purchase
 
 export default async function CustomerPage({ params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdmin();
+  const tz = await getTz();
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
   const c = await db()
@@ -92,7 +94,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   const info: [string, React.ReactNode][] = [
     ["邮箱", c.email],
     ["微信号", c.wechat ?? <span className="text-base-content/50">没填（老账号）</span>],
-    ["注册", formatExpire(c.created_at)],
+    ["注册", formatExpire(c.created_at, "zh", tz)],
     ["推荐码", <span className="font-mono">{c.referral_code}</span>],
     ["推荐人", c.referrer_id ? <CustomerLink id={c.referrer_id} email={c.referrer ?? ""} /> : "无"],
   ];
@@ -108,7 +110,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
         <h1 className="text-2xl font-bold">
           {c.wechat ?? c.email}
           {c.wechat && <span className="ml-2 align-middle text-sm font-normal text-base-content/60">{c.email}</span>}
-          {c.deleted_at && <span className="badge badge-error badge-soft ml-2 align-middle">已删除 {formatExpire(c.deleted_at)}</span>}
+          {c.deleted_at && <span className="badge badge-error badge-soft ml-2 align-middle">已删除 {formatExpire(c.deleted_at, "zh", tz)}</span>}
         </h1>
         <div className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
           {info.map(([k, v]) => (
@@ -178,7 +180,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                 <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <div className="text-xs text-base-content/60">到期</div>
-                    <div>{formatExpire(user.expire)}</div>
+                    <div>{formatExpire(user.expire, "zh", tz)}</div>
                     {left && <div className={`text-xs ${left.urgent ? "text-error" : "text-base-content/60"}`}>{left.text}</div>}
                   </div>
                   <div>
@@ -242,7 +244,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                   <td>
                     <span className={`badge badge-sm ${ORDER_STATUS[o.status]?.badge ?? "badge-ghost"}`}>{ORDER_STATUS[o.status]?.text ?? o.status}</span>
                   </td>
-                  <td className="whitespace-nowrap text-base-content/60">{formatExpire(o.paid_at ?? o.created_at)}</td>
+                  <td className="whitespace-nowrap text-base-content/60">{formatExpire(o.paid_at ?? o.created_at, "zh", tz)}</td>
                 </tr>
               ))}
             </tbody>
@@ -268,7 +270,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                     {e.amount >= 0 ? "+" : "-"}
                     {money(Math.abs(e.amount))}
                   </td>
-                  <td className="whitespace-nowrap text-base-content/60">{formatExpire(e.created_at)}</td>
+                  <td className="whitespace-nowrap text-base-content/60">{formatExpire(e.created_at, "zh", tz)}</td>
                 </tr>
               ))}
             </tbody>
@@ -291,7 +293,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                   <td className="text-right">
                     已给这位客人返 <b className="text-success">{money(r.earned)}</b>
                   </td>
-                  <td className="whitespace-nowrap text-base-content/60">{formatDate(r.created_at)} 注册</td>
+                  <td className="whitespace-nowrap text-base-content/60">{formatDate(r.created_at, "zh", tz)} 注册</td>
                 </tr>
               ))}
             </tbody>

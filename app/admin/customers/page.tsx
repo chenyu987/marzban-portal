@@ -6,6 +6,7 @@ import AdminHeader from "../AdminHeader";
 import { CustomerLink, SubLink } from "../Links";
 import BindButton from "../BindButton";
 import { FilterBar, Pager, pageOf, param } from "../ui";
+import { getTz } from "@/lib/tz-server";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ const HAS: Record<string, { label: string; sql: string }> = {
 // 下面是还没注册网站账号的老客人（按微信号对上他们的老订阅）
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = await requireAdmin();
+  const tz = await getTz();
   const sp = await searchParams;
   const query = param(sp, "q");
   const has = param(sp, "has") in HAS ? param(sp, "has") : "";
@@ -141,7 +143,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                     <td className="text-right">{money(c.balance)}</td>
                     <td className="text-right">{money(c.paid)}</td>
                     <td>{c.referrer_id ? <CustomerLink id={c.referrer_id} email={c.referrer ?? ""} /> : <span className="text-base-content/40">-</span>}</td>
-                    <td className="whitespace-nowrap text-base-content/60">{formatDate(c.created_at)}</td>
+                    <td className="whitespace-nowrap text-base-content/60">{formatDate(c.created_at, "zh", tz)}</td>
                   </tr>
                 );
               })}

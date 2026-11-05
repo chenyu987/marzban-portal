@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { db } from "@/lib/env";
 import { requireCustomer } from "@/lib/session";
-import { findUser, type MarzbanUser } from "@/lib/marzban";
-import { sortSubs, formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, canRenewEarly, isExpiredSub, needsRenewal, resetLabel, statusLabel, timeLeft } from "@/lib/format";
+import { findUser, userUsage, type MarzbanUser } from "@/lib/marzban";
+import { monthStartBeijing } from "@/lib/admin-users";
+import { latestPeak, peakRingPct } from "@/lib/usage-peak";
+import { daysRingPct, unlimitedRingPct, sortSubs, formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, canRenewEarly, isExpiredSub, needsRenewal, resetLabel, statusLabel, timeLeft } from "@/lib/format";
 import { AVAILABLE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
 import { site } from "@/site.config";
 import { describePlan, findPlan } from "@/lib/plans";
@@ -21,11 +23,15 @@ import { getT } from "@/lib/lang";
 import { makeT, pick, type Lang } from "@/lib/i18n";
 import { groupName, planName } from "@/lib/plan-text";
 import { withCodeDays } from "@/lib/redeem-codes";
+import { getTz } from "@/lib/tz-server";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ renewed?: string; opened?: string; days?: string }> }) {
   const customer = await requireCustomer();
+  const tz = await getTz();
+  // 上个月用得最多的那个订阅用了多少：不限流量的圆环按它当满圈，没算出来时按对数刻度画
+  const peak = await latestPeak().catch(() => null);
   const { renewed, opened, days: openedDays } = await searchParams;
   // 兑换码新开了订阅跳过来：标出是什么套餐（码上改过天数的按码上的天数叫，比如「高速版 10天体验」）
   const openedBase = opened ? findPlan(site.plans, opened) : undefined;
@@ -71,9 +77,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     results.map(async ({ marzban_username, code, hidden_at }) => {
       try {
         const user = await findUser(marzban_username);
-        return { username: marzban_username, code, hiddenAt: hidden_at, user, gone: !user };
+        // 不限流量的：查本月（北京时间 1 号起）用了多少，画在流量圆环里；查不到就用 Marzban 记的已用流量
+        const monthUsed =
+          user && !user.data_limit
+            ? await userUsage(marzban_username, monthStartBeijing(now), new Date(now))
+                .then((r) => r.usages.reduce((n, u) => n + u.used_traffic, 0))
+                .catch(() => null)
+            : null;
+        return { username: marzban_username, code, hiddenAt: hidden_at, user, gone: !user, monthUsed };
       } catch {
-        return { username: marzban_username, code, hiddenAt: hidden_at, user: null, gone: false };
+        return { username: marzban_username, code, hiddenAt: hidden_at, user: null, gone: false, monthUsed: null };
       }
     }),
   );
@@ -163,9 +176,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </div>
           </div>
         )}
-        {subs.map(({ username, code, user, gone }) =>
+        {subs.map(({ username, code, user, gone, monthUsed }) =>
           user ? (
-            <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} lang={lang} app={app} />
+            <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} lang={lang} app={app} tz={tz} monthUsed={monthUsed} peak={peak} />
           ) : gone ? (
             <GoneCard key={username} username={username} code={code} planId={planOf.get(username)} lang={lang} />
           ) : (
@@ -181,11 +194,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           referrals={referred.map((r) => ({
             id: r.id,
             name: friend(r),
-            createdAt: formatDate(r.created_at, lang),
+            createdAt: formatDate(r.created_at, lang, tz),
             earned: money(r.earned),
             rewards: rewards
               .filter((w) => w.friend_id === r.id)
-              .map((w) => ({ date: formatDate(w.created_at, lang), paid: money(w.paid), reward: money(w.reward) })),
+              .map((w) => ({ date: formatDate(w.created_at, lang, tz), paid: money(w.paid), reward: money(w.reward) })),
           }))}
           balance={money(balance?.balance ?? 0)}
           reserved={balance?.reserved ? money(balance.reserved) : null}
@@ -239,7 +252,7 @@ function SubscriptionId({ code, lang }: { code: string | null; lang: Lang }) {
   );
 }
 
-function SubscriptionCard({ user, code, planId, lang, app }: { user: MarzbanUser; code: string | null; planId?: string; lang: Lang; app: ImportApp }) {
+function SubscriptionCard({ user, code, planId, lang, app, tz, monthUsed, peak }: { user: MarzbanUser; code: string | null; planId?: string; lang: Lang; app: ImportApp; tz: string; monthUsed: number | null; peak: number | null }) {
   const t = makeT(lang);
   const { title, subtitle } = planHeading(planId, lang);
   const status = statusLabel(user.status, lang);
@@ -247,13 +260,15 @@ function SubscriptionCard({ user, code, planId, lang, app }: { user: MarzbanUser
   const expired = !!user.expire && user.expire * 1000 <= Date.now();
   const reset = user.data_limit ? resetLabel(user.data_limit_reset_strategy ?? "", lang) : undefined;
   const pct = user.data_limit ? Math.min(100, (user.used_traffic / user.data_limit) * 100) : null;
+  // 不限流量：本月已用是上个月最高那位的百分之几，只用来画弧（只按本月用量比，查不到本月用量就不比）
+  const vsPeak = !user.data_limit && peak && monthUsed !== null ? peakRingPct(monthUsed, peak) : null;
   // 剩余天数和这期套餐的总天数（不知道套餐就按 30 天画环）
   const daysLeft = user.expire ? Math.max(0, Math.ceil((user.expire * 1000 - Date.now()) / 86400_000)) : null;
   const plan = planId ? findPlan(site.plans, planId) : undefined;
   const period = plan?.days ?? 30;
   // 免费体验前几天不放续费按钮，最后 3 天的黄色提醒和到期后的红色提示照常
   const trial = !!plan?.codeOnly && plan.price === 0;
-  const daysPct = daysLeft === null ? 100 : Math.min(100, (daysLeft / period) * 100);
+  const daysPct = daysRingPct(daysLeft, period);
   // 买了还没连过（没有上线时间、也没用过流量）：多半是还不会装 App，卡片最上面放「下一步」引导，连上过一次就不再显示
   const neverUsed = !expired && !user.online_at && !(user.lifetime_used_traffic ?? user.used_traffic);
 
@@ -279,20 +294,38 @@ function SubscriptionCard({ user, code, planId, lang, app }: { user: MarzbanUser
             </Ring>
             <div className="min-w-0">
               <div className="text-sm text-base-content/60">{t("到期时间", "Expires")}</div>
-              <div className="font-medium">{formatExpire(user.expire, lang)}</div>
+              <div className="font-medium">{formatExpire(user.expire, lang, tz)}</div>
               {left && <div className={`text-sm ${left.urgent ? "text-error" : "text-base-content/60"}`}>{left.text}</div>}
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Ring pct={pct ?? 0} tone={pct !== null && pct >= 90 ? "text-error" : "text-secondary"}>
-              <span className="text-sm leading-none font-bold">{pct === null ? "∞" : `${Math.round(pct)}%`}</span>
-              <span className="text-[10px] text-base-content/60">{pct === null ? t("不限", "unlimited") : t("已用", "used")}</span>
-            </Ring>
+            {/* 有上限：按已用比例画。不限流量：圈里写本月用了多少，弧按「本月已用 ÷ 上个月用得最多那位」画
+                （只画弧，不写比例、不说基准是什么）；还没算出上个月最高时按对数刻度（unlimitedRingPct） */}
+            {pct !== null ? (
+              <Ring pct={pct} tone={pct >= 90 ? "text-error" : "text-secondary"}>
+                <span className="text-sm leading-none font-bold">{`${Math.round(pct)}%`}</span>
+                <span className="text-[10px] text-base-content/60">{t("已用", "used")}</span>
+              </Ring>
+            ) : (
+              <Ring pct={vsPeak ?? unlimitedRingPct(monthUsed ?? user.used_traffic)} tone="text-secondary">
+                <span className="text-xs leading-none font-bold tabular-nums">{formatBytes(monthUsed ?? user.used_traffic).replace(" ", "")}</span>
+                <span className="text-[10px] text-base-content/60">{monthUsed !== null ? t("本月", "this month") : t("已用", "used")}</span>
+              </Ring>
+            )}
             <div className="min-w-0">
               <div className="text-sm text-base-content/60">{t("流量", "Data")}</div>
-              <div className="font-medium">
-                {formatBytes(user.used_traffic)} / {user.data_limit ? formatBytes(user.data_limit) : t("不限", "Unlimited")}
-              </div>
+              {user.data_limit ? (
+                <div className="font-medium">
+                  {formatBytes(user.used_traffic)} / {formatBytes(user.data_limit)}
+                </div>
+              ) : (
+                <>
+                  <div className="font-medium">{t("不限流量", "Unlimited")}</div>
+                  <div className="text-sm text-base-content/60">
+                    {monthUsed !== null ? t(`本月已用 ${formatBytes(monthUsed)}`, `${formatBytes(monthUsed)} used this month`) : t(`已用 ${formatBytes(user.used_traffic)}`, `${formatBytes(user.used_traffic)} used`)}
+                  </div>
+                </>
+              )}
               {reset && <div className="text-sm text-base-content/60">{reset}</div>}
             </div>
           </div>
@@ -350,13 +383,13 @@ function SubscriptionCard({ user, code, planId, lang, app }: { user: MarzbanUser
 function Ring({ pct, tone, children }: { pct: number; tone: string; children: React.ReactNode }) {
   return (
     <div
-      className={`radial-progress shrink-0 ${tone}`}
+      className={`radial-progress relative shrink-0 ${tone}`}
       // 底下画一圈浅色轨道，不然只有进度那一段弧
       style={{ "--value": Math.round(pct), "--size": "4.25rem", "--thickness": "6px", boxShadow: "inset 0 0 0 6px var(--color-base-300)" } as React.CSSProperties}
       role="progressbar"
       aria-valuenow={Math.round(pct)}
     >
-      <span className="flex flex-col items-center text-base-content">{children}</span>
+      <span className="relative flex flex-col items-center text-base-content">{children}</span>
     </div>
   );
 }

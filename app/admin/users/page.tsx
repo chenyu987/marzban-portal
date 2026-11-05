@@ -10,12 +10,14 @@ import { findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
 import BulkActions from "./BulkActions";
 import PageSize from "./PageSize";
+import { getTz } from "@/lib/tz-server";
 
 export const dynamic = "force-dynamic";
 
 // Marzban 用户列表：直接查 Marzban，和面板是同一份数据。能按用户名、备注搜，按状态筛，排序，翻页
 export default async function UsersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = await requireAdmin();
+  const tz = await getTz();
   const sp = await searchParams;
   const str = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string).trim() : "");
   const q = str("q");
@@ -200,8 +202,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                     <td>
                       <span className={`badge badge-sm ${st.badge}`}>{st.text}</span>
                     </td>
-                    <td className="whitespace-nowrap" title={u.expire && prefs.time === "relative" ? formatExpire(u.expire) : undefined}>
-                      {prefs.time === "absolute" ? formatExpire(u.expire) : expireRelative(u.expire, now)}
+                    <td className="whitespace-nowrap" title={u.expire && prefs.time === "relative" ? formatExpire(u.expire, "zh", tz) : undefined}>
+                      {prefs.time === "absolute" ? formatExpire(u.expire, "zh", tz) : expireRelative(u.expire, now)}
                     </td>
                     <td className="whitespace-nowrap">
                       {formatBytes(u.used_traffic)} / {u.data_limit ? formatBytes(u.data_limit) : "不限"}

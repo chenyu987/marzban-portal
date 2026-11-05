@@ -10,6 +10,7 @@ import { Tabs } from "./ui";
 import { CustomerLink, SubLink } from "./Links";
 import OrderActions from "./OrderActions";
 import VerifyActions from "./VerifyActions";
+import { getTz } from "@/lib/tz-server";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,7 @@ const sub = (o: Row) => (o.marzban_username ? <SubLink username={o.marzban_usern
 
 export default async function AdminHome({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = await requireAdmin();
+  const tz = await getTz();
   const sp = await searchParams;
   const view = sp.view === "all" ? "all" : "todo";
   // 开通中的（出过问题，要核对）排最前，然后是客人说已付的（按点的时间），最后是还没付的
@@ -149,7 +151,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
                   {who(o)}｜{planName(o.plan_id)}｜{o.marzban_username ? <>续期 {sub(o)}</> : "新开订阅"}
                 </div>
                 <div className="text-sm">
-                  应收 <b>{due(o)}</b>，{formatExpire(o.created_at)} 下单
+                  应收 <b>{due(o)}</b>，{formatExpire(o.created_at, "zh", tz)} 下单
                 </div>
                 {stuck ? (
                   <p className="text-sm text-error">

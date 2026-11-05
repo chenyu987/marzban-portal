@@ -387,6 +387,16 @@ test("邀请朋友：每个朋友一行，写一共返了多少，点开看每�
   await expect(row).toContainText("付款 ¥45.00");
   await expect(row).toContainText("+¥4.50");
   await expect(row).toContainText("付款 ¥35.00");
+
+  // 转账单：朋友点了「我已付款」（已开通、还没对账）不返；管理员确认到账后才返
+  sql(`INSERT INTO orders (customer_id, amount, method, status, paid_at, created_at) VALUES (${fid}, 10000, 'transfer', 'paid', 1793720000, 1793720000)`);
+  const transferId = query(`SELECT id FROM orders WHERE customer_id = ${fid} AND method = 'transfer' ORDER BY id DESC LIMIT 1`)[0].id;
+  expect(query(`SELECT COUNT(*) AS n FROM balance_entries WHERE order_id = ${transferId} AND kind = 'referral_reward'`)[0].n).toBe(0);
+  await me.reload();
+  await expect(row.locator("summary")).toContainText("+¥8.00");
+  sql(`UPDATE orders SET verified_at = 1793730000 WHERE id = ${transferId}`);
+  await me.reload();
+  await expect(row.locator("summary")).toContainText("+¥18.00");
 });
 
 test("管理员删除客人：名下订阅从 Marzban 删掉，账号注销，记录留着，同一个邮箱能重新注册", async ({ page, browser }) => {
@@ -625,10 +635,10 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await setMockExpire(username, Math.floor(Date.now() / 1000) + 2 * 86400);
   await page.reload();
   await expect(page.getByText(/这个订阅还剩 .*到期，记得续费/)).toBeVisible();
-  // 每天的到期提醒：还剩 2 天发「3 天」那封；再跑一次不会重复发
+  // 每天的到期提醒：还剩 2 天发「2 天」那封；再跑一次不会重复发
   const notices = () => query(`SELECT days FROM expiry_notices WHERE marzban_username = '${username}'`);
   expect((await page.request.post("/api/cron/expiry")).ok()).toBe(true);
-  expect(notices()).toEqual([{ days: 3 }]);
+  expect(notices()).toEqual([{ days: 2 }]);
   await page.request.post("/api/cron/expiry");
   expect(notices()).toHaveLength(1);
   // 每 5 分钟的节点掉线检查能跑（判断逻辑在 lib/node-alerts.test.ts；节点状态别的测试会改，这里不对具体节点断言）
@@ -827,7 +837,7 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   // 兑换成功直接跳到「我的订阅」，顶上写续期成功
   await expect(page).toHaveURL(/\/dashboard\?renewed=1/);
   await expect(page.getByTestId("renewed")).toContainText("续期成功");
-  await expect(page.getByText(/刷新（更新）一下订阅/)).toBeVisible();
+  await expect(page.getByText(/打开客户端点击刷新按钮/)).toBeVisible();
 
   // 免费体验：价目表上没有，只能用兑换码开；开出来的订阅标「（体验）」
   await page.goto("/plans");

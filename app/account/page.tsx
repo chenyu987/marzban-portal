@@ -6,6 +6,8 @@ import ThemeSwitch from "../ThemeSwitch";
 import { cookies } from "next/headers";
 import { THEME_COOKIE, parseTheme } from "@/lib/theme";
 import { getT } from "@/lib/lang";
+import TzSwitch from "../TzSwitch";
+import { DEFAULT_TZ, TZ_AUTO, TZ_AUTO_COOKIE, TZ_COOKIE } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +15,10 @@ export const dynamic = "force-dynamic";
 export default async function AccountPage() {
   const customer = await requireCustomer();
   const { t } = await getT();
-  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
+  const jar = await cookies();
+  const theme = parseTheme(jar.get(THEME_COOKIE)?.value);
+  const tzChosen = jar.get(TZ_COOKIE)?.value ?? TZ_AUTO;
+  const tzDevice = jar.get(TZ_AUTO_COOKIE)?.value ?? DEFAULT_TZ;
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16">
       <CustomerNav />
@@ -39,8 +44,8 @@ export default async function AccountPage() {
         <Section
           title={t("到期提醒", "Expiry reminders")}
           desc={t(
-            "月付到期前 3 天和当天各发一封；季付、半年、一年到期前 7 天、3 天和当天各发一封。",
-            "Monthly plans: 3 days before and on the day. Quarterly, 6-month and yearly plans: 7 days, 3 days before and on the day.",
+            "月付到期前 2 天和当天各发一封；季付、半年、一年到期前 7 天、2 天和当天各发一封。",
+            "Monthly plans: 2 days before and on the day. Quarterly, 6-month and yearly plans: 7 days, 2 days before and on the day.",
           )}
         >
           <PrefsForm notify={!!customer.notify_expiry} />
@@ -49,6 +54,9 @@ export default async function AccountPage() {
           <div data-testid="account-theme">
             <ThemeSwitch current={theme} />
           </div>
+        </Section>
+        <Section title={t("时区", "Time zone")} desc={t("到期时间、下单时间这些按哪个时区显示。只对这台设备生效。", "Which time zone to show expiry and order times in. Applies to this device only.")}>
+          <TzSwitch chosen={decodeURIComponent(tzChosen)} device={decodeURIComponent(tzDevice)} />
         </Section>
         <Section title={t("语言", "Language")} desc={t("网站和提醒邮件用的语言。", "Used for the website and reminder emails.")}>
           <div data-testid="account-lang">

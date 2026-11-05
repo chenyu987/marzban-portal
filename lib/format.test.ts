@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatDate, formatExpire, isExpiredSub, formatMoney, maskEmail, formatRedeemCode, canRenewEarly, needsRenewal, sortSubs, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft, formatOrderNo, parseOrderNo } from "./format";
+import { formatBytes, formatDate, formatExpire, isExpiredSub, formatMoney, maskEmail, formatRedeemCode, canRenewEarly, needsRenewal, sortSubs, daysRingPct, unlimitedRingPct, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft, formatOrderNo, parseOrderNo } from "./format";
 import { hashPassword, verifyPassword } from "./password";
 
 describe("parseSubToken", () => {
@@ -58,6 +58,25 @@ describe("到期时间", () => {
     expect(needsRenewal(-86400, 0)).toBe(true);
     expect(needsRenewal(null, 0)).toBe(false);
   });
+  it("unlimitedRingPct：用得越多弧越长，越往后长得越慢，最多 95%", () => {
+    const GB = 1024 ** 3;
+    expect(unlimitedRingPct(0)).toBe(0);
+    expect(unlimitedRingPct(0.84 * GB)).toBeGreaterThan(10);
+    expect(unlimitedRingPct(0.84 * GB)).toBeLessThan(15);
+    expect(unlimitedRingPct(10 * GB)).toBeLessThan(50);
+    expect(unlimitedRingPct(10 * GB)).toBeGreaterThan(unlimitedRingPct(1 * GB));
+    expect(unlimitedRingPct(5000 * GB)).toBe(95);
+  });
+
+  it("daysRingPct：按这期的天数算比例；续过好几期的按整数倍算，不会一直是满的", () => {
+    expect(daysRingPct(30, 30)).toBe(100);
+    expect(daysRingPct(15, 30)).toBe(50);
+    expect(daysRingPct(59, 30)).toBeCloseTo(98.3, 1);
+    expect(daysRingPct(45, 30)).toBe(75);
+    expect(daysRingPct(0, 30)).toBe(0);
+    expect(daysRingPct(null, 30)).toBe(100);
+  });
+
   it("sortSubs：能用的在上，然后查不到的、过期的、删掉的；同一类保持原顺序", () => {
     const now = 1000 * 1000;
     const ok = (n: string) => ({ n, user: { status: "active", expire: 2000 }, gone: false });

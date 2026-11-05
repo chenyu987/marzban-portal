@@ -13,6 +13,7 @@ import CustomerNav from "../CustomerNav";
 import { getT } from "@/lib/lang";
 import { pick } from "@/lib/i18n";
 import { periodLabel, planName } from "@/lib/plan-text";
+import { getTz } from "@/lib/tz-server";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ const price = (fen: number) => `${site.currency}${formatMoney(fen).replace(/\.00
 // ?new=1：从过期 / 删掉的订阅卡片上的「新开一个」过来，默认选好「新开一个订阅」
 export default async function PlansPage({ searchParams }: { searchParams: Promise<{ renew?: string | string[]; new?: string }> }) {
   const customer = await requireCustomer();
+  const tz = await getTz();
   const { renew, new: wantNew } = await searchParams;
   const { t, p: tx, lang } = await getT();
   const [{ results: subs }, { results: open }, balanceRow] = await Promise.all([
@@ -116,9 +118,9 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
                       return t(`给订阅 ${label} 续期`, `renew subscription ${label}`);
                     })()
                   : t("新开订阅", "new subscription"),
-                createdAt: formatDate(o.created_at, lang),
+                createdAt: formatDate(o.created_at, lang, tz),
                 processing: o.status === "processing",
-                claimedAt: o.claimed_at === null ? null : formatExpire(o.claimed_at, lang),
+                claimedAt: o.claimed_at === null ? null : formatExpire(o.claimed_at, lang, tz),
               }}
             />
           ))}

@@ -9,6 +9,7 @@ import AdminHeader from "../AdminHeader";
 import { CreateCodes, VoidCode } from "./CodeForms";
 import { CustomerLink } from "../Links";
 import { FilterBar, Pager, pageOf, param } from "../ui";
+import { getTz } from "@/lib/tz-server";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ const like = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 // 兑换码：生成；按状态（没用过 / 已用 / 卡住）、套餐、码 / 备注 / 客人搜；作废没用过的
 export default async function CodesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = await requireAdmin();
+  const tz = await getTz();
   const sp = await searchParams;
   // 兼容以前的 ?unused=1
   const state = param(sp, "unused") === "1" ? "unused" : param(sp, "state") in STATES ? param(sp, "state") : "";
@@ -141,7 +143,7 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
                     ) : (
                       <span className="flex flex-wrap items-center gap-1 text-sm">
                         {r.email ? <CustomerLink id={r.used_by} email={r.email} wechat={r.wechat} /> : `客人 ${r.used_by}`}
-                        <span className="text-base-content/60">{formatExpire(r.used_at)} 用的</span>
+                        <span className="text-base-content/60">{formatExpire(r.used_at, "zh", tz)} 用的</span>
                         {r.order_id === null ? (
                           <span className="text-base-content/60">（免费体验，不记订单）</span>
                         ) : (
@@ -155,7 +157,7 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
                       </span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap text-base-content/60">{formatExpire(r.created_at)}</td>
+                  <td className="whitespace-nowrap text-base-content/60">{formatExpire(r.created_at, "zh", tz)}</td>
                 </tr>
               );
             })}

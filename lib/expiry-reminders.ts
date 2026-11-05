@@ -5,9 +5,9 @@ import { db } from "./env";
 import { getUser } from "./marzban";
 import { canSendMail, sendMail } from "./mail";
 import { findPlan } from "./plans";
-import { dueNotice } from "./expiry-notice";
-import { formatExpire, formatSubCode } from "./format";
-import { makeT, parseLang } from "./i18n";
+import { daysLeft, dueNotice } from "./expiry-notice";
+import { parseLang } from "./i18n";
+import { reminderMail } from "./expiry-mail";
 import { groupName } from "./plan-text";
 import { site } from "@/site.config";
 
@@ -46,7 +46,7 @@ export async function runExpiryReminders(now: number): Promise<{ checked: number
       .bind(r.marzban_username, user.expire, days, now)
       .run();
     if (claim.meta.changes !== 1) continue;
-    const mail = reminderMail(r, plan ? groupName(plan.group ?? plan.name, parseLang(r.lang)) : null, user.expire, days, now);
+    const mail = reminderMail(r, plan ? groupName(plan.group ?? plan.name, parseLang(r.lang)) : null, user.expire, daysLeft(user.expire, now), now);
     if (await sendMail(r.email, mail.subject, mail.text)) {
       sent++;
     } else {
@@ -58,27 +58,4 @@ export async function runExpiryReminders(now: number): Promise<{ checked: number
     }
   }
   return { checked: results.length, sent, failed };
-}
-
-function reminderMail(r: Row, planName: string | null, expire: number, days: number, now: number) {
-  const lang = parseLang(r.lang);
-  const t = makeT(lang);
-  const sub = formatSubCode(r.code);
-  const what = planName ? t(`${planName}（订阅编号 ${sub}）`, `${planName} (subscription ${sub})`) : t(`订阅 ${sub}`, `Subscription ${sub}`);
-  const when = formatExpire(expire, lang);
-  const link = new URL(`/plans?renew=${encodeURIComponent(r.marzban_username)}`, site.siteUrl).toString();
-  const expired = expire <= now;
-  const subject = expired
-    ? t(`${site.brand} 订阅已到期`, `Your ${site.brand} subscription has expired`)
-    : days === 0
-      ? t(`${site.brand} 订阅今天到期`, `Your ${site.brand} subscription expires today`)
-      : t(`${site.brand} 订阅 ${days} 天后到期`, `Your ${site.brand} subscription expires in ${days} days`);
-  const head = expired
-    ? t(`你的 ${what} 已经在 ${when} 到期了，续费后马上恢复，不用重新导入。`, `Your ${what} expired on ${when}. Renew to restore it right away; no need to import again.`)
-    : t(`你的 ${what} 将在 ${when}（北京时间）到期。`, `Your ${what} expires on ${when} (Beijing time).`);
-  const text = t(
-    `你好，\n\n${head}\n\n续费：${link}\n续上的天数接着原来的到期时间往后加，不会浪费。\n\n不想收到这类提醒，可以在网站「账户」页关掉。`,
-    `Hi,\n\n${head}\n\nRenew: ${link}\nThe new days are added after your current expiry date, so nothing is wasted.\n\nTo stop these reminders, turn them off on the Account page.`,
-  );
-  return { subject, text };
 }

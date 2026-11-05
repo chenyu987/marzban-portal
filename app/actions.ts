@@ -29,6 +29,7 @@ export type FormState = { error?: string; ok?: string; email?: string; ref?: str
 
 import { emailError, passwordError, wechatError } from "@/lib/account";
 import { claimByWechat, followWechatChange } from "@/lib/claim";
+import { mailGreeting, mailSupportLine } from "@/lib/mail-text";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function register(_: FormState, form: FormData): Promise<FormState> {
@@ -451,8 +452,8 @@ export async function requestReset(_: FormState, form: FormData): Promise<FormSt
     email,
     t(`${site.brand} 重置密码`, `Reset your ${site.brand} password`),
     t(
-      `你好，\n\n有人（希望是你）申请重置 ${site.brand} 账号 ${email} 的密码。打开下面的链接设置新密码，1 小时内有效，只能用一次：\n\n${link}\n\n如果不是你申请的，不用理会这封邮件，密码不会改变。`,
-      `Hi,\n\nSomeone (hopefully you) asked to reset the password for the ${site.brand} account ${email}. Open the link below to set a new password. It's valid for 1 hour and works only once:\n\n${link}\n\nIf you didn't ask for this, you can ignore this email. Your password won't change.`,
+      `${mailGreeting(t)}\n\n有人（希望是你）申请重置 ${site.brand} 账号 ${email} 的密码。打开下面的链接设置新密码，1 小时内有效，只能用一次：\n\n${link}\n\n如果不是你申请的，不用理会这封邮件，密码不会改变。${mailSupportLine(t) && `\n\n${mailSupportLine(t)}`}`,
+      `${mailGreeting(t)}\n\nSomeone (hopefully you) asked to reset the password for the ${site.brand} account ${email}. Open the link below to set a new password. It's valid for 1 hour and works only once:\n\n${link}\n\nIf you didn't ask for this, you can ignore this email. Your password won't change.${mailSupportLine(t) && `\n\n${mailSupportLine(t)}`}`,
     ),
   );
   if (!sent) return { error: t("邮件没发出去，请稍后再试，或者联系客服帮你重置", "The email couldn't be sent. Please try again later, or contact support to reset it"), email, support: true };

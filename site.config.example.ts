@@ -27,6 +27,8 @@ export type SiteConfig = {
   brand: string;
   // 一键导入后客户端里这条订阅叫什么（比如写网址，客人一看就知道去哪续费）。不填用 brand
   importName?: string;
+  // 发给客人的邮件开头怎么称呼：「尊敬的 X 用户」。不填用 brand
+  mailGreetingName?: string;
   // portal 的网址，重置密码的链接用它来拼（不用请求里的 Host，防止被伪造）。换域名时记得改
   siteUrl: string;
   description: Text;

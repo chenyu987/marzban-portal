@@ -9,6 +9,9 @@ import { THEME_COOKIE, parseTheme } from "@/lib/theme";
 import AdminHeader from "../AdminHeader";
 import ThemeSwitch from "../../ThemeSwitch";
 import { AdminPasswordForm, LogoutSessionsButton, PrefsForm } from "./Forms";
+import TzSwitch from "../../TzSwitch";
+import { DEFAULT_TZ, TZ_AUTO, TZ_AUTO_COOKIE, TZ_COOKIE } from "@/lib/timezone";
+import { getTz } from "@/lib/tz-server";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +45,11 @@ export default async function AdminAccountPage() {
       .all<{ id: number; action: string; target: string | null; detail: string | null; created_at: number }>(),
     adminPrefs(admin.id),
   ]);
-  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
+  const jar = await cookies();
+  const theme = parseTheme(jar.get(THEME_COOKIE)?.value);
+  const tzChosen = decodeURIComponent(jar.get(TZ_COOKIE)?.value ?? TZ_AUTO);
+  const tzDevice = decodeURIComponent(jar.get(TZ_AUTO_COOKIE)?.value ?? DEFAULT_TZ);
+  const tz = await getTz();
   const others = sessions.filter((s) => s.id !== admin.sid).length;
 
   return (
@@ -66,8 +73,8 @@ export default async function AdminAccountPage() {
           <dl className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm sm:text-right">
             <dt className="text-xs text-base-content/50">账号创建</dt>
             <dt className="text-xs text-base-content/50">这次登录</dt>
-            <dd className="tabular-nums">{me ? formatDate(me.created_at) : "-"}</dd>
-            <dd className="tabular-nums">{me?.last_login_at ? formatExpire(me.last_login_at) : "-"}</dd>
+            <dd className="tabular-nums">{me ? formatDate(me.created_at, "zh", tz) : "-"}</dd>
+            <dd className="tabular-nums">{me?.last_login_at ? formatExpire(me.last_login_at, "zh", tz) : "-"}</dd>
           </dl>
         </div>
       </section>
@@ -77,6 +84,10 @@ export default async function AdminAccountPage() {
           <div data-testid="admin-theme">
             <ThemeSwitch current={theme} />
           </div>
+        </Section>
+
+        <Section title="时区" desc="后台页面上的时间（下单、到期、日志）按哪个时区显示，只对这台设备生效。填到期时间的输入框和「本月」统计照旧按北京时间。" testid="admin-tz">
+          <TzSwitch chosen={tzChosen} device={tzDevice} />
         </Section>
 
         <Section title="后台偏好" desc="订阅列表打开时默认怎么显示。网址里带了条件的话，以网址为准。" testid="admin-prefs">
@@ -93,7 +104,7 @@ export default async function AdminAccountPage() {
                     {s.id === admin.sid && <span className="badge badge-soft badge-success badge-sm ml-2">这台设备</span>}
                   </div>
                   <div className="text-xs text-base-content/60">
-                    登录于 {formatExpire(s.created_at)} · 最后活动 {formatExpire(s.last_seen_at ?? s.created_at)}
+                    登录于 {formatExpire(s.created_at, "zh", tz)} · 最后活动 {formatExpire(s.last_seen_at ?? s.created_at, "zh", tz)}
                     {s.ip && <> · IP {s.ip}</>}
                   </div>
                 </div>
@@ -115,7 +126,7 @@ export default async function AdminAccountPage() {
             <ul className="divide-y divide-base-300 text-sm">
               {logs.map((l) => (
                 <li key={l.id} className="flex flex-wrap gap-x-3 py-1.5">
-                  <span className="w-36 shrink-0 text-base-content/60">{formatExpire(l.created_at)}</span>
+                  <span className="w-36 shrink-0 text-base-content/60">{formatExpire(l.created_at, "zh", tz)}</span>
                   <span className="font-medium">{LOG_ACTIONS[l.action] ?? l.action}</span>
                   {l.target && <span>{l.target}</span>}
                   {l.detail && <span className="text-base-content/60">{l.detail}</span>}

@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useT } from "../LangContext";
+import { useLang, useT } from "../LangContext";
+import { useSite } from "../SiteContext";
+import { referralInvite } from "@/lib/referral-invite";
 
 // 每个朋友一行：谁、哪天加入、一共给你返了多少；点开看他每一笔付款返了多少（以前「已推荐」和「奖励明细」两张表，同一个人出现两次）
 export type Referral = { id: number; name: string; createdAt: string; earned: string; rewards: { date: string; paid: string; reward: string }[] };
@@ -12,13 +14,15 @@ type Props = { code: string; referrals: Referral[]; balance: string; reserved: s
 
 export default function ReferralCard({ code, referrals, balance, reserved, totalEarned }: Props) {
   const [link, setLink] = useState("");
-  const [copied, setCopied] = useState<"code" | "link" | null>(null);
+  const [copied, setCopied] = useState<"code" | "link" | "invite" | null>(null);
   const t = useT();
+  const lang = useLang();
+  const { brand } = useSite();
 
   useEffect(() => setLink(`${window.location.origin}/register?ref=${code}`), [code]);
 
-  async function copy(what: "code" | "link") {
-    await navigator.clipboard.writeText(what === "code" ? code : link);
+  async function copy(what: "code" | "link" | "invite") {
+    await navigator.clipboard.writeText(what === "code" ? code : what === "link" ? link : referralInvite(brand, link, code, lang));
     setCopied(what);
     setTimeout(() => setCopied(null), 2000);
   }
@@ -36,17 +40,27 @@ export default function ReferralCard({ code, referrals, balance, reserved, total
           <span className="badge badge-soft badge-success shrink-0 font-semibold">{t("返 10%", "10% back")}</span>
         </div>
 
-        {/* 推荐码：主操作是复制链接（朋友点开就填好了），推荐码给不方便点链接的人 */}
+        {/* 推荐码点一下就复制。主操作是「复制推荐邀请」：一整段话，带链接和从注册到用上的几步，直接发给朋友；只要链接的用「复制推荐链接」 */}
         <div className="rounded-box border border-dashed border-base-300 p-4">
           <div className="text-xs text-base-content/50">{t("我的推荐码", "My referral code")}</div>
           <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-            <code className="font-mono text-2xl font-bold tracking-[0.2em]">{code}</code>
+            <code
+              role="button"
+              tabIndex={0}
+              title={t("点击复制", "Click to copy")}
+              onClick={() => copy("code")}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), copy("code"))}
+              className="cursor-pointer font-mono text-2xl font-bold tracking-[0.2em]"
+              data-testid="referral-code"
+            >
+              {copied === "code" ? t("已复制 ✓", "Copied ✓") : code}
+            </code>
             <div className="flex gap-2">
-              <button type="button" onClick={() => copy("code")} className="btn btn-ghost btn-sm">
-                {copied === "code" ? t("已复制 ✓", "Copied ✓") : t("复制推荐码", "Copy code")}
-              </button>
-              <button type="button" onClick={() => copy("link")} className="btn btn-primary btn-sm" disabled={!link}>
+              <button type="button" onClick={() => copy("link")} className="btn btn-ghost btn-sm" disabled={!link}>
                 {copied === "link" ? t("已复制 ✓", "Copied ✓") : t("复制推荐链接", "Copy link")}
+              </button>
+              <button type="button" onClick={() => copy("invite")} className="btn btn-primary btn-sm" disabled={!link}>
+                {copied === "invite" ? t("已复制 ✓", "Copied ✓") : t("复制推荐邀请", "Copy invite")}
               </button>
             </div>
           </div>

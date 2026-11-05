@@ -15,10 +15,25 @@ export function formatBytes(n: number): string {
   return `${(n / 1024 ** 3).toFixed(n < 10 * 1024 ** 3 ? 2 : 1)} GB`;
 }
 
+// 不限流量的圆环画多少（0～100）：没有上限，按「用了多少」画一条慢慢变长的弧，让客人看得出在动。
+// 用对数刻度，200 GB 画到底、越往后长得越慢，普通人一个月只走一小段，不会看着像「快用完了」；最多画到 95%
+export function unlimitedRingPct(bytes: number): number {
+  const gb = Math.max(0, bytes) / 1024 ** 3;
+  return Math.min(95, (Math.log10(1 + gb) / Math.log10(1 + 200)) * 100);
+}
+
 // 到期时间按北京时间显示
 // 已经过期的订阅（客人可以在主页隐藏它）：Marzban 标成 expired，或者到期时间已经过了
 export function isExpiredSub(user: { status: string; expire: number | null }, nowMs: number): boolean {
   return user.status === "expired" || (!!user.expire && user.expire * 1000 <= nowMs);
+}
+
+// 剩余天数圆环画多少（0～100）。按「这期一共多少天」算比例，每过一天少一截。
+// 提前续过好几期的（月付续了一次，剩 59 天）按套餐天数的整数倍算一期（60 天），不然一直是满的、看不出在变少
+export function daysRingPct(daysLeft: number | null, periodDays: number): number {
+  if (daysLeft === null) return 100;
+  const total = Math.max(periodDays, Math.ceil(daysLeft / periodDays) * periodDays);
+  return Math.min(100, (daysLeft / total) * 100);
 }
 
 // 「我的订阅」上订阅的排法：能用的在最上面，然后是暂时查不到的，再是过期的，最后是 Marzban 上已经删掉的。
@@ -28,10 +43,11 @@ export function sortSubs<T extends { user: { status: string; expire: number | nu
   return subs.map((s, i) => ({ s, i })).sort((a, b) => rank(a.s) - rank(b.s) || a.i - b.i).map((x) => x.s);
 }
 
-export function formatExpire(expire: number | null, lang: Lang = "zh"): string {
+// tz：按哪个时区显示（页面上用 getTz() 拿客人 / 管理员选的；提醒邮件等不传，按北京时间）
+export function formatExpire(expire: number | null, lang: Lang = "zh", tz = "Asia/Shanghai"): string {
   if (!expire) return lang === "en" ? "Never" : "永不到期";
   return new Date(expire * 1000).toLocaleString(LOCALE[lang], {
-    timeZone: "Asia/Shanghai",
+    timeZone: tz,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -148,9 +164,9 @@ export function maskEmail(email: string): string {
   return `${name.slice(0, name.length > 2 ? 2 : 1)}***${email.slice(at)}`;
 }
 
-export function formatDate(sec: number, lang: Lang = "zh"): string {
+export function formatDate(sec: number, lang: Lang = "zh", tz = "Asia/Shanghai"): string {
   return new Date(sec * 1000).toLocaleDateString(LOCALE[lang], {
-    timeZone: "Asia/Shanghai",
+    timeZone: tz,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

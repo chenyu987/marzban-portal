@@ -14,8 +14,8 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   workers: 1,
   reporter: "list",
-  // 浏览器语言设成中文：没选过语言时页面按浏览器语言显示，测试按中文写
-  use: { baseURL: `http://localhost:${PORT}`, trace: "retain-on-failure", locale: "zh-CN" },
+  // 浏览器语言设成中文：没选过语言时页面按浏览器语言显示，测试按中文写。时区固定北京：时间默认跟随设备的时区，测试里的时间按北京写
+  use: { baseURL: `http://localhost:${PORT}`, trace: "retain-on-failure", locale: "zh-CN", timezoneId: "Asia/Shanghai" },
   webServer: [
     { command: "node dev/mock-marzban.mjs", port: 8010, reuseExistingServer: true },
     { command: `npx next dev -p ${PORT}`, port: PORT, reuseExistingServer: PORT === 3000, timeout: 180_000 },
