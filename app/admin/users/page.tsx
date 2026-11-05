@@ -134,7 +134,16 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      <FilterBar base="/admin/users">
+      <FilterBar
+        base="/admin/users"
+        summary={
+          data && (
+            <>
+              <b>{data.total}</b> {t("个订阅", "subscriptions")}
+            </>
+          )
+        }
+      >
         <select name="online" defaultValue={online ?? ""} className="select select-sm w-36" aria-label={t("在线", "Online")}>
           <option value="">{t("不限在线", "Any activity")}</option>
           {ONLINE_WINDOWS.map((m) => (
@@ -252,7 +261,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
             <div className="flex items-center gap-4">
               <PageSize size={PAGE_SIZE} />
               <span className="text-base-content/60">
-                {t(`共 ${data.total} 个，第 ${page} / ${pages} 页`, `${data.total} total · page ${page} of ${pages}`)}
+                {pages > 1 ? t(`第 ${page} / ${pages} 页`, `Page ${page} of ${pages}`) : ""}
               </span>
             </div>
             <div className="join">

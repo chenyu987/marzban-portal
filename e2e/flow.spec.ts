@@ -1138,7 +1138,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
 
     // 全部订单：按状态筛、按订单号搜，客人和订阅能点进去
   await admin.goto("/admin?view=all&status=cancelled");
-  await expect(admin.getByTestId("orders-summary")).toContainText("筛出");
+  await expect(admin.getByTestId("orders-summary")).toContainText("已付款");
   for (const row of await admin.getByTestId("order-row").all()) await expect(row).toContainText("已取消");
   await admin.goto(`/admin?view=all&q=${second}`);
   await expect(admin.getByTestId("order-row")).toHaveCount(1);

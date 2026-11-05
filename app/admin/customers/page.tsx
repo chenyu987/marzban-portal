@@ -91,7 +91,15 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       <div className="mt-4 mb-1 flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-2xl font-bold">{t("客人", "Customers")}</h1>
       </div>
-      <FilterBar base="/admin/customers" active={!!(query || has || sort !== "new")}>
+      <FilterBar
+        base="/admin/customers"
+        active={!!(query || has || sort !== "new")}
+        summary={
+          <>
+            <b>{total?.n ?? 0}</b> {t("位客人", "customers")}
+          </>
+        }
+      >
         <input name="q" defaultValue={query} placeholder={t("邮箱、微信号、订阅名或订阅编号", "Email, WeChat ID, subscription name or code")} className="input input-sm w-64" />
         <select name="has" defaultValue={has} className="select select-sm w-36" aria-label={t("筛选", "Filter")}>
           <option value="">{t("全部客人", "All customers")}</option>

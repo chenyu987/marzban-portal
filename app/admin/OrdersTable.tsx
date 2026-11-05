@@ -42,7 +42,7 @@ const planName = (t: T, lang: Lang, id: string | null) => {
   return id ? t(`${id}（已下架）`, `${id} (retired)`) : t("只记账", "Ledger only");
 };
 
-// 全部订单：搜订单号 / 客人 / 订阅 / 付款人，按状态、怎么付、套餐、下单日期筛，翻页；顶上汇总筛出来的单
+// 全部订单：搜订单号 / 客人 / 订阅 / 付款人，按状态、怎么付、套餐、下单日期筛，翻页；「筛选」按钮里汇总筛出来的单
 export default async function OrdersTable({ sp }: { sp: Record<string, string | string[] | undefined> }) {
   const tz = await getTz();
   const { t, lang } = await getT();
@@ -114,7 +114,15 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
 
   return (
     <>
-      <FilterBar base="/admin?view=all" active={active}>
+      <FilterBar
+        base="/admin?view=all"
+        active={active}
+        summary={
+          <span data-testid="orders-summary">
+            <b>{sum?.n ?? 0}</b> {t("单 · 已付款", "orders · paid")} <b>{sum?.paid_n ?? 0}</b> {t("单，共", "orders,")} <b className="text-success">{money(sum?.paid ?? 0)}</b>
+          </span>
+        }
+      >
         <input type="hidden" name="view" value="all" />
         <input name="q" defaultValue={q} placeholder={t("订单号、客人、订阅、付款人", "Order no., customer, subscription, payer")} className="input input-sm w-52" />
         <select name="status" defaultValue={status} className="select select-sm w-36" aria-label={t("状态", "Status")}>
@@ -148,15 +156,6 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
           <input type="date" name="to" defaultValue={to} className="input input-sm w-36" aria-label={t("到", "To")} />
         </label>
       </FilterBar>
-
-      <div className="mb-2 flex flex-wrap gap-4 text-sm" data-testid="orders-summary">
-        <span>
-          {t("筛出", "Found")} <b>{sum?.n ?? 0}</b> {t("单", "orders")}
-        </span>
-        <span>
-          {t("其中已付款", "Paid:")} <b>{sum?.paid_n ?? 0}</b> {t("单，共", "orders, total")} <b className="text-success">{money(sum?.paid ?? 0)}</b>
-        </span>
-      </div>
 
       <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
         <ResizableTable id="orders" className="table table-sm">

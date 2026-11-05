@@ -50,46 +50,41 @@ export default async function NodesPage() {
         </div>
       )}
 
-      {/* 面板本机：一行看完。左边名字、状态标签和版本，中间 CPU、内存两根细条和本月流量，右边重启 */}
+      {/* 面板本机：和下面的节点卡片一样的三行。第一行名字、状态标签，右边版本和本月流量；第二行 CPU、内存两根条；第三行重启按钮，靠左 */}
       {core && system && (
-        <div className="mb-6 flex flex-wrap items-center gap-x-8 gap-y-3 rounded-box bg-base-100 px-4 py-3 shadow-sm" data-testid="core" data-started={core.started ? "1" : "0"}>
-          {/* 状态标签和下面的节点一样：名字后面「在线」/「出错」 */}
-          <div className="min-w-48">
-            <div className="flex items-center gap-2">
-              <span className="font-bold">{t("面板本机", "Panel host")}</span>
-              {(() => {
-                const st = nodeStatusLabel(core.started ? "connected" : "error", lang);
-                return <span className={`badge badge-sm ${st.badge}`}>{st.text}</span>;
-              })()}
-            </div>
-            <div className="text-xs text-base-content/50">
-              Marzban {system.version} · Xray {core.version}
-            </div>
-          </div>
-          {[
-            { label: "CPU", value: `${system.cpu_usage.toFixed(0)}%`, pct: system.cpu_usage, sub: t(`${system.cpu_cores} 核`, `${system.cpu_cores} core${system.cpu_cores === 1 ? "" : "s"}`) },
-            {
-              label: t("内存", "Memory"),
-              value: formatBytes(system.mem_used),
-              pct: system.mem_total ? (system.mem_used / system.mem_total) * 100 : 0,
-              sub: `/ ${formatBytes(system.mem_total)}`,
-            },
-          ].map((m) => (
-            <div key={m.label} className="w-32">
-              <div className="flex items-baseline justify-between text-xs">
-                <span className="text-base-content/50">{m.label}</span>
-                <span>
-                  <b className="font-semibold">{m.value}</b> <span className="text-base-content/40">{m.sub}</span>
-                </span>
+        <div className="card mb-6 bg-base-100 shadow-sm" data-testid="core" data-started={core.started ? "1" : "0"}>
+          <div className="card-body gap-3 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="font-bold">{t("面板本机", "Panel host")}</span>
+                {(() => {
+                  const st = nodeStatusLabel(core.started ? "connected" : "error", lang);
+                  return <span className={`badge badge-sm ${st.badge}`}>{st.text}</span>;
+                })()}
               </div>
-              <progress className={`progress mt-1 h-1 w-full ${m.pct >= 85 ? "progress-error" : m.pct >= 60 ? "progress-warning" : "progress-success"}`} value={m.pct} max={100} />
+              <span className="text-sm text-base-content/60">
+                {t(
+                  `Marzban ${system.version}｜Xray ${core.version}｜本月 ${formatBytes(usage.get(null) ?? 0)}`,
+                  `Marzban ${system.version} | Xray ${core.version} | ${formatBytes(usage.get(null) ?? 0)} this month`,
+                )}
+              </span>
             </div>
-          ))}
-          <div className="text-xs">
-            <div className="text-base-content/50">{t("本月流量", "This month")}</div>
-            <b className="font-semibold">{formatBytes(usage.get(null) ?? 0)}</b>
-          </div>
-          <div className="ml-auto">
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-xs text-base-content/60">
+              {[
+                { label: "CPU", pct: system.cpu_usage, text: t(`${system.cpu_usage.toFixed(0)}%（${system.cpu_cores} 核）`, `${system.cpu_usage.toFixed(0)}% (${system.cpu_cores} core${system.cpu_cores === 1 ? "" : "s"})`) },
+                {
+                  label: t("内存", "Memory"),
+                  pct: system.mem_total ? (system.mem_used / system.mem_total) * 100 : 0,
+                  text: `${formatBytes(system.mem_used)} / ${formatBytes(system.mem_total)}`,
+                },
+              ].map((m) => (
+                <div key={m.label} className="flex items-center gap-2">
+                  {m.label}
+                  <progress className={`progress w-48 ${m.pct >= 85 ? "progress-error" : m.pct >= 60 ? "progress-warning" : "progress-success"}`} value={m.pct} max={100} />
+                  <span className="text-base-content">{m.text}</span>
+                </div>
+              ))}
+            </div>
             <CoreActions />
           </div>
         </div>
@@ -115,7 +110,7 @@ export default async function NodesPage() {
                   </span>
                 </div>
                 {n.status === "error" && n.message && <div className="alert alert-error alert-soft text-sm">{n.message}</div>}
-                {/* 第二行：左边本月流量条，右边重连、停用、修改、删除 */}
+                {/* 第二行本月流量条，第三行重连、停用、修改、删除，靠左 */}
                 <NodeActions
                   node={n}
                   lead={

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "../LangContext";
 
@@ -9,11 +10,15 @@ import { useT } from "../LangContext";
 // 有条件在生效时按钮上显示几项，旁边给「清除」，不用点开也知道现在筛过了。
 // 「几项」在浏览器里数：没隐藏的输入框有值、下拉框不是默认的那个，就算一项。
 // 不要「筛选」按钮：下拉框、日期一改就生效，搜索框按回车生效。样式在 globals.css 的 .filter-panel（浅底胶囊，没有边框）
-export default function FilterPopover({ base, children }: { base: string; children: React.ReactNode }) {
+// summary：筛出来多少条，放进按钮里「筛选」后面（比如「6 个 · 没用过 1」），页面上就不用再单独写一句「筛出几个」
+export default function FilterPopover({ base, summary, children }: { base: string; summary?: React.ReactNode; children: React.ReactNode }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(0);
   const form = useRef<HTMLFormElement>(null);
+  // 地址栏的筛选参数。点「清除」或换筛选是站内跳转，这个组件不会重新挂载：下拉框用的是 defaultValue，不跟着变，
+  // 数出来的「几项」也停在旧值。所以拿它当表单的 key，参数一变表单就重建，再重新数一遍
+  const qs = useSearchParams().toString();
 
   // 开着还是收着记在这个标签页里（sessionStorage）：下拉框一改页面就刷新，刷新后面板还开着，能接着选
   const key = `admin-filter-open:${base}`;
@@ -43,7 +48,7 @@ export default function FilterPopover({ base, children }: { base: string; childr
     for (const s of Array.from(f.elements))
       if (s instanceof HTMLSelectElement && (s.dataset.default !== undefined ? s.value !== s.dataset.default : s.selectedIndex > 0)) n++;
     setCount(n);
-  }, []);
+  }, [qs]);
 
   useEffect(() => {
     if (!open) return;
@@ -61,13 +66,19 @@ export default function FilterPopover({ base, children }: { base: string; childr
           type="button"
           aria-expanded={open}
           onClick={toggle}
-          className={`btn btn-sm gap-1.5 rounded-full font-normal ${open || count ? "btn-soft btn-primary" : "btn-ghost text-base-content/70"}`}
+          className={`btn btn-sm gap-1.5 rounded-full border-0 font-normal ${open || count ? "btn-soft btn-primary" : "bg-base-200/70 text-base-content/70 hover:bg-base-200"}`}
         >
           <svg viewBox="0 0 20 20" className="size-4" aria-hidden>
             <path fill="currentColor" d="M3 4.75A.75.75 0 0 1 3.75 4h12.5a.75.75 0 0 1 .53 1.28L12 10.06v4.19a.75.75 0 0 1-.33.62l-2.5 1.67A.75.75 0 0 1 8 15.92v-5.86L3.22 5.28A.75.75 0 0 1 3 4.75Z" />
           </svg>
           {t("筛选", "Filter")}
           {count > 0 && <span className="badge badge-xs badge-primary">{count}</span>}
+          {/* 筛出多少条也放在按钮里，用一条细竖线和「筛选」隔开，数字加粗 */}
+          {summary && (
+            <span className="ml-1 flex items-center gap-1 border-l border-current/20 pl-2.5 [&_b]:font-semibold" data-testid="filter-summary">
+              {summary}
+            </span>
+          )}
           <svg viewBox="0 0 20 20" className={`size-3.5 transition-transform duration-200 ${open ? "rotate-180" : ""}`} aria-hidden>
             <path fill="currentColor" d="M5.22 7.22a.75.75 0 0 1 1.06 0L10 10.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 8.28a.75.75 0 0 1 0-1.06Z" />
           </svg>
@@ -86,6 +97,7 @@ export default function FilterPopover({ base, children }: { base: string; childr
       >
         <div className="overflow-hidden">
           <form
+            key={qs}
             ref={form}
             onChange={(e) => {
               const el = e.target as HTMLElement;

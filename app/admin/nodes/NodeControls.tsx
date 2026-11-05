@@ -80,10 +80,10 @@ export function NodeActions({ node, lead }: { node: MarzbanNode; lead?: React.Re
   const id = String(node.id);
   const disabled = node.status === "disabled";
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {lead}
-        <div className="ml-auto flex flex-wrap gap-2">
+    <div className="flex flex-col gap-3">
+      {lead}
+      {/* 按钮单独一行，靠左 */}
+      <div className="flex flex-wrap items-center gap-2">
         <button type="button" className="btn btn-xs" disabled={pending || disabled} onClick={() => run(adminReconnectNode, { id }, () => true)}>
           {t("重连", "Reconnect")}
         </button>
@@ -115,7 +115,6 @@ export function NodeActions({ node, lead }: { node: MarzbanNode; lead?: React.Re
           {t("删除", "Delete")}
         </button>
         {pending && <span className="loading loading-spinner loading-xs self-center" />}
-        </div>
       </div>
       {editing && (
         <div ref={setBox} className="flex flex-col gap-2">
@@ -142,7 +141,7 @@ export function CoreActions() {
     <div className="flex flex-col gap-2">
       <button
         type="button"
-        className="btn btn-ghost btn-sm self-end text-warning"
+        className="btn btn-xs self-start text-warning"
         disabled={pending}
         onClick={() => run(adminRestartCore, {}, () => confirm(t("重启 Xray？所有节点都会跟着重启，所有客人断开几秒后自动重连", "Restart Xray? All nodes restart too; every customer drops for a few seconds and reconnects")))}
       >

@@ -91,13 +91,16 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
       {/* 默认停在第一个 Pro 档位（分档时）：最常发的是它；不分档就是第一个 */}
       <CreateCodes plans={plans} defaultGroup={site.plans.find((p) => p.pro)?.group} />
 
-      <h2 className="mt-8 mb-2 text-lg font-bold">
-        {t("兑换码", "Codes")}{" "}
-        <span className="text-sm font-normal text-base-content/60">
-          {t(`（筛出 ${count?.n ?? 0} 个，其中没用过 ${count?.unused ?? 0} 个）`, `(${count?.n ?? 0} found, ${count?.unused ?? 0} unused)`)}
-        </span>
-      </h2>
-      <FilterBar base="/admin/codes" active={!!(state || group || q)}>
+      <h2 className="mt-8 mb-2 text-lg font-bold">{t("兑换码", "Codes")}</h2>
+      <FilterBar
+        base="/admin/codes"
+        active={!!(state || group || q)}
+        summary={
+          <>
+            <b>{count?.n ?? 0}</b> {t("个 · 没用过", "codes · unused")} <b>{count?.unused ?? 0}</b>
+          </>
+        }
+      >
         <input name="q" defaultValue={q} placeholder={t("兑换码、备注、客人", "Code, note, customer")} className="input input-sm w-52" />
         <select name="state" defaultValue={state} className="select select-sm w-40" aria-label={t("状态", "Status")}>
           <option value="">{t("全部状态", "All statuses")}</option>

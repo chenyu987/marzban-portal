@@ -56,7 +56,15 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
     <div className="mx-auto max-w-5xl px-4 pb-16">
       <AdminHeader email={me.email} />
       <h1 className="mt-4 mb-4 text-2xl font-bold">{t("操作日志", "Activity log")}</h1>
-      <FilterBar base="/admin/logs" active={!!(admin || action || q)}>
+      <FilterBar
+        base="/admin/logs"
+        active={!!(admin || action || q)}
+        summary={
+          <>
+            <b>{count?.n ?? 0}</b> {t("条", "entries")}
+          </>
+        }
+      >
         <input name="q" defaultValue={q} placeholder={t("搜对谁、说明", "Search target or details")} className="input input-sm w-48" />
         <select name="admin" defaultValue={admin} className="select select-sm" aria-label={t("谁", "Who")}>
           <option value="">{t("所有人", "Everyone")}</option>

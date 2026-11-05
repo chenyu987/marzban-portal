@@ -27,8 +27,13 @@ export function pageOf(sp: Record<string, string | string[] | undefined>): numbe
 
 // 筛选栏：平时收成一个「筛选」按钮，点开浮在表格上面（见 FilterPopover.tsx）。GET 表单，回车或点「筛选」都提交。
 // active 留着给以后用（现在几项在浏览器里数）
-export function FilterBar({ base, children }: { base: string; active?: boolean; children: React.ReactNode }) {
-  return <FilterPopover base={base}>{children}</FilterPopover>;
+// summary 是筛出来多少条，放进「筛选」按钮里
+export function FilterBar({ base, summary, children }: { base: string; active?: boolean; summary?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <FilterPopover base={base} summary={summary}>
+      {children}
+    </FilterPopover>
+  );
 }
 
 // 表格下面：共几条、第几页、上一页下一页
@@ -37,10 +42,8 @@ export async function Pager({ base, params, page, pageSize, total }: { base: str
   const { t } = await getT();
   return (
     <div className="mt-3 flex items-center justify-between text-sm">
-      <span className="text-base-content/60">
-        {t(`共 ${total} 条`, `${total} total`)}
-        {pages > 1 ? t(`，第 ${page} / ${pages} 页`, ` · page ${page} of ${pages}`) : ""}
-      </span>
+      {/* 共几条写在「筛选」按钮旁边了，这里只写第几页 */}
+      <span className="text-base-content/60">{pages > 1 ? t(`第 ${page} / ${pages} 页`, `Page ${page} of ${pages}`) : ""}</span>
       {pages > 1 && (
         <div className="join">
           {page > 1 && (
