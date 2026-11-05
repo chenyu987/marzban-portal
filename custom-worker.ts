@@ -4,9 +4,10 @@
 // @ts-ignore .open-next/worker.js 是 opennextjs-cloudflare build 时生成的
 import { default as handler } from "./.open-next/worker.js";
 import { httpsRedirect } from "./lib/https-redirect";
+import { adminRootRedirect } from "./lib/admin-root";
 
 export default {
-  fetch: (request: Request, env: CloudflareEnv, ctx: ExecutionContext) => httpsRedirect(request) ?? handler.fetch(request, env, ctx),
+  fetch: (request: Request, env: CloudflareEnv, ctx: ExecutionContext) => httpsRedirect(request) ?? adminRootRedirect(request) ?? handler.fetch(request, env, ctx),
   async scheduled(event: ScheduledController, env: CloudflareEnv, ctx: ExecutionContext) {
     const job = event.cron === "*/5 * * * *" ? "nodes" : "expiry";
     // 两个任务可能同一分钟触发，口令各用各的，放在一个集合里

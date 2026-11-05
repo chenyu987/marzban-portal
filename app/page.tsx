@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 // 没配 landing 或 landingPublic: false 时首页只有品牌名和登录、注册按钮，已经登录的直接去「我的订阅」。
 // 带 ?ref=推荐码 来的，注册按钮把推荐码带过去；已经登录的，按钮换成「进入我的订阅」
 export default async function Home({ searchParams }: { searchParams: Promise<{ ref?: string | string[] }> }) {
-  // 后台域名前面挡着 Cloudflare Access，过了 Access 的请求会带这个头：打开后台域名的根目录直接进后台
+  // 后台域名的根目录在 Worker 最外层就跳到 /admin 了（lib/admin-root.ts），这里是本地 next dev 时的兜底
   if ((await headers()).get("cf-access-jwt-assertion")) redirect("/admin");
   const me = await currentCustomer();
   const { t, p: tx, lang } = await getT();
