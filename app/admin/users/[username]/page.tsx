@@ -14,6 +14,7 @@ import { describePlan, findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
 import { pick } from "@/lib/i18n";
 import BindToCustomer from "./BindToCustomer";
+import CopyButton from "../../CopyButton";
 import BindButton from "../../BindButton";
 import { CustomerLink } from "../../Links";
 import CopyCode from "../../../dashboard/CopyCode";
@@ -102,8 +103,10 @@ export default async function UserPage({ params }: { params: Promise<{ username:
             <BindButton customerId={legacy.match_id} username={user.username} who={legacy.match_email ?? ""} />
           </>
         ) : legacy ? (
-          <span>
-            微信 <b>{legacy.wechat}</b>（还没注册网站账号）
+          <span className="inline-flex items-center">
+            微信 <b className="ml-1">{legacy.wechat}</b>
+            <CopyButton text={legacy.wechat} label="复制微信号" />
+            （还没注册网站账号）
           </span>
         ) : (
           <span className="text-base-content/50">没绑</span>
@@ -111,7 +114,7 @@ export default async function UserPage({ params }: { params: Promise<{ username:
         <span className="text-base-content/40">｜</span>
         <span className="text-base-content/60">最后连接 {onlineText(user.online_at, Date.now())}</span>
       </div>
-      {!owner && <BindToCustomer username={user.username} />}
+      {!owner && <BindToCustomer username={user.username} wechat={legacy?.wechat} />}
 
       <div className="mb-4 grid grid-cols-2 gap-4 rounded-box bg-base-100 p-4 shadow-sm">
         <div>

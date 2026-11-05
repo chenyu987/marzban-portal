@@ -18,6 +18,7 @@ import { formatRedeemCode, newRedeemCode } from "@/lib/format";
 import { codeMessages, parseCodeDays, withCodeDays } from "@/lib/redeem-codes";
 import { hashResetToken, newResetToken, RESET_TTL_ADMIN, resetLink } from "@/lib/reset";
 import { site } from "@/site.config";
+import { wechatError } from "@/lib/account";
 
 // 和客人登录一样限制试密码；记在 login_failures 里，邮箱前面加 admin: 区分
 const FAIL_WINDOW = 15 * 60;
@@ -590,7 +591,11 @@ export async function adminBindUser(_: FormState, form: FormData): Promise<FormS
     .prepare("SELECT id FROM customers WHERE email = ?1 OR wechat = ?2 COLLATE NOCASE")
     .bind(who.toLowerCase(), who)
     .all<{ id: number }>();
-  if (c.results.length === 0) return { error: `没有邮箱或微信号是 ${who} 的客人` };
+  if (c.results.length === 0) {
+    // 不是邮箱的话，可以先把它记成这个订阅的微信号，客人以后用这个微信号注册时自动绑过来（见 BindToCustomer）
+    const hint = who.includes("@") ? "" : "。可以先记下这个微信号，客人以后用它注册会自动绑过来";
+    return { error: `没有邮箱或微信号是 ${who} 的客人${hint}`, wechat: who.includes("@") ? undefined : who };
+  }
   if (c.results.length > 1) return { error: `有 ${c.results.length} 个客人的微信号是 ${who}，请填邮箱` };
   const f = new FormData();
   f.set("customerId", String(c.results[0].id));
@@ -599,6 +604,31 @@ export async function adminBindUser(_: FormState, form: FormData): Promise<FormS
   const r = await adminBindSubscription(undefined, f);
   if (r?.ok) revalidatePath(`/admin/users/${encodeURIComponent(String(form.get("username") ?? ""))}`);
   return r;
+}
+
+// 订阅还没绑客人、也没有这个微信号的注册客人时：先记下订阅的微信号（存在 marzban_wechat，和老订阅一样）。
+// 后台按微信号能搜到；客人以后用这个微信号注册或改成这个微信号，就自动绑过去（lib/claim.ts）。已经记过的话改成新的
+export async function adminSetSubWechat(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const username = String(form.get("username") ?? "");
+  const wechat = String(form.get("wechat") ?? "").trim();
+  const bad = wechatError(wechat);
+  if (bad) return { error: bad };
+  if (!(await findUser(username))) return { error: `Marzban 上没有 ${username}` };
+  const owned = await db().prepare("SELECT 1 FROM subscriptions WHERE marzban_username = ?").bind(username).first();
+  if (owned) return { error: "这个订阅已经绑了客人，不用再记微信号" };
+  const before = await db().prepare("SELECT wechat FROM marzban_wechat WHERE marzban_username = ?").bind(username).first<{ wechat: string }>();
+  await db()
+    .prepare(
+      `INSERT INTO marzban_wechat (marzban_username, wechat, created_at) VALUES (?, ?, ?)
+       ON CONFLICT (marzban_username) DO UPDATE SET wechat = excluded.wechat`,
+    )
+    .bind(username, wechat, nowSec())
+    .run();
+  await logAdmin(admin, "user.set_wechat", username, before ? `${before.wechat} → ${wechat}` : wechat);
+  revalidatePath(`/admin/users/${encodeURIComponent(username)}`);
+  revalidatePath("/admin/users");
+  return { ok: `已记下微信号 ${wechat}，客人用这个微信号注册后会自动绑过来` };
 }
 
 // 改套餐：按新套餐改 Marzban 上的流量上限、重置方式、设备数（ip=N）、档位对应的入站，到期时间不动；记下现在的套餐，客人订阅页标题跟着变

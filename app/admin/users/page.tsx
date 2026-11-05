@@ -6,6 +6,7 @@ import { formatBytes, formatExpire, RESET_LABEL, STATUS_LABEL } from "@/lib/form
 import { expireRelative, onlineState, parsePageSize, PAGE_SIZES, SORTS, STATUS_FILTERS } from "@/lib/admin-users";
 import AdminHeader from "../AdminHeader";
 import { CustomerLink } from "../Links";
+import CopyButton from "../CopyButton";
 import { findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
 import BulkActions from "./BulkActions";
@@ -191,8 +192,10 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                       {owner ? (
                         <CustomerLink id={owner.id} email={owner.email} wechat={owner.wechat} />
                       ) : legacyWechat.has(u.username) ? (
-                        <span title="老订阅，客人还没绑网站账号">
-                          {legacyWechat.get(u.username)} <span className="text-xs text-base-content/50">未注册</span>
+                        <span title="老订阅，客人还没绑网站账号" className="inline-flex items-center">
+                          {legacyWechat.get(u.username)}
+                          <CopyButton text={legacyWechat.get(u.username)!} label="复制微信号" />
+                          <span className="text-xs text-base-content/50">未注册</span>
                         </span>
                       ) : (
                         <span className="text-base-content/40">-</span>

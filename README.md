@@ -12,6 +12,7 @@ A self-service customer portal for [Marzban](https://github.com/Gozargah/Marzban
 ## 功能
 
 - 邮箱 + 密码注册登录（PBKDF2 哈希，会话存在 D1），有登录失败次数限制
+- 防机器人：注册和忘记密码页可以加 Cloudflare Turnstile 人机验证（Worker secret `TURNSTILE_SITE_KEY` 和 `TURNSTILE_SECRET_KEY` 都配了才开，没配就不显示、不检查）；同一个 IP 每小时最多注册 3 个、每天 10 个，申请重置密码每小时 5 次、每天 20 次；同一个客人兑换码输错每小时最多 10 次（`lib/rate-limit.ts`，借用 `login_failures` 表记次数，不另建表，只留一天）。本地没有 `cf-connecting-ip` 时 IP 记成 `local`，不限次数
 - 粘贴已有的订阅链接，绑定到账号。后端只取链接里的 token，不会去请求客人给的域名
 - 按微信号自动认领：注册或改微信号时，`marzban_wechat` 表里记着这个微信号的订阅、和 Marzban 上按微信号起名的用户（`微信号`、`微信号_2`…），只要还没绑给别人，就自动绑到这个账号。微信号没有验证，每次自动绑定都记进后台操作日志
 - 在微信内置浏览器里打开时，顶部提示换到系统浏览器（微信里登录状态可能保存不住）
@@ -28,7 +29,7 @@ A self-service customer portal for [Marzban](https://github.com/Gozargah/Marzban
 - 中英文：每页底部和「账户」页可以切「中文 / English」，选的语言记在 cookie `lang` 里（登录着的也记到账号上，提醒邮件按它写）。没选过的默认中文；`site.config.ts` 设 `autoLang: true` 就按浏览器语言：首选中文的看中文，首选别的语言的看英文，读不到就中文。客人看到的页面、报错和邮件都跟着换；管理后台只有中文。文案直接写在用到的地方 `t("中文", "English")`（服务器上 `getT()`，客户端组件 `useT()`，见 `lib/i18n.ts`）；`site.config.ts` 里给客人看的文案可以写成 `{ zh, en }`，套餐英文名写在 `Plan.en`
 - 深浅色：默认跟随系统；「账户」页可以选「跟随系统 / 浅色 / 深色」，记在 cookie `theme` 里，服务器渲染时写到 `<html data-theme>`，打开页面不会闪（`lib/theme.ts`）
 - 忘记密码：登录页「忘记密码？」→ 输入邮箱，收到带重置链接的邮件（1 小时内有效，只能用一次），设好新密码后所有设备的登录都会退出。发信用 Resend，配了 `RESEND_API_KEY` 和 `MAIL_FROM` 才会发，没配时页面让客人联系管理员；管理员可以用 `npm run password:reset-link -- <邮箱> [--remote]` 生成 24 小时有效的链接发给客人。链接里的网址用 `site.config.ts` 的 `siteUrl`
-- 管理后台（`/admin`）：前面挡一层 Cloudflare Access，后端每个请求都校验 Access 的 JWT（`lib/access.ts`），邮箱要在 `site.config.ts` 的 `admin.emails` 里；没配 Access 时后台整个返回 404。管理员账号和客人分开，只能用 `npm run admin:create -- <邮箱> [--remote]` 建，邮箱要和 Access 登录的一样。现在能做的：在网页上确认 / 取消客人的转账订单（逻辑和 `npm run orders` 一样）；客人列表和详情（订阅、订单、余额明细、推荐关系），加减余额（必须写原因）、生成重置密码链接、把 Marzban 上已有的用户绑给客人；生成兑换码（看谁用了、作废没用过的）；看操作日志（按人、按操作筛）。所有操作记在 `admin_logs`。本地开发在 `.dev.vars` 设 `ADMIN_DEV_NO_ACCESS=1` 跳过 Access（只认 localhost）
+- 管理后台（`/admin`）：前面挡一层 Cloudflare Access，后端每个请求都校验 Access 的 JWT（`lib/access.ts`），邮箱要在 `site.config.ts` 的 `admin.emails` 里；没配 Access 时后台整个返回 404。管理员账号和客人分开，只能用 `npm run admin:create -- <邮箱> [--remote]` 建，邮箱要和 Access 登录的一样。现在能做的：在网页上确认 / 取消客人的转账订单（逻辑和 `npm run orders` 一样）；客人列表和详情（订阅、订单、余额明细、推荐关系），加减余额（必须写原因）、生成重置密码链接、把 Marzban 上已有的用户绑给客人（订阅页填的微信号还没有客人时，可以先把微信号记在订阅上，客人用它注册就自动绑过去）；生成兑换码（看谁用了、作废没用过的）；看操作日志（按人、按操作筛）。所有操作记在 `admin_logs`。本地开发在 `.dev.vars` 设 `ADMIN_DEV_NO_ACCESS=1` 跳过 Access（只认 localhost）
 - 安装教程：iPhone、Mac、Windows、安卓分页，按访问设备自动切到对应的那页
 
 ## 目录

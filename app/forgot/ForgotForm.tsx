@@ -6,9 +6,10 @@ import { requestReset } from "../actions";
 import ContactSupport from "../ContactSupport";
 import Brand from "../Brand";
 import { useT } from "../LangContext";
+import Turnstile from "../Turnstile";
 
 // 还不能发邮件时（没配发信服务）不显示输入框，直接让客人找管理员
-export default function ForgotForm({ canSend }: { canSend: boolean }) {
+export default function ForgotForm({ canSend, turnstileSiteKey }: { canSend: boolean; turnstileSiteKey: string | null }) {
   const [state, action, pending] = useActionState(requestReset, undefined);
   const t = useT();
   return (
@@ -32,8 +33,9 @@ export default function ForgotForm({ canSend }: { canSend: boolean }) {
                   className="input w-full"
                 />
               </label>
+              {turnstileSiteKey && <Turnstile siteKey={turnstileSiteKey} resetKey={state} />}
               {state?.error && <div role="alert" className="alert alert-error alert-soft">{state.error}</div>}
-      {state?.support && <ContactSupport />}
+              {state?.support && <ContactSupport />}
               {state?.ok && <div role="alert" className="alert alert-success alert-soft">{state.ok}</div>}
               <button className="btn btn-primary" disabled={pending}>
                 {pending && <span className="loading loading-spinner loading-sm" />}

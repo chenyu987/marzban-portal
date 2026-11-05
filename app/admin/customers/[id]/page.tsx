@@ -1,4 +1,5 @@
 import Link from "next/link";
+import CopyButton from "../../CopyButton";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
@@ -109,7 +110,13 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
       <div className="mt-2 mb-4 rounded-box bg-base-100 p-4 shadow-sm">
         <h1 className="text-2xl font-bold">
           {c.wechat ?? c.email}
-          {c.wechat && <span className="ml-2 align-middle text-sm font-normal text-base-content/60">{c.email}</span>}
+          <CopyButton text={c.wechat ?? c.email} label={c.wechat ? "复制微信号" : "复制邮箱"} />
+          {c.wechat && (
+            <span className="ml-1 align-middle text-sm font-normal text-base-content/60">
+              {c.email}
+              <CopyButton text={c.email} label="复制邮箱" />
+            </span>
+          )}
           {c.deleted_at && <span className="badge badge-error badge-soft ml-2 align-middle">已删除 {formatExpire(c.deleted_at, "zh", tz)}</span>}
         </h1>
         <div className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">

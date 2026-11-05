@@ -4,6 +4,7 @@ import { register } from "../actions";
 import AuthForm from "../AuthForm";
 import { authAside } from "@/lib/public-site";
 import { getT } from "@/lib/lang";
+import { turnstileSiteKey } from "@/lib/turnstile";
 
 // 推荐链接是 /register?ref=<推荐码>，打开时自动填好
 export default async function RegisterPage({ searchParams }: { searchParams: Promise<{ ref?: string | string[] }> }) {
@@ -18,6 +19,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
       action={register}
       passwordAutoComplete="new-password"
       footer={{ text: t("已经有账号？", "Already have an account?"), href: "/login", link: t("登录", "Log in") }}
+      turnstileSiteKey={turnstileSiteKey()}
       referral={{ defaultValue: typeof ref === "string" ? ref.slice(0, 32) : "" }}
     />
   );

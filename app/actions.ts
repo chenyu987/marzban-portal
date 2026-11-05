@@ -30,6 +30,8 @@ export type FormState = { error?: string; ok?: string; email?: string; ref?: str
 import { emailError, passwordError, wechatError } from "@/lib/account";
 import { claimByWechat, followWechatChange } from "@/lib/claim";
 import { mailGreeting, mailSupportLine } from "@/lib/mail-text";
+import { KEEP_SECONDS, overLimit, recordHit, REDEEM_FAIL_LIMITS, REGISTER_LIMITS, RESET_IP_LIMITS } from "@/lib/rate-limit";
+import { verifyTurnstile } from "@/lib/turnstile";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function register(_: FormState, form: FormData): Promise<FormState> {
@@ -41,6 +43,11 @@ export async function register(_: FormState, form: FormData): Promise<FormState>
   const { t, lang } = await getT();
   const invalid = emailError(email, lang) ?? passwordError(password, lang) ?? wechatError(wechat, lang);
   if (invalid) return { error: invalid, ...back };
+  // 防机器人：先过人机验证，再看这个 IP 最近注册了几个
+  const ip = (await headers()).get("cf-connecting-ip") ?? "local";
+  if (!(await verifyTurnstile(form, ip))) return { error: t("人机验证没通过，请再点一下验证框后重试", "Human verification failed. Please complete the check and try again"), ...back };
+  if (await overLimit("register", ip, REGISTER_LIMITS))
+    return { error: t("这个网络最近注册的账号太多了，请过一会儿再试，或者联系客服", "Too many accounts were created from this network recently. Please try again later or contact support"), ...back, support: true };
 
   // 推荐码可以不填；填了就必须是真的，免得客人以为填上了其实没记到
   const code = normalizeReferralCode(refInput);
@@ -62,6 +69,7 @@ export async function register(_: FormState, form: FormData): Promise<FormState>
     )
     .bind(email, await hashPassword(password), wechat, newReferralCode(), referrer, nowSec())
     .first<{ id: number }>();
+  await recordHit("register", ip);
   // 管理员之前按这个微信号开过的订阅，直接绑过来，「我的订阅」里就能看到
   await claimByWechat({ id: row!.id, email }, wechat);
   await createSession(row!.id);
@@ -98,10 +106,10 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
     .first<{ id: number; password_hash: string }>();
   // 邮箱不存在和密码错误给同一个提示，不让人试探哪些邮箱注册过
   if (!c || !(await verifyPassword(password, c.password_hash))) {
-    // 顺手删掉过期的记录，表不会越来越大
+    // 顺手删掉过期的记录，表不会越来越大。防机器人的次数（lib/rate-limit.ts）也记在这张表里、要留一天，所以删一天以前的
     await db().batch([
       db().prepare("INSERT INTO login_failures (email, ip, at) VALUES (?, ?, ?)").bind(email, ip, nowSec()),
-      db().prepare("DELETE FROM login_failures WHERE at <= ?").bind(since),
+      db().prepare("DELETE FROM login_failures WHERE at <= ?").bind(nowSec() - KEEP_SECONDS),
     ]);
     return { error: t("邮箱或密码不对", "Wrong email or password"), email };
   }
@@ -190,12 +198,18 @@ export async function redeem(_: FormState, form: FormData): Promise<FormState> {
   const target = String(form.get("target") ?? "new");
   const { t, lang } = await getT();
   if (!code) return { error: t("兑换码格式不对，是 16 位字母和数字", "Invalid redeem code: it's 16 letters and numbers") };
+  // 防机器人一个个试兑换码：同一个客人输错太多次就暂停一会儿
+  const tooMany = { error: t("兑换码输错次数太多，请 1 小时后再试", "Too many wrong codes. Please try again in an hour") };
+  if (await overLimit("redeem_fail", String(customer.id), REDEEM_FAIL_LIMITS)) return tooMany;
 
   const row = await db()
     .prepare("SELECT plan_id, days, used_by FROM redeem_codes WHERE code = ?")
     .bind(code)
     .first<{ plan_id: string; days: number | null; used_by: number | null }>();
-  if (!row) return { error: t("没有这个兑换码，请检查有没有输错", "That redeem code doesn't exist. Please check for typos") };
+  if (!row) {
+    await recordHit("redeem_fail", String(customer.id));
+    return { error: t("没有这个兑换码，请检查有没有输错", "That redeem code doesn't exist. Please check for typos") };
+  }
   if (row.used_by !== null) return { error: t("这个兑换码已经用过了", "This redeem code has already been used") };
   const base = findPlan(site.plans, row.plan_id);
   // 后台生成时改过天数的兑换码，开通 / 续期按码上的天数算
@@ -425,6 +439,11 @@ export async function requestReset(_: FormState, form: FormData): Promise<FormSt
   if (!EMAIL_RE.test(email)) return { error: emailError(email, lang)!, email };
   if (!canSendMail())
     return { error: t("现在还不能自动发邮件，请联系客服帮你重置密码", "We can't send emails yet. Please contact support to reset your password"), email, support: true };
+  // 防机器人：人机验证 + 同一个 IP 限次数（每个账号每小时 3 封另外还有限制）
+  const ip = (await headers()).get("cf-connecting-ip") ?? "local";
+  if (!(await verifyTurnstile(form, ip))) return { error: t("人机验证没通过，请再点一下验证框后重试", "Human verification failed. Please complete the check and try again"), email };
+  if (await overLimit("reset", ip, RESET_IP_LIMITS)) return { error: t("申请太频繁了，请过一会儿再试", "Too many requests. Please try again later"), email };
+  await recordHit("reset", ip);
   const done = {
     ok: t(
       `如果 ${email} 注册过，重置链接已经发过去了，1 小时内有效。没收到的话看看垃圾邮件。`,

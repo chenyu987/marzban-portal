@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import Brand from "./Brand";
+import Turnstile from "./Turnstile";
 import { useT } from "./LangContext";
 import type { FormState } from "./actions";
 import type { AuthAside } from "@/lib/public-site";
@@ -19,9 +20,11 @@ type Props = {
   forgotLink?: boolean;
   // 左边的标题、介绍、卖点，由页面（服务器）从 site.config 算好传进来
   aside: AuthAside;
+  // 配了 Turnstile 才有（注册页用），没配就不显示人机验证
+  turnstileSiteKey?: string | null;
 };
 
-export default function AuthForm({ title, submitLabel, action, passwordAutoComplete, footer, referral, forgotLink, aside }: Props) {
+export default function AuthForm({ title, submitLabel, action, passwordAutoComplete, footer, referral, forgotLink, aside, turnstileSiteKey }: Props) {
   const [state, formAction, pending] = useActionState(action, undefined);
   const t = useT();
   return (
@@ -120,6 +123,7 @@ export default function AuthForm({ title, submitLabel, action, passwordAutoCompl
               />
             </label>
           )}
+          {turnstileSiteKey && <Turnstile siteKey={turnstileSiteKey} resetKey={state} />}
           {state?.error && <div role="alert" className="alert alert-error alert-soft">{state.error}</div>}
           <button className="btn btn-primary" disabled={pending}>
             {pending && <span className="loading loading-spinner loading-sm" />}

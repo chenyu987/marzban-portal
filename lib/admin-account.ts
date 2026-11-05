@@ -22,6 +22,7 @@ export const LOG_ACTIONS: Record<string, string> = {
   "user.revoke_sub": "重置订阅链接",
   "user.delete": "删除订阅",
   "user.change_plan": "改套餐",
+  "user.set_wechat": "记微信号",
   "node.add": "加节点",
   "node.edit": "修改节点",
   "node.enable": "启用节点",

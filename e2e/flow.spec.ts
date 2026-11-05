@@ -228,6 +228,67 @@ test("老客人注册：微信号对上的订阅自动绑过来，改微信号�
   await ctx.close();
 });
 
+test("订阅没绑客人、也找不到这个微信号的客人：管理员先记下微信号，客人用它注册后自动绑过来", async ({ page, browser }) => {
+  const stamp = Date.now();
+  const sub = `e2e_note_${stamp}`;
+  const wechat = `e2e_notewx_${stamp}`;
+  const adminEmail = `e2e-note-admin-${stamp}@example.test`;
+  const adminPassword = "E2eAdmin-123456";
+  run(["admin:create", "--", adminEmail], `${adminPassword}\n${adminPassword}\n`);
+  await mockMarzban("POST", "/user", { username: sub, expire: Math.floor(Date.now() / 1000) + 30 * 86400 });
+
+  const ctx = await browser.newContext();
+  const admin = await ctx.newPage();
+  admin.on("dialog", (d) => d.accept());
+  await admin.goto("/admin/login");
+  await admin.getByPlaceholder("管理员邮箱").fill(adminEmail);
+  await admin.getByPlaceholder("密码").fill(adminPassword);
+  await admin.getByRole("button", { name: "登录" }).click();
+  await expect(admin).toHaveURL(/\/admin$/);
+  await admin.goto(`/admin/users/${sub}`);
+  await admin.getByLabel("绑到客人").fill(wechat);
+  await admin.getByRole("button", { name: "绑到这个客人" }).click();
+  await expect(admin.getByText(`没有邮箱或微信号是 ${wechat} 的客人`)).toBeVisible();
+  await admin.getByRole("button", { name: "记下这个微信号" }).click();
+  await expect(admin.getByText(`已记下微信号 ${wechat}`)).toBeVisible();
+  await expect(admin.getByTestId("sub-owner")).toContainText("还没注册网站账号");
+  expect(query(`SELECT wechat FROM marzban_wechat WHERE marzban_username = '${sub}'`)[0].wechat).toBe(wechat);
+  expect(query(`SELECT COUNT(*) AS n FROM admin_logs WHERE action = 'user.set_wechat' AND target = '${sub}'`)[0].n).toBe(1);
+  await ctx.close();
+
+  // 客人用这个微信号注册：订阅自动出现在「我的订阅」
+  await page.goto("/register");
+  await page.getByPlaceholder("邮箱").fill(`e2e-note-${stamp}@example.test`);
+  await page.getByPlaceholder("密码（至少 8 位）").fill("E2eTest-1234");
+  await page.getByPlaceholder("微信号").fill(wechat);
+  await page.getByRole("button", { name: "注册" }).click();
+  await expect(page.getByTestId("sub-id")).toHaveCount(1);
+});
+
+test("防机器人：同一个 IP 一小时内最多注册 3 个账号", async ({ browser }) => {
+  const stamp = Date.now();
+  // 本地没有 cf-connecting-ip 时不限；这里假装是线上的同一个 IP
+  const ip = `198.51.100.${stamp % 250}`;
+  const ctx = await browser.newContext({ extraHTTPHeaders: { "cf-connecting-ip": ip } });
+  const page = await ctx.newPage();
+  const signUp = async (i: number) => {
+    await page.context().clearCookies();
+    await page.goto("/register");
+    await page.getByPlaceholder("邮箱").fill(`e2e-rl-${stamp}-${i}@example.test`);
+    await page.getByPlaceholder("密码（至少 8 位）").fill("E2eTest-1234");
+    await page.getByPlaceholder("微信号").fill(`e2e_rl_${stamp}`);
+    await page.getByRole("button", { name: "注册" }).click();
+  };
+  for (const i of [1, 2, 3]) {
+    await signUp(i);
+    await expect(page).toHaveURL(/\/dashboard/);
+  }
+  await signUp(4);
+  await expect(page.getByText("这个网络最近注册的账号太多了")).toBeVisible();
+  expect(query(`SELECT COUNT(*) AS n FROM customers WHERE email = 'e2e-rl-${stamp}-4@example.test'`)[0].n).toBe(0);
+  await ctx.close();
+});
+
 const IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 test("手机上：右上角菜单能切页面、能退出；买了还没连过的订阅顶上有「看安装教程」，能关掉，连上过就不显示", async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 402, height: 874 }, isMobile: true, hasTouch: true, userAgent: IPHONE_UA });
