@@ -186,14 +186,14 @@ test("老客人注册：微信号对上的订阅自动绑过来，改微信号�
   const wechat = `E2E-Claim-${stamp}`;
   const base = `e2e_claim_${stamp}`;
   const expire = Math.floor(Date.now() / 1000) + 30 * 86400;
-  // 管理员在 Marzban 上按微信号建的用户（第一个、第二个），和一个记在 marzban_wechat 里的老订阅（用户名是微信名）
+  // 管理员在 Marzban 上按微信号建的用户（第一个、第二个），和一个记了微信号的老订阅（用户名是微信名）
   await mockMarzban("POST", "/user", { username: base, expire });
   await mockMarzban("POST", "/user", { username: `${base}_2`, expire });
   // 前缀一样但不是这个微信号的，不能被认走
   await mockMarzban("POST", "/user", { username: `${base}0`, expire });
   const legacy = `e2e_old_${stamp}`;
   await mockMarzban("POST", "/user", { username: legacy, expire });
-  sql(`INSERT INTO marzban_wechat (marzban_username, wechat, created_at) VALUES ('${legacy}', '${wechat.toLowerCase()}', unixepoch())`);
+  sql(`INSERT INTO marzban_users (marzban_username, wechat) VALUES ('${legacy}', '${wechat.toLowerCase()}')`);
 
   const signUp = async (p: Page, email: string, wx: string) => {
     await p.goto("/register");
@@ -218,7 +218,7 @@ test("老客人注册：微信号对上的订阅自动绑过来，改微信号�
   await page.getByRole("button", { name: "保存微信号" }).click();
   await expect(page.getByText("微信号已更新")).toBeVisible();
   expect(owned()).toEqual([base, `${base}_2`, legacy].sort());
-  expect(query(`SELECT wechat FROM marzban_wechat WHERE marzban_username = '${legacy}'`)[0].wechat).toBe(`e2e_claim2_${stamp}`);
+  expect(query(`SELECT wechat FROM marzban_users WHERE marzban_username = '${legacy}'`)[0].wechat).toBe(`e2e_claim2_${stamp}`);
 
   // 别人用原来的微信号注册：已经绑走的拿不到
   const ctx = await browser.newContext();
@@ -252,7 +252,7 @@ test("订阅没绑客人、也找不到这个微信号的客人：管理员先�
   await admin.getByRole("button", { name: "记下这个微信号" }).click();
   await expect(admin.getByText(`已记下微信号 ${wechat}`)).toBeVisible();
   await expect(admin.getByTestId("sub-owner")).toContainText("还没注册网站账号");
-  expect(query(`SELECT wechat FROM marzban_wechat WHERE marzban_username = '${sub}'`)[0].wechat).toBe(wechat);
+  expect(query(`SELECT wechat FROM marzban_users WHERE marzban_username = '${sub}'`)[0].wechat).toBe(wechat);
   expect(query(`SELECT COUNT(*) AS n FROM admin_logs WHERE action = 'user.set_wechat' AND target = '${sub}'`)[0].n).toBe(1);
   await ctx.close();
 
@@ -916,7 +916,7 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   await expect(trialCard.getByRole("link", { name: /续费/ })).toHaveCount(0);
   // 在体验上续费普通版：套餐换成普通版，标题不再是体验
   // 免费体验不记订单（不算收入），只记这个订阅的套餐
-  const trialUser = query(`SELECT marzban_username FROM subscription_plans WHERE plan_id = 'p3-trial' ORDER BY updated_at DESC LIMIT 1`)[0].marzban_username;
+  const trialUser = query(`SELECT marzban_username FROM marzban_users WHERE plan_id = 'p3-trial' ORDER BY updated_at DESC LIMIT 1`)[0].marzban_username;
   expect(query(`SELECT COUNT(*) AS n FROM orders WHERE plan_id = 'p3-trial'`)[0].n).toBe(0);
   await page.goto("/plans");
   const upgrade = run(["codes:create", "--", "p1-month"]).match(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}/)![0];
@@ -1143,7 +1143,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   // 老订阅：微信号和这个客人一样（大小写不同也算），客人页提示一键绑定
   const legacyUser = `e2e_legacy_${stamp}`.slice(0, 32);
   await mockMarzban("POST", "/user", { username: legacyUser, expire: Math.floor(Date.now() / 1000) + 30 * 86400 });
-  sql(`INSERT INTO marzban_wechat (marzban_username, wechat, created_at) VALUES ('${legacyUser}', 'E2E_WX_TEST', unixepoch())`);
+  sql(`INSERT INTO marzban_users (marzban_username, wechat) VALUES ('${legacyUser}', 'E2E_WX_TEST')`);
   await admin.reload();
   const maybe = admin.getByTestId("maybe-subs");
   await expect(maybe).toContainText(legacyUser);

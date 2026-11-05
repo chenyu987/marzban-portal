@@ -61,12 +61,12 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     for (const r of results) owners.set(r.marzban_username, r);
     // 没绑客人的老订阅：显示记着的微信号
     const { results: old } = await db()
-      .prepare(`SELECT marzban_username, wechat FROM marzban_wechat WHERE marzban_username IN (SELECT value FROM json_each(?))`)
+      .prepare(`SELECT marzban_username, wechat FROM marzban_users WHERE wechat IS NOT NULL AND marzban_username IN (SELECT value FROM json_each(?))`)
       .bind(namesJson)
       .all<{ marzban_username: string; wechat: string }>();
     for (const r of old) legacyWechat.set(r.marzban_username, r.wechat);
     const { results: plans } = await db()
-      .prepare(`SELECT marzban_username, plan_id FROM subscription_plans WHERE marzban_username IN (SELECT value FROM json_each(?))`)
+      .prepare(`SELECT marzban_username, plan_id FROM marzban_users WHERE plan_id IS NOT NULL AND marzban_username IN (SELECT value FROM json_each(?))`)
       .bind(namesJson)
       .all<{ marzban_username: string; plan_id: string }>();
     for (const r of plans) planOf.set(r.marzban_username, findPlan(site.plans, r.plan_id)?.group ?? r.plan_id);

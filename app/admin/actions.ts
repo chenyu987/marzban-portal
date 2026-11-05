@@ -606,7 +606,7 @@ export async function adminBindUser(_: FormState, form: FormData): Promise<FormS
   return r;
 }
 
-// 订阅还没绑客人、也没有这个微信号的注册客人时：先记下订阅的微信号（存在 marzban_wechat，和老订阅一样）。
+// 订阅还没绑客人、也没有这个微信号的注册客人时：先记下订阅的微信号（存在 marzban_users.wechat，和老订阅一样）。
 // 后台按微信号能搜到；客人以后用这个微信号注册或改成这个微信号，就自动绑过去（lib/claim.ts）。已经记过的话改成新的
 export async function adminSetSubWechat(_: FormState, form: FormData): Promise<FormState> {
   const admin = await requireAdmin();
@@ -617,15 +617,15 @@ export async function adminSetSubWechat(_: FormState, form: FormData): Promise<F
   if (!(await findUser(username))) return { error: `Marzban 上没有 ${username}` };
   const owned = await db().prepare("SELECT 1 FROM subscriptions WHERE marzban_username = ?").bind(username).first();
   if (owned) return { error: "这个订阅已经绑了客人，不用再记微信号" };
-  const before = await db().prepare("SELECT wechat FROM marzban_wechat WHERE marzban_username = ?").bind(username).first<{ wechat: string }>();
+  const before = (await db().prepare("SELECT wechat FROM marzban_users WHERE marzban_username = ?").bind(username).first<{ wechat: string | null }>())?.wechat;
   await db()
     .prepare(
-      `INSERT INTO marzban_wechat (marzban_username, wechat, created_at) VALUES (?, ?, ?)
+      `INSERT INTO marzban_users (marzban_username, wechat) VALUES (?, ?)
        ON CONFLICT (marzban_username) DO UPDATE SET wechat = excluded.wechat`,
     )
-    .bind(username, wechat, nowSec())
+    .bind(username, wechat)
     .run();
-  await logAdmin(admin, "user.set_wechat", username, before ? `${before.wechat} → ${wechat}` : wechat);
+  await logAdmin(admin, "user.set_wechat", username, before ? `${before} → ${wechat}` : wechat);
   revalidatePath(`/admin/users/${encodeURIComponent(username)}`);
   revalidatePath("/admin/users");
   return { ok: `已记下微信号 ${wechat}，客人用这个微信号注册后会自动绑过来` };
@@ -647,10 +647,10 @@ export async function adminChangePlan(_: FormState, form: FormData): Promise<For
   } catch (e) {
     return { error: `改套餐失败：${errText(e)}` };
   }
-  const before = await db().prepare("SELECT plan_id FROM subscription_plans WHERE marzban_username = ?").bind(username).first<{ plan_id: string }>();
+  const before = await db().prepare("SELECT plan_id FROM marzban_users WHERE marzban_username = ? AND plan_id IS NOT NULL").bind(username).first<{ plan_id: string }>();
   await db()
     .prepare(
-      `INSERT INTO subscription_plans (marzban_username, plan_id, updated_at) VALUES (?, ?, ?)
+      `INSERT INTO marzban_users (marzban_username, plan_id, updated_at) VALUES (?, ?, ?)
        ON CONFLICT (marzban_username) DO UPDATE SET plan_id = excluded.plan_id, updated_at = excluded.updated_at`,
     )
     .bind(username, plan.id, nowSec())

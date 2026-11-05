@@ -37,7 +37,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
     db()
       .prepare(
         `SELECT s.marzban_username, s.code, p.plan_id FROM subscriptions s
-         LEFT JOIN subscription_plans p ON p.marzban_username = s.marzban_username WHERE s.customer_id = ? ORDER BY s.id`,
+         LEFT JOIN marzban_users p ON p.marzban_username = s.marzban_username WHERE s.customer_id = ? ORDER BY s.id`,
       )
       .bind(id)
       .all<{ marzban_username: string; code: string | null; plan_id: string | null }>(),
@@ -66,7 +66,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   const { results: maybe } = c.wechat
     ? await db()
         .prepare(
-          `SELECT w.marzban_username FROM marzban_wechat w
+          `SELECT w.marzban_username FROM marzban_users w
            WHERE w.wechat = ? COLLATE NOCASE AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.marzban_username = w.marzban_username)`,
         )
         .bind(c.wechat)

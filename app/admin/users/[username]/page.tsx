@@ -55,15 +55,15 @@ export default async function UserPage({ params }: { params: Promise<{ username:
     ? null
     : await db()
         .prepare(
-          `SELECT w.wechat, m.id AS match_id, m.email AS match_email FROM marzban_wechat w
+          `SELECT w.wechat, m.id AS match_id, m.email AS match_email FROM marzban_users w
            LEFT JOIN customers m ON m.id = (SELECT id FROM customers x WHERE x.wechat = w.wechat COLLATE NOCASE ORDER BY id LIMIT 1)
-           WHERE w.marzban_username = ?`,
+           WHERE w.marzban_username = ? AND w.wechat IS NOT NULL`,
         )
         .bind(username)
         .first<{ wechat: string; match_id: number | null; match_email: string | null }>();
   // 订阅编号（客人订阅页上那个 7F3A-9C21）；后台手动建、没绑客人的订阅没有
   const code = (await db().prepare("SELECT code FROM subscriptions WHERE marzban_username = ?").bind(username).first<{ code: string | null }>())?.code;
-  const planRow = await db().prepare("SELECT plan_id FROM subscription_plans WHERE marzban_username = ?").bind(username).first<{ plan_id: string }>();
+  const planRow = await db().prepare("SELECT plan_id FROM marzban_users WHERE marzban_username = ? AND plan_id IS NOT NULL").bind(username).first<{ plan_id: string }>();
   // 套餐说明：价目表上那行（比如「单设备  20G流量/月」），没配就写流量
   const desc = (id: string) => {
     const p = findPlan(site.plans, id)!;

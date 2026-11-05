@@ -61,12 +61,12 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const { results: legacy } = await db()
     .prepare(
       `SELECT w.marzban_username, w.wechat, c.id AS customer_id, c.email, c.wechat AS customer_wechat, m.id AS match_id, m.email AS match_email
-       FROM marzban_wechat w
+       FROM marzban_users w
        LEFT JOIN subscriptions s ON s.marzban_username = w.marzban_username
        LEFT JOIN customers c ON c.id = s.customer_id
        -- 同微信号的注册客人可能不止一个（微信号没限制唯一），取最早注册的那个
        LEFT JOIN customers m ON s.id IS NULL AND m.id = (SELECT id FROM customers x WHERE x.wechat = w.wechat COLLATE NOCASE ORDER BY id LIMIT 1)
-       WHERE ?1 = '' OR w.marzban_username LIKE ?2 ESCAPE '\\' OR w.wechat LIKE ?2 ESCAPE '\\'
+       WHERE w.wechat IS NOT NULL AND (?1 = '' OR w.marzban_username LIKE ?2 ESCAPE '\\' OR w.wechat LIKE ?2 ESCAPE '\\')
        ORDER BY c.id IS NOT NULL, w.wechat COLLATE NOCASE, w.marzban_username LIMIT 200`,
     )
     .bind(query, like(query))

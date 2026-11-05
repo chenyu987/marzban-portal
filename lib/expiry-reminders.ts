@@ -19,7 +19,7 @@ export async function runExpiryReminders(now: number): Promise<{ checked: number
     .prepare(
       `SELECT s.marzban_username, s.code, c.email, c.lang, p.plan_id FROM subscriptions s
        JOIN customers c ON c.id = s.customer_id
-       LEFT JOIN subscription_plans p ON p.marzban_username = s.marzban_username
+       LEFT JOIN marzban_users p ON p.marzban_username = s.marzban_username
        WHERE c.notify_expiry = 1`,
     )
     .all<Row>();

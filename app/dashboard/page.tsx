@@ -64,8 +64,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // 每个订阅现在的套餐（付款时自动记，管理员改套餐也改这里），用来当卡片标题；没记过的老订阅显示「我的订阅」
   const { results: paid } = await db()
     .prepare(
-      `SELECT p.marzban_username, p.plan_id, p.updated_at FROM subscription_plans p
-       JOIN subscriptions s ON s.marzban_username = p.marzban_username WHERE s.customer_id = ?`,
+      `SELECT p.marzban_username, p.plan_id, p.updated_at FROM marzban_users p
+       JOIN subscriptions s ON s.marzban_username = p.marzban_username WHERE s.customer_id = ? AND p.plan_id IS NOT NULL`,
     )
     .bind(customer.id)
     .all<{ marzban_username: string; plan_id: string; updated_at: number }>();

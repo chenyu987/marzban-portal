@@ -295,7 +295,7 @@ export async function redeem(_: FormState, form: FormData): Promise<FormState> {
         : [
             db()
               .prepare(
-                `INSERT INTO subscription_plans (marzban_username, plan_id, updated_at) VALUES (?, ?, ?)
+                `INSERT INTO marzban_users (marzban_username, plan_id, updated_at) VALUES (?, ?, ?)
                  ON CONFLICT (marzban_username) DO UPDATE SET plan_id = excluded.plan_id, updated_at = excluded.updated_at`,
               )
               .bind(username, plan.id, now),
