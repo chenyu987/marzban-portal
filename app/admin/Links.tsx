@@ -1,9 +1,12 @@
 import Link from "next/link";
+import { getT } from "@/lib/lang";
 import CopyButton from "./CopyButton";
 
 // 后台里客人、订阅互相跳转的链接，所有页面统一用这两个，不用自己去搜
 // 客人显示微信号（客服最常用，点了进客人页），后面小字是邮箱；两个后面都有复制按钮，方便贴去微信、邮件里
-export function CustomerLink({ id, email, wechat }: { id: number; email: string; wechat?: string | null }) {
+export async function CustomerLink({ id, email, wechat }: { id: number; email: string; wechat?: string | null }) {
+  const { t } = await getT();
+  const copyEmail = t("复制邮箱", "Copy email");
   const href = `/admin/customers/${id}`;
   if (!wechat)
     return (
@@ -11,7 +14,7 @@ export function CustomerLink({ id, email, wechat }: { id: number; email: string;
         <Link href={href} className="link link-hover">
           {email}
         </Link>
-        <CopyButton text={email} label="复制邮箱" />
+        <CopyButton text={email} label={copyEmail} />
       </span>
     );
   return (
@@ -20,8 +23,8 @@ export function CustomerLink({ id, email, wechat }: { id: number; email: string;
         {wechat}
         <span className="ml-1 text-xs text-base-content/50">{email}</span>
       </Link>
-      <CopyButton text={wechat} label="复制微信号" />
-      <CopyButton text={email} label="复制邮箱" />
+      <CopyButton text={wechat} label={t("复制微信号", "Copy WeChat ID")} />
+      <CopyButton text={email} label={copyEmail} />
     </span>
   );
 }

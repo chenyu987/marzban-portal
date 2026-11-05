@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { cancelOrder, claimPaid } from "../actions";
 import { confirmSubmit } from "../ConfirmDialog";
+import ContactSupport from "../ContactSupport";
 import { useT } from "../LangContext";
 
 export type OpenOrder = {
@@ -169,6 +170,7 @@ export default function PendingOrder({ order, payments }: { order: OpenOrder; pa
                 className="input input-sm w-full"
               />
               {state?.error && <div role="alert" className="alert alert-error alert-soft text-sm">{state.error}</div>}
+              {state?.support && <ContactSupport />}
               <button className="btn btn-primary w-full" disabled={claiming}>
                 {claiming && <span className="loading loading-spinner loading-xs" />}
                 {t("我已付款", "I've paid")}

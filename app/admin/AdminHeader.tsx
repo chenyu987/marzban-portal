@@ -6,28 +6,31 @@ import { adminLogout } from "./actions";
 import { Logo } from "../Brand";
 import { MenuButton, MenuSheet, useMenuOpen } from "../MobileMenu";
 import CommandPalette from "./CommandPalette";
+import { useT } from "../LangContext";
+import type { T } from "@/lib/i18n";
 
 // 后台导航按用途分三组：日常（订单、客人、Marzban 用户、兑换码）、线路（节点、Host）、记录（日志）。
 // 当前页高亮；宽屏摆在顶部，太窄时横向滑动不换行；手机上和客人页一样是右上角的整屏菜单（见 MobileMenu.tsx）
-const GROUPS: { href: string; label: string }[][] = [
+const groups = (t: T): { href: string; label: string }[][] => [
   [
-    { href: "/admin", label: "订单" },
-    { href: "/admin/customers", label: "客人" },
-    { href: "/admin/users", label: "订阅" },
-    { href: "/admin/codes", label: "兑换码" },
+    { href: "/admin", label: t("订单", "Orders") },
+    { href: "/admin/customers", label: t("客人", "Customers") },
+    { href: "/admin/users", label: t("订阅", "Subscriptions") },
+    { href: "/admin/codes", label: t("兑换码", "Codes") },
   ],
   [
-    { href: "/admin/nodes", label: "节点" },
+    { href: "/admin/nodes", label: t("节点", "Nodes") },
     { href: "/admin/hosts", label: "Host" },
   ],
-  [{ href: "/admin/logs", label: "日志" }],
+  [{ href: "/admin/logs", label: t("日志", "Logs") }],
 ];
-const MENU_LINKS = [...GROUPS.flat(), { href: "/admin/account", label: "账户" }];
-// 后台只有中文，不跟着语言走
-const MENU_LABELS = { menu: "菜单", open: "打开菜单", close: "关闭菜单", logout: "退出" };
 
 export default function AdminHeader({ email }: { email: string }) {
   const path = usePathname();
+  const t = useT();
+  const GROUPS = groups(t);
+  const MENU_LINKS = [...GROUPS.flat(), { href: "/admin/account", label: t("账户", "Account") }];
+  const MENU_LABELS = { menu: t("菜单", "Menu"), open: t("打开菜单", "Open menu"), close: t("关闭菜单", "Close menu"), logout: t("退出", "Log out") };
   const [open, setOpen] = useMenuOpen();
   const active = (href: string) => (href === "/admin" ? path === "/admin" : path === href || path.startsWith(`${href}/`));
   return (
@@ -35,7 +38,7 @@ export default function AdminHeader({ email }: { email: string }) {
       <header className="sticky top-0 z-10 -mx-4 mb-2 flex items-center gap-2 border-b border-base-300 bg-base-200/90 px-4 py-2 backdrop-blur">
         <Link href="/admin" className="mr-1 flex shrink-0 items-center gap-2 text-lg font-bold">
           <Logo size={26} />
-          管理后台
+          {t("管理后台", "Admin")}
         </Link>
         <nav className="-mx-1 hidden flex-1 items-center gap-1 overflow-x-auto px-1 whitespace-nowrap sm:flex">
           {GROUPS.map((g, i) => (
@@ -63,10 +66,10 @@ export default function AdminHeader({ email }: { email: string }) {
           aria-current={active("/admin/account") ? "page" : undefined}
           className={`btn btn-sm shrink-0 max-sm:hidden ${active("/admin/account") ? "btn-soft btn-primary" : "btn-ghost"}`}
         >
-          账户
+          {MENU_LINKS[MENU_LINKS.length - 1].label}
         </Link>
         <form action={adminLogout} className="hidden shrink-0 sm:block">
-          <button className="btn btn-ghost btn-sm">退出</button>
+          <button className="btn btn-ghost btn-sm">{MENU_LABELS.logout}</button>
         </form>
         <MenuButton open={open} onOpen={() => setOpen(true)} label={MENU_LABELS.open} />
       </header>

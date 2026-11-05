@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import type { MarzbanNode } from "@/lib/marzban";
 import type { FormState } from "../../actions";
 import { adminAddNode, adminDeleteNode, adminEditNode, adminReconnectNode, adminRestartCore, adminToggleNode } from "../actions";
+import { useT } from "../../LangContext";
 
 function Alert({ state }: { state?: FormState }) {
   if (state?.error) return <div role="alert" className="alert alert-error alert-soft text-sm">{state.error}</div>;
@@ -26,13 +27,14 @@ function useRun() {
 }
 
 function Fields({ node }: { node?: MarzbanNode }) {
+  const t = useT();
   return (
     <div className="grid gap-2 sm:grid-cols-5">
-      <input name="name" required defaultValue={node?.name} placeholder="节点名，比如 东京" className="input input-sm w-full" />
-      <input name="address" required defaultValue={node?.address} placeholder="IP 或域名" className="input input-sm w-full" />
-      <input name="port" defaultValue={node?.port ?? 62050} inputMode="numeric" title="服务端口" className="input input-sm w-full" />
-      <input name="apiPort" defaultValue={node?.api_port ?? 62051} inputMode="numeric" title="API 端口" className="input input-sm w-full" />
-      <input name="coefficient" defaultValue={node?.usage_coefficient ?? 1} inputMode="decimal" title="流量倍率" className="input input-sm w-full" />
+      <input name="name" required defaultValue={node?.name} placeholder={t("节点名，比如 东京", "Name, e.g. Tokyo")} className="input input-sm w-full" />
+      <input name="address" required defaultValue={node?.address} placeholder={t("IP 或域名", "IP or domain")} className="input input-sm w-full" />
+      <input name="port" defaultValue={node?.port ?? 62050} inputMode="numeric" title={t("服务端口", "Service port")} className="input input-sm w-full" />
+      <input name="apiPort" defaultValue={node?.api_port ?? 62051} inputMode="numeric" title={t("API 端口", "API port")} className="input input-sm w-full" />
+      <input name="coefficient" defaultValue={node?.usage_coefficient ?? 1} inputMode="decimal" title={t("流量倍率", "Traffic multiplier")} className="input input-sm w-full" />
     </div>
   );
 }
@@ -45,11 +47,12 @@ function collect(el: HTMLElement | null): Record<string, string> {
 
 export function NodeForm() {
   const { result, pending, run } = useRun();
+  const t = useT();
   const [box, setBox] = useState<HTMLDivElement | null>(null);
   return (
     <div ref={setBox} className="card bg-base-100 shadow-sm">
       <div className="card-body gap-2 p-4">
-        <p className="text-xs text-base-content/60">名字｜地址｜服务端口｜API 端口｜流量倍率</p>
+        <p className="text-xs text-base-content/60">{t("名字｜地址｜服务端口｜API 端口｜流量倍率", "Name | Address | Service port | API port | Multiplier")}</p>
         <Fields />
         <button
           type="button"
@@ -57,10 +60,10 @@ export function NodeForm() {
           disabled={pending}
           onClick={() => {
             const d = collect(box);
-            run(adminAddNode, d, () => confirm(`在 Marzban 上加节点 ${d.name}（${d.address}）？`));
+            run(adminAddNode, d, () => confirm(t(`在 Marzban 上加节点 ${d.name}（${d.address}）？`, `Add node ${d.name} (${d.address}) on Marzban?`)));
           }}
         >
-          加节点
+          {t("加节点", "Add node")}
         </button>
         <Alert state={result} />
       </div>
@@ -71,6 +74,7 @@ export function NodeForm() {
 export function NodeActions({ node }: { node: MarzbanNode }) {
   const { result, pending, run } = useRun();
   const [editing, setEditing] = useState(false);
+  const t = useT();
   const [box, setBox] = useState<HTMLDivElement | null>(null);
   const id = String(node.id);
   const disabled = node.status === "disabled";
@@ -78,7 +82,7 @@ export function NodeActions({ node }: { node: MarzbanNode }) {
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap gap-2">
         <button type="button" className="btn btn-xs" disabled={pending || disabled} onClick={() => run(adminReconnectNode, { id }, () => true)}>
-          重连
+          {t("重连", "Reconnect")}
         </button>
         <button
           type="button"
@@ -86,22 +90,26 @@ export function NodeActions({ node }: { node: MarzbanNode }) {
           disabled={pending}
           onClick={() =>
             run(adminToggleNode, { id, enable: disabled ? "1" : "" }, () =>
-              confirm(disabled ? `启用节点 ${node.name}？` : `停用节点 ${node.name}？连在这个节点上的客人会断开，要换别的节点`),
+              confirm(
+                disabled
+                  ? t(`启用节点 ${node.name}？`, `Enable node ${node.name}?`)
+                  : t(`停用节点 ${node.name}？连在这个节点上的客人会断开，要换别的节点`, `Disable node ${node.name}? Customers on it will be disconnected and need another node`),
+              ),
             )
           }
         >
-          {disabled ? "启用" : "停用"}
+          {disabled ? t("启用", "Enable") : t("停用", "Disable")}
         </button>
         <button type="button" className="btn btn-xs" onClick={() => setEditing(!editing)}>
-          {editing ? "收起" : "修改"}
+          {editing ? t("收起", "Close") : t("修改", "Edit")}
         </button>
         <button
           type="button"
           className="btn btn-xs btn-error btn-outline"
           disabled={pending}
-          onClick={() => run(adminDeleteNode, { id }, () => prompt(`删除节点后客人就连不上它了。确定要删就输入节点名 ${node.name}`) === node.name)}
+          onClick={() => run(adminDeleteNode, { id }, () => prompt(t(`删除节点后客人就连不上它了。确定要删就输入节点名 ${node.name}`, `Customers won't be able to use this node after deletion. Type the node name ${node.name} to delete`)) === node.name)}
         >
-          删除
+          {t("删除", "Delete")}
         </button>
         {pending && <span className="loading loading-spinner loading-xs self-center" />}
       </div>
@@ -112,9 +120,9 @@ export function NodeActions({ node }: { node: MarzbanNode }) {
             type="button"
             className="btn btn-sm self-start"
             disabled={pending}
-            onClick={() => run(adminEditNode, { id, ...collect(box) }, () => confirm(`保存对节点 ${node.name} 的修改？`))}
+            onClick={() => run(adminEditNode, { id, ...collect(box) }, () => confirm(t(`保存对节点 ${node.name} 的修改？`, `Save changes to node ${node.name}?`)))}
           >
-            保存
+            {t("保存", "Save")}
           </button>
         </div>
       )}
@@ -125,15 +133,16 @@ export function NodeActions({ node }: { node: MarzbanNode }) {
 
 export function CoreActions() {
   const { result, pending, run } = useRun();
+  const t = useT();
   return (
     <div className="flex flex-col gap-2">
       <button
         type="button"
         className="btn btn-sm btn-warning btn-outline self-start"
         disabled={pending}
-        onClick={() => run(adminRestartCore, {}, () => confirm("重启 Xray？所有节点都会跟着重启，所有客人断开几秒后自动重连"))}
+        onClick={() => run(adminRestartCore, {}, () => confirm(t("重启 Xray？所有节点都会跟着重启，所有客人断开几秒后自动重连", "Restart Xray? All nodes restart too; every customer drops for a few seconds and reconnects")))}
       >
-        重启 Xray
+        {t("重启 Xray", "Restart Xray")}
       </button>
       <Alert state={result} />
     </div>

@@ -2,15 +2,16 @@
 // 天数记在 redeem_codes.days，空表示按套餐的天数
 import type { Plan } from "../site.config.example";
 import { formatRedeemCode } from "./format";
+import type { Lang } from "./i18n";
 
 export const MAX_CODE_DAYS = 3650;
 
 // 后台填的天数：空或等于套餐天数 → null（按套餐）；不是 1～3650 的整数 → 报错
-export function parseCodeDays(input: string, plan: Plan): { days: number | null } | { error: string } {
+export function parseCodeDays(input: string, plan: Plan, lang: Lang = "zh"): { days: number | null } | { error: string } {
   const s = input.trim();
   if (!s) return { days: null };
   const n = Number(s);
-  if (!Number.isInteger(n) || n < 1 || n > MAX_CODE_DAYS) return { error: `天数要写 1 到 ${MAX_CODE_DAYS} 的整数` };
+  if (!Number.isInteger(n) || n < 1 || n > MAX_CODE_DAYS) return { error: lang === "en" ? `Days must be a whole number from 1 to ${MAX_CODE_DAYS}` : `天数要写 1 到 ${MAX_CODE_DAYS} 的整数` };
   return { days: n === plan.days ? null : n };
 }
 

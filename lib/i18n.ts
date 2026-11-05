@@ -1,6 +1,6 @@
 // 中英文切换。客人在页面底部点「中文 / English」，选的语言记在 cookie lang 里，没选过就是中文。
 // 纯函数，前后端都能用；服务器上读 cookie 用 lib/lang.ts，客户端组件用 app/LangContext.tsx 的 useT()。
-// 文案直接写在用到的地方：t("中文", "English")，不用另外维护词典。管理后台只有中文
+// 文案直接写在用到的地方：t("中文", "English")，不用另外维护词典。管理后台也一样
 import type { Text } from "../site.config.example";
 
 export type Lang = "zh" | "en";

@@ -7,6 +7,8 @@ import { CustomerLink, SubLink } from "../Links";
 import BindButton from "../BindButton";
 import { FilterBar, Pager, pageOf, param } from "../ui";
 import { getTz } from "@/lib/tz-server";
+import { getT } from "@/lib/lang";
+import type { T } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -18,18 +20,18 @@ const like = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 // 客人列表：按邮箱、微信号、订阅名或订阅编号搜，最多显示 100 个，新注册的在前
 const PAGE_SIZE = 30;
-const SORTS: Record<string, { label: string; sql: string }> = {
-  new: { label: "最新注册的在前", sql: "c.id DESC" },
-  paid: { label: "付款最多的在前", sql: "paid DESC, c.id DESC" },
-  balance: { label: "余额最多的在前", sql: "balance DESC, c.id DESC" },
+const SORTS: Record<string, { label: (t: T) => string; sql: string }> = {
+  new: { label: (t) => t("最新注册的在前", "Newest first"), sql: "c.id DESC" },
+  paid: { label: (t) => t("付款最多的在前", "Most paid first"), sql: "paid DESC, c.id DESC" },
+  balance: { label: (t) => t("余额最多的在前", "Highest balance first"), sql: "balance DESC, c.id DESC" },
 };
-const HAS: Record<string, { label: string; sql: string }> = {
-  sub: { label: "有订阅", sql: "EXISTS (SELECT 1 FROM subscriptions s WHERE s.customer_id = c.id)" },
-  nosub: { label: "没有订阅", sql: "NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.customer_id = c.id)" },
-  balance: { label: "有余额", sql: "(SELECT COALESCE(SUM(amount), 0) FROM balance_entries b WHERE b.customer_id = c.id) > 0" },
-  referred: { label: "别人推荐来的", sql: "c.referred_by IS NOT NULL" },
-  nowechat: { label: "没填微信号", sql: "c.wechat IS NULL" },
-  deleted: { label: "已删除的", sql: "c.deleted_at IS NOT NULL" },
+const HAS: Record<string, { label: (t: T) => string; sql: string }> = {
+  sub: { label: (t) => t("有订阅", "Has a subscription"), sql: "EXISTS (SELECT 1 FROM subscriptions s WHERE s.customer_id = c.id)" },
+  nosub: { label: (t) => t("没有订阅", "No subscription"), sql: "NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.customer_id = c.id)" },
+  balance: { label: (t) => t("有余额", "Has balance"), sql: "(SELECT COALESCE(SUM(amount), 0) FROM balance_entries b WHERE b.customer_id = c.id) > 0" },
+  referred: { label: (t) => t("别人推荐来的", "Referred"), sql: "c.referred_by IS NOT NULL" },
+  nowechat: { label: (t) => t("没填微信号", "No WeChat ID"), sql: "c.wechat IS NULL" },
+  deleted: { label: (t) => t("已删除的", "Deleted"), sql: "c.deleted_at IS NOT NULL" },
 };
 
 // 客人列表：搜邮箱、微信号、订阅名或订阅编号，按有没有订阅 / 余额 / 推荐人筛，排序、翻页。
@@ -37,6 +39,7 @@ const HAS: Record<string, { label: string; sql: string }> = {
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = await requireAdmin();
   const tz = await getTz();
+  const { t, lang } = await getT();
   const sp = await searchParams;
   const query = param(sp, "q");
   const has = param(sp, "has") in HAS ? param(sp, "has") : "";
@@ -84,40 +87,42 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     <div className="mx-auto max-w-5xl px-4 pb-16">
       <AdminHeader email={admin.email} />
       <div className="mt-4 mb-1 flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-2xl font-bold">客人</h1>
-        <span className="text-sm text-base-content/60">在网站上注册的人；每个客人名下可以有好几个订阅（Marzban 用户）</span>
+        <h1 className="text-2xl font-bold">{t("客人", "Customers")}</h1>
+        <span className="text-sm text-base-content/60">
+          {t("在网站上注册的人；每个客人名下可以有好几个订阅（Marzban 用户）", "People registered on the site; each can have several subscriptions (Marzban users)")}
+        </span>
       </div>
       <FilterBar base="/admin/customers" active={!!(query || has || sort !== "new")}>
-        <input name="q" defaultValue={query} placeholder="邮箱、微信号、订阅名或订阅编号" className="input input-sm w-64" />
-        <select name="has" defaultValue={has} className="select select-sm w-36" aria-label="筛选">
-          <option value="">全部客人</option>
+        <input name="q" defaultValue={query} placeholder={t("邮箱、微信号、订阅名或订阅编号", "Email, WeChat ID, subscription name or code")} className="input input-sm w-64" />
+        <select name="has" defaultValue={has} className="select select-sm w-36" aria-label={t("筛选", "Filter")}>
+          <option value="">{t("全部客人", "All customers")}</option>
           {Object.entries(HAS).map(([k, v]) => (
             <option key={k} value={k}>
-              {v.label}
+              {v.label(t)}
             </option>
           ))}
         </select>
-        <select name="sort" defaultValue={sort} className="select select-sm w-40" aria-label="排序">
+        <select name="sort" defaultValue={sort} className="select select-sm w-40" aria-label={t("排序", "Sort")}>
           {Object.entries(SORTS).map(([k, v]) => (
             <option key={k} value={k}>
-              {v.label}
+              {v.label(t)}
             </option>
           ))}
         </select>
       </FilterBar>
       {results.length === 0 ? (
-        <p className="text-base-content/60">{query ? "没有找到注册过的客人。" : "还没有客人。"}</p>
+        <p className="text-base-content/60">{query ? t("没有找到注册过的客人。", "No registered customers found.") : t("还没有客人。", "No customers yet.")}</p>
       ) : (
         <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
           <table className="table table-sm">
             <thead>
               <tr>
-                <th>客人</th>
-                <th>订阅</th>
-                <th className="text-right">余额</th>
-                <th className="text-right">累计付款</th>
-                <th>推荐人</th>
-                <th>注册</th>
+                <th>{t("客人", "Customer")}</th>
+                <th>{t("订阅", "Subscriptions")}</th>
+                <th className="text-right">{t("余额", "Balance")}</th>
+                <th className="text-right">{t("累计付款", "Total paid")}</th>
+                <th>{t("推荐人", "Referrer")}</th>
+                <th>{t("注册", "Joined")}</th>
               </tr>
             </thead>
             <tbody>
@@ -130,20 +135,20 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                     </td>
                     <td>
                       {names.length === 0 ? (
-                        <span className="text-base-content/40">没有</span>
+                        <span className="text-base-content/40">{t("没有", "None")}</span>
                       ) : (
                         <span className="flex flex-wrap gap-x-2">
                           {names.slice(0, 3).map((n) => (
                             <SubLink key={n} username={n} />
                           ))}
-                          {names.length > 3 && <span className="text-base-content/50">等 {names.length} 个</span>}
+                          {names.length > 3 && <span className="text-base-content/50">{t(`等 ${names.length} 个`, `${names.length} total`)}</span>}
                         </span>
                       )}
                     </td>
                     <td className="text-right">{money(c.balance)}</td>
                     <td className="text-right">{money(c.paid)}</td>
                     <td>{c.referrer_id ? <CustomerLink id={c.referrer_id} email={c.referrer ?? ""} /> : <span className="text-base-content/40">-</span>}</td>
-                    <td className="whitespace-nowrap text-base-content/60">{formatDate(c.created_at, "zh", tz)}</td>
+                    <td className="whitespace-nowrap text-base-content/60">{formatDate(c.created_at, lang, tz)}</td>
                   </tr>
                 );
               })}
@@ -154,16 +159,19 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       <Pager base="/admin/customers" params={params} page={page} pageSize={PAGE_SIZE} total={total?.n ?? 0} />
       {people.size > 0 && (
         <>
-          <h2 className="mt-10 mb-1 text-lg font-bold">老客人（portal 上线前开的订阅）</h2>
+          <h2 className="mt-10 mb-1 text-lg font-bold">{t("老客人（portal 上线前开的订阅）", "Legacy customers (subscriptions from before the portal)")}</h2>
           <p className="mb-3 text-sm text-base-content/60">
-            按微信号就知道是谁：一个微信号一行，名下的老订阅都列在后面。客人注册网站账号时填的微信号一样，就会出现「绑定」按钮，点一下他就能在网站上看到、续费。不自动绑：微信号别人也能填，要你确认是本人。
+            {t(
+              "按微信号就知道是谁：一个微信号一行，名下的老订阅都列在后面。客人注册网站账号时填的微信号一样，就会出现「绑定」按钮，点一下他就能在网站上看到、续费。不自动绑：微信号别人也能填，要你确认是本人。",
+              "One row per WeChat ID, with its legacy subscriptions. When someone registers with the same WeChat ID, a “Link” button appears; one tap lets them see and renew it on the site. Not linked automatically: anyone can type a WeChat ID, so you confirm it's really them.",
+            )}
           </p>
           <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
             <table className="table table-sm">
               <thead>
                 <tr>
-                  <th>客人（微信号）</th>
-                  <th>订阅和网站账号</th>
+                  <th>{t("客人（微信号）", "Customer (WeChat ID)")}</th>
+                  <th>{t("订阅和网站账号", "Subscriptions & site account")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -177,17 +185,17 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                             <SubLink username={w.marzban_username} />
                             {w.customer_id ? (
                               <>
-                                <span className="badge badge-sm badge-success">已绑定</span>
+                                <span className="badge badge-sm badge-success">{t("已绑定", "Linked")}</span>
                                 <CustomerLink id={w.customer_id} email={w.email ?? ""} wechat={w.customer_wechat} />
                               </>
                             ) : w.match_id ? (
                               <>
-                                <span className="text-sm text-base-content/60">同微信号的客人</span>
+                                <span className="text-sm text-base-content/60">{t("同微信号的客人", "Customer with same WeChat ID")}</span>
                                 <CustomerLink id={w.match_id} email={w.match_email ?? ""} />
                                 <BindButton customerId={w.match_id} username={w.marzban_username} who={w.match_email ?? ""} />
                               </>
                             ) : (
-                              <span className="text-sm text-base-content/50">还没注册网站账号</span>
+                              <span className="text-sm text-base-content/50">{t("还没注册网站账号", "No site account yet")}</span>
                             )}
                           </div>
                         ))}

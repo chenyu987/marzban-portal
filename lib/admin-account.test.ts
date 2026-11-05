@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeDevice, parsePrefsForm } from "./admin-account";
+import { describeDevice, LOG_ACTIONS, logActionLabels, parsePrefsForm } from "./admin-account";
 
 describe("认登录设备", () => {
   it("常见的几种", () => {
@@ -10,6 +10,8 @@ describe("认登录设备", () => {
     expect(describeDevice("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36")).toBe("Android · Chrome");
     expect(describeDevice("")).toBe("未知设备");
     expect(describeDevice("curl/8.0")).toBe("未知设备");
+    expect(describeDevice("curl/8.0", "en")).toBe("Unknown device");
+    expect(describeDevice("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.50", "en")).toBe("iPhone · WeChat");
   });
 });
 
@@ -25,5 +27,13 @@ describe("后台偏好表单", () => {
     expect(parsePrefsForm(form({ page_size: "500" }))).toHaveProperty("error");
     expect(parsePrefsForm(form({ sort: "drop table" }))).toHaveProperty("error");
     expect(parsePrefsForm(form({ time: "x" }))).toHaveProperty("error");
+  });
+});
+
+describe("日志操作名", () => {
+  it("每个操作都有英文名", () => {
+    expect(Object.keys(logActionLabels("en")).sort()).toEqual(Object.keys(LOG_ACTIONS).sort());
+    expect(logActionLabels("en")["order.verify"]).toBe("Reconcile: received");
+    expect(logActionLabels()["order.verify"]).toBe("对账：确认到账");
   });
 });

@@ -3,25 +3,34 @@ import CopyButton from "../../CopyButton";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
-import { formatBytes, formatDate, formatExpire, formatMoney, STATUS_LABEL, formatSubCode, timeLeft, formatOrderNo } from "@/lib/format";
+import { formatBytes, formatDate, formatExpire, formatMoney, statusLabel, formatSubCode, timeLeft, formatOrderNo } from "@/lib/format";
 import { getUser, type MarzbanUser } from "@/lib/marzban";
 import { findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
 import AdminHeader from "../../AdminHeader";
 import CustomerActions, { DeleteCustomer } from "./CustomerActions";
 import { CustomerLink, SubLink } from "../../Links";
-import { ORDER_METHOD, ORDER_STATUS } from "../../ui";
+import { orderMethod, orderStatus } from "../../ui";
 import BindButton from "../../BindButton";
 import { getTz } from "@/lib/tz-server";
+import { getT } from "@/lib/lang";
 
 export const dynamic = "force-dynamic";
 
 const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
-const KIND: Record<string, string> = { referral_reward: "推荐奖励", purchase: "买套餐", adjust: "管理员调整", withdrawal: "提现" };
 
 export default async function CustomerPage({ params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdmin();
   const tz = await getTz();
+  const { t, lang } = await getT();
+  const ORDER_STATUS = orderStatus(t);
+  const ORDER_METHOD = orderMethod(t);
+  const KIND: Record<string, string> = {
+    referral_reward: t("推荐奖励", "Referral reward"),
+    purchase: t("买套餐", "Plan purchase"),
+    adjust: t("管理员调整", "Admin adjustment"),
+    withdrawal: t("提现", "Withdrawal"),
+  };
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
   const c = await db()
@@ -93,68 +102,68 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   );
 
   const info: [string, React.ReactNode][] = [
-    ["邮箱", c.email],
-    ["微信号", c.wechat ?? <span className="text-base-content/50">没填（老账号）</span>],
-    ["注册", formatExpire(c.created_at, "zh", tz)],
-    ["推荐码", <span className="font-mono">{c.referral_code}</span>],
-    ["推荐人", c.referrer_id ? <CustomerLink id={c.referrer_id} email={c.referrer ?? ""} /> : "无"],
+    [t("邮箱", "Email"), c.email],
+    [t("微信号", "WeChat"), c.wechat ?? <span className="text-base-content/50">{t("没填（老账号）", "Not set (old account)")}</span>],
+    [t("注册", "Joined"), formatExpire(c.created_at, lang, tz)],
+    [t("推荐码", "Referral code"), <span className="font-mono">{c.referral_code}</span>],
+    [t("推荐人", "Referrer"), c.referrer_id ? <CustomerLink id={c.referrer_id} email={c.referrer ?? ""} /> : t("无", "None")],
   ];
 
   return (
     <div className="mx-auto max-w-5xl px-4 pb-16">
       <AdminHeader email={admin.email} />
       <Link href="/admin/customers" className="link link-hover text-sm text-base-content/60">
-        ← 客人列表
+        ← {t("客人列表", "Customers")}
       </Link>
 
       <div className="mt-2 mb-4 rounded-box bg-base-100 p-4 shadow-sm">
         <h1 className="text-2xl font-bold">
           {c.wechat ?? c.email}
-          <CopyButton text={c.wechat ?? c.email} label={c.wechat ? "复制微信号" : "复制邮箱"} />
+          <CopyButton text={c.wechat ?? c.email} label={c.wechat ? t("复制微信号", "Copy WeChat ID") : t("复制邮箱", "Copy email")} />
           {c.wechat && (
             <span className="ml-1 align-middle text-sm font-normal text-base-content/60">
               {c.email}
-              <CopyButton text={c.email} label="复制邮箱" />
+              <CopyButton text={c.email} label={t("复制邮箱", "Copy email")} />
             </span>
           )}
-          {c.deleted_at && <span className="badge badge-error badge-soft ml-2 align-middle">已删除 {formatExpire(c.deleted_at, "zh", tz)}</span>}
+          {c.deleted_at && <span className="badge badge-error badge-soft ml-2 align-middle">{t("已删除", "Deleted")} {formatExpire(c.deleted_at, lang, tz)}</span>}
         </h1>
         <div className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
           {info.map(([k, v]) => (
             <div key={k} className="flex gap-2">
-              <span className="w-14 shrink-0 text-base-content/60">{k}</span>
+              <span className={`${lang === "en" ? "w-24" : "w-14"} shrink-0 text-base-content/60`}>{k}</span>
               <span>{v}</span>
             </div>
           ))}
         </div>
         <div className="mt-4 grid grid-cols-3 gap-2 text-center">
           <div className="rounded-box bg-base-200 p-2">
-            <div className="text-xs text-base-content/60">余额</div>
+            <div className="text-xs text-base-content/60">{t("余额", "Balance")}</div>
             <div className="font-bold">{money(totals?.balance ?? 0)}</div>
           </div>
           <div className="rounded-box bg-base-200 p-2">
-            <div className="text-xs text-base-content/60">累计付款</div>
+            <div className="text-xs text-base-content/60">{t("累计付款", "Total paid")}</div>
             <div className="font-bold">
               {money(totals?.paid ?? 0)}
-              <span className="ml-1 text-xs font-normal text-base-content/60">{totals?.paid_n ?? 0} 单</span>
+              <span className="ml-1 text-xs font-normal text-base-content/60">{t(`${totals?.paid_n ?? 0} 单`, `${totals?.paid_n ?? 0} orders`)}</span>
             </div>
           </div>
           <div className="rounded-box bg-base-200 p-2">
-            <div className="text-xs text-base-content/60">推荐了</div>
-            <div className="font-bold">{referred.results.length} 人</div>
+            <div className="text-xs text-base-content/60">{t("推荐了", "Referred")}</div>
+            <div className="font-bold">{t(`${referred.results.length} 人`, `${referred.results.length}`)}</div>
           </div>
         </div>
       </div>
 
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-bold">订阅（{users.length}）</h2>
+        <h2 className="text-lg font-bold">{t(`订阅（${users.length}）`, `Subscriptions (${users.length})`)}</h2>
         <Link href={`/admin/users/new?customer=${encodeURIComponent(c.wechat ?? c.email)}`} className="btn btn-ghost btn-xs font-normal text-base-content/60">
-          + 新开订阅
+          + {t("新开订阅", "New subscription")}
         </Link>
       </div>
       {maybe.length > 0 && (
         <div role="alert" className="alert alert-info alert-soft mb-3 flex-wrap" data-testid="maybe-subs">
-          <span>微信号一样的老订阅，多半是他的：</span>
+          <span>{t("微信号一样的老订阅，多半是他的：", "Legacy subscriptions with the same WeChat ID, probably theirs:")}</span>
           {maybe.map((m) => (
             <span key={m.marzban_username} className="flex items-center gap-1">
               <SubLink username={m.marzban_username} />
@@ -163,12 +172,12 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
           ))}
         </div>
       )}
-      {users.length === 0 && <p className="mb-2 text-sm text-base-content/60">名下还没有订阅。可以新开一个，或者在下面把 Marzban 上已有的订阅绑过来。</p>}
+      {users.length === 0 && <p className="mb-2 text-sm text-base-content/60">{t("名下还没有订阅。可以新开一个，或者在下面把 Marzban 上已有的订阅绑过来。", "No subscriptions yet. Create one, or link an existing Marzban subscription below.")}</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         {users.map(({ username, code, plan, user }) => {
-          const st = user ? (STATUS_LABEL[user.status] ?? { text: user.status, badge: "badge-neutral" }) : null;
+          const st = user ? statusLabel(user.status, lang) : null;
           const pct = user?.data_limit ? Math.min(100, (user.used_traffic / user.data_limit) * 100) : null;
-          const left = user ? timeLeft(user.expire) : null;
+          const left = user ? timeLeft(user.expire, undefined, lang) : null;
           return (
             <Link
               key={username}
@@ -178,22 +187,22 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-mono font-bold">{username}</span>
-                {st ? <span className={`badge badge-sm ${st.badge}`}>{st.text}</span> : <span className="badge badge-sm badge-error">Marzban 上查不到</span>}
+                {st ? <span className={`badge badge-sm ${st.badge}`}>{st.text}</span> : <span className="badge badge-sm badge-error">{t("Marzban 上查不到", "Not found on Marzban")}</span>}
               </div>
               <div className="text-xs text-base-content/50">
-                {plan ?? "没记套餐"}｜订阅编号 {formatSubCode(code)}
+                {plan ?? t("没记套餐", "No plan recorded")}｜{t("订阅编号", "Code")} {formatSubCode(code)}
               </div>
               {user && (
                 <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
                   <div>
-                    <div className="text-xs text-base-content/60">到期</div>
-                    <div>{formatExpire(user.expire, "zh", tz)}</div>
+                    <div className="text-xs text-base-content/60">{t("到期", "Expires")}</div>
+                    <div>{formatExpire(user.expire, lang, tz)}</div>
                     {left && <div className={`text-xs ${left.urgent ? "text-error" : "text-base-content/60"}`}>{left.text}</div>}
                   </div>
                   <div>
-                    <div className="text-xs text-base-content/60">流量</div>
+                    <div className="text-xs text-base-content/60">{t("流量", "Traffic")}</div>
                     <div>
-                      {formatBytes(user.used_traffic)} / {user.data_limit ? formatBytes(user.data_limit) : "不限"}
+                      {formatBytes(user.used_traffic)} / {user.data_limit ? formatBytes(user.data_limit) : t("不限", "Unlimited")}
                     </div>
                     {pct !== null && <progress className={`progress h-1.5 w-full ${pct >= 90 ? "progress-error" : "progress-primary"}`} value={pct} max={100} />}
                   </div>
@@ -206,31 +215,31 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
 
       {!c.deleted_at && (
         <>
-          <h2 className="mt-8 mb-2 text-lg font-bold">操作</h2>
+          <h2 className="mt-8 mb-2 text-lg font-bold">{t("操作", "Actions")}</h2>
           <CustomerActions customerId={c.id} email={c.email} />
         </>
       )}
 
       <div className="mt-8 mb-2 flex items-center justify-between">
-        <h2 className="text-lg font-bold">订单（{orders.results.length}）</h2>
+        <h2 className="text-lg font-bold">{t(`订单（${orders.results.length}）`, `Orders (${orders.results.length})`)}</h2>
         <Link href={`/admin?view=all&q=${encodeURIComponent(c.email)}`} className="link link-hover text-sm">
-          在订单页里看
+          {t("在订单页里看", "View in Orders")}
         </Link>
       </div>
       {orders.results.length === 0 ? (
-        <p className="text-sm text-base-content/60">没有订单。</p>
+        <p className="text-sm text-base-content/60">{t("没有订单。", "No orders.")}</p>
       ) : (
         <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
           <table className="table table-sm">
             <thead>
               <tr>
-                <th>订单</th>
-                <th>套餐</th>
-                <th className="text-right">金额</th>
-                <th>怎么付</th>
-                <th>订阅</th>
-                <th>状态</th>
-                <th>时间</th>
+                <th>{t("订单", "Order")}</th>
+                <th>{t("套餐", "Plan")}</th>
+                <th className="text-right">{t("金额", "Amount")}</th>
+                <th>{t("怎么付", "Payment")}</th>
+                <th>{t("订阅", "Subscription")}</th>
+                <th>{t("状态", "Status")}</th>
+                <th>{t("时间", "Time")}</th>
               </tr>
             </thead>
             <tbody>
@@ -241,17 +250,17 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                       {formatOrderNo(o.no)}
                     </Link>
                   </td>
-                  <td>{o.plan_id ? (findPlan(site.plans, o.plan_id)?.name ?? o.plan_id) : "只记账"}</td>
+                  <td>{o.plan_id ? (findPlan(site.plans, o.plan_id)?.name ?? o.plan_id) : t("只记账", "Ledger only")}</td>
                   <td className="text-right whitespace-nowrap">
                     {money(o.amount)}
-                    {o.balance_used > 0 && o.method === "transfer" && <div className="text-xs text-base-content/50">余额抵扣 {money(o.balance_used)}</div>}
+                    {o.balance_used > 0 && o.method === "transfer" && <div className="text-xs text-base-content/50">{t(`余额抵扣 ${money(o.balance_used)}`, `${money(o.balance_used)} from balance`)}</div>}
                   </td>
                   <td>{ORDER_METHOD[o.method] ?? o.method}</td>
                   <td>{o.marzban_username ? <SubLink username={o.marzban_username} /> : "-"}</td>
                   <td>
                     <span className={`badge badge-sm ${ORDER_STATUS[o.status]?.badge ?? "badge-ghost"}`}>{ORDER_STATUS[o.status]?.text ?? o.status}</span>
                   </td>
-                  <td className="whitespace-nowrap text-base-content/60">{formatExpire(o.paid_at ?? o.created_at, "zh", tz)}</td>
+                  <td className="whitespace-nowrap text-base-content/60">{formatExpire(o.paid_at ?? o.created_at, lang, tz)}</td>
                 </tr>
               ))}
             </tbody>
@@ -259,9 +268,9 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
-      <h2 className="mt-8 mb-2 text-lg font-bold">余额明细</h2>
+      <h2 className="mt-8 mb-2 text-lg font-bold">{t("余额明细", "Balance history")}</h2>
       {entries.results.length === 0 ? (
-        <p className="text-sm text-base-content/60">没有记录。</p>
+        <p className="text-sm text-base-content/60">{t("没有记录。", "No entries.")}</p>
       ) : (
         <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
           <table className="table table-sm">
@@ -270,14 +279,14 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                 <tr key={e.id}>
                   <td>
                     {KIND[e.kind] ?? e.kind}
-                    {e.order_id ? `（订单 ${formatOrderNo(e.order_no)}）` : ""}
-                    {e.note ? `：${e.note}` : ""}
+                    {e.order_id ? t(`（订单 ${formatOrderNo(e.order_no)}）`, ` (order ${formatOrderNo(e.order_no)})`) : ""}
+                    {e.note ? t(`：${e.note}`, `: ${e.note}`) : ""}
                   </td>
                   <td className={`text-right whitespace-nowrap ${e.amount >= 0 ? "text-success" : "text-error"}`}>
                     {e.amount >= 0 ? "+" : "-"}
                     {money(Math.abs(e.amount))}
                   </td>
-                  <td className="whitespace-nowrap text-base-content/60">{formatExpire(e.created_at, "zh", tz)}</td>
+                  <td className="whitespace-nowrap text-base-content/60">{formatExpire(e.created_at, lang, tz)}</td>
                 </tr>
               ))}
             </tbody>
@@ -285,9 +294,9 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
-      <h2 className="mt-8 mb-2 text-lg font-bold">推荐的人（{referred.results.length}）</h2>
+      <h2 className="mt-8 mb-2 text-lg font-bold">{t(`推荐的人（${referred.results.length}）`, `Referred (${referred.results.length})`)}</h2>
       {referred.results.length === 0 ? (
-        <p className="text-sm text-base-content/60">还没推荐过人。</p>
+        <p className="text-sm text-base-content/60">{t("还没推荐过人。", "Hasn't referred anyone yet.")}</p>
       ) : (
         <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
           <table className="table table-sm">
@@ -298,9 +307,9 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                     <CustomerLink id={r.id} email={r.email} wechat={r.wechat} />
                   </td>
                   <td className="text-right">
-                    已给这位客人返 <b className="text-success">{money(r.earned)}</b>
+                    {t("已给这位客人返", "Earned")} <b className="text-success">{money(r.earned)}</b>
                   </td>
-                  <td className="whitespace-nowrap text-base-content/60">{formatDate(r.created_at, "zh", tz)} 注册</td>
+                  <td className="whitespace-nowrap text-base-content/60">{t(`${formatDate(r.created_at, lang, tz)} 注册`, `joined ${formatDate(r.created_at, lang, tz)}`)}</td>
                 </tr>
               ))}
             </tbody>

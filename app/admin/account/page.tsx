@@ -3,8 +3,10 @@ import { cookies } from "next/headers";
 import { adminPrefs, requireAdmin } from "@/lib/admin";
 import { db, nowSec } from "@/lib/env";
 import { formatDate, formatExpire } from "@/lib/format";
-import { describeDevice, LOG_ACTIONS } from "@/lib/admin-account";
-import { PAGE_SIZES, SORTS } from "@/lib/admin-users";
+import { describeDevice, logActionLabels } from "@/lib/admin-account";
+import { PAGE_SIZES, sortLabels } from "@/lib/admin-users";
+import { getT } from "@/lib/lang";
+import LangSwitch from "../../LangSwitch";
 import { THEME_COOKIE, parseTheme } from "@/lib/theme";
 import AdminHeader from "../AdminHeader";
 import ThemeSwitch from "../../ThemeSwitch";
@@ -32,6 +34,7 @@ function Section({ title, desc, children, testid }: { title: string; desc?: stri
 // 管理员「我的账户」：外观、改密码、登录中的设备、后台偏好、我最近的操作。只看、只改自己
 export default async function AdminAccountPage() {
   const admin = await requireAdmin();
+  const { t, lang } = await getT();
   const now = nowSec();
   const [me, { results: sessions }, { results: logs }, prefs] = await Promise.all([
     db().prepare("SELECT created_at, last_login_at FROM admins WHERE id = ?").bind(admin.id).first<{ created_at: number; last_login_at: number | null }>(),
@@ -57,7 +60,7 @@ export default async function AdminAccountPage() {
     <div className="mx-auto max-w-5xl px-4 pb-16">
       <AdminHeader email={admin.email} />
       <div className="mx-auto max-w-3xl">
-      <h1 className="mt-4 mb-4 text-2xl font-bold">我的账户</h1>
+      <h1 className="mt-4 mb-4 text-2xl font-bold">{t("我的账户", "My account")}</h1>
       {/* 顶上一张名片：头像字母、邮箱、身份；下面两格写账号哪天建的、这次什么时候登录的 */}
       <section className="card mb-4 bg-base-100 shadow-sm" data-testid="admin-profile">
         <div className="card-body gap-4 sm:flex-row sm:items-center">
@@ -67,67 +70,90 @@ export default async function AdminAccountPage() {
             </span>
             <div className="min-w-0">
               <div className="truncate text-lg font-semibold">{admin.email}</div>
-              <span className="badge badge-soft badge-primary badge-sm mt-1">管理员</span>
+              <span className="badge badge-soft badge-primary badge-sm mt-1">{t("管理员", "Admin")}</span>
             </div>
           </div>
           <dl className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm sm:text-right">
-            <dt className="text-xs text-base-content/50">账号创建</dt>
-            <dt className="text-xs text-base-content/50">这次登录</dt>
-            <dd className="tabular-nums">{me ? formatDate(me.created_at, "zh", tz) : "-"}</dd>
-            <dd className="tabular-nums">{me?.last_login_at ? formatExpire(me.last_login_at, "zh", tz) : "-"}</dd>
+            <dt className="text-xs text-base-content/50">{t("账号创建", "Created")}</dt>
+            <dt className="text-xs text-base-content/50">{t("这次登录", "This login")}</dt>
+            <dd className="tabular-nums">{me ? formatDate(me.created_at, lang, tz) : "-"}</dd>
+            <dd className="tabular-nums">{me?.last_login_at ? formatExpire(me.last_login_at, lang, tz) : "-"}</dd>
           </dl>
         </div>
       </section>
 
       <div className="flex flex-col gap-4">
-        <Section title="外观" desc="只对这台设备上的后台生效，客人那边不受影响。">
+        <Section
+          title={t("语言", "Language")}
+          desc={t("后台页面用中文还是英文，只对这台设备生效。操作日志里存下的说明照原样显示。", "Admin pages in Chinese or English, on this device only. Details already saved in the activity log stay as written.")}
+          testid="admin-lang"
+        >
+          <LangSwitch size="sm" />
+        </Section>
+
+        <Section title={t("外观", "Appearance")} desc={t("只对这台设备上的后台生效，客人那边不受影响。", "Applies to the admin on this device only; customers aren't affected.")}>
           <div data-testid="admin-theme">
             <ThemeSwitch current={theme} />
           </div>
         </Section>
 
-        <Section title="时区" desc="后台页面上的时间（下单、到期、日志）按哪个时区显示，只对这台设备生效。填到期时间的输入框和「本月」统计照旧按北京时间。" testid="admin-tz">
+        <Section
+          title={t("时区", "Time zone")}
+          desc={t(
+            "后台页面上的时间（下单、到期、日志）按哪个时区显示，只对这台设备生效。填到期时间的输入框和「本月」统计照旧按北京时间。",
+            "Time zone for times shown in the admin (orders, expiry, logs), on this device only. Expiry inputs and “this month” stats still use Beijing time.",
+          )}
+          testid="admin-tz"
+        >
           <TzSwitch chosen={tzChosen} device={tzDevice} />
         </Section>
 
-        <Section title="后台偏好" desc="订阅列表打开时默认怎么显示。网址里带了条件的话，以网址为准。" testid="admin-prefs">
-          <PrefsForm pageSize={prefs.pageSize} sort={prefs.sort} time={prefs.time} pageSizes={PAGE_SIZES} sorts={SORTS} />
+        <Section
+          title={t("后台偏好", "Admin preferences")}
+          desc={t("订阅列表打开时默认怎么显示。网址里带了条件的话，以网址为准。", "Defaults for the subscription list. Conditions in the URL take priority.")}
+          testid="admin-prefs"
+        >
+          <PrefsForm pageSize={prefs.pageSize} sort={prefs.sort} time={prefs.time} pageSizes={PAGE_SIZES} sorts={sortLabels(lang)} />
         </Section>
 
-        <Section title="登录中的设备" desc="后台登录 12 小时后自动失效。看到不认识的设备，退出它并改密码。" testid="admin-sessions">
+        <Section
+          title={t("登录中的设备", "Signed-in devices")}
+          desc={t("后台登录 12 小时后自动失效。看到不认识的设备，退出它并改密码。", "Admin sessions expire after 12 hours. If you see a device you don't recognise, log it out and change your password.")}
+          testid="admin-sessions"
+        >
           <ul className="divide-y divide-base-300">
             {sessions.map((s) => (
               <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
                 <div>
                   <div className="font-medium">
-                    {describeDevice(s.user_agent)}
-                    {s.id === admin.sid && <span className="badge badge-soft badge-success badge-sm ml-2">这台设备</span>}
+                    {describeDevice(s.user_agent, lang)}
+                    {s.id === admin.sid && <span className="badge badge-soft badge-success badge-sm ml-2">{t("这台设备", "This device")}</span>}
                   </div>
                   <div className="text-xs text-base-content/60">
-                    登录于 {formatExpire(s.created_at, "zh", tz)} · 最后活动 {formatExpire(s.last_seen_at ?? s.created_at, "zh", tz)}
+                    {t("登录于", "Signed in")} {formatExpire(s.created_at, lang, tz)} · {t("最后活动", "last active")} {formatExpire(s.last_seen_at ?? s.created_at, lang, tz)}
                     {s.ip && <> · IP {s.ip}</>}
                   </div>
                 </div>
-                {s.id !== admin.sid && <LogoutSessionsButton sid={s.id} label="退出" />}
+                {s.id !== admin.sid && <LogoutSessionsButton sid={s.id} label={t("退出", "Log out")} />}
               </li>
             ))}
           </ul>
-          <LogoutSessionsButton label={others ? `退出其他 ${others} 台设备` : "没有别的设备登录着"} disabled={!others} />
+          <LogoutSessionsButton label={others ? t(`退出其他 ${others} 台设备`, `Log out ${others} other device(s)`) : t("没有别的设备登录着", "No other devices signed in")} disabled={!others} />
         </Section>
 
-        <Section title="改密码">
+        <Section title={t("改密码", "Change password")}>
           <AdminPasswordForm />
         </Section>
 
-        <Section title="我最近的操作" desc="只列最近 20 条。" testid="admin-my-logs">
+        <Section title={t("我最近的操作", "My recent activity")} desc={t("只列最近 20 条。", "Last 20 entries only.")} testid="admin-my-logs">
           {logs.length === 0 ? (
-            <p className="text-sm text-base-content/60">还没有操作记录。</p>
+            <p className="text-sm text-base-content/60">{t("还没有操作记录。", "No activity yet.")}</p>
           ) : (
             <ul className="divide-y divide-base-300 text-sm">
               {logs.map((l) => (
                 <li key={l.id} className="flex flex-wrap gap-x-3 py-1.5">
-                  <span className="w-36 shrink-0 text-base-content/60">{formatExpire(l.created_at, "zh", tz)}</span>
-                  <span className="font-medium">{LOG_ACTIONS[l.action] ?? l.action}</span>
+                  <span className="w-36 shrink-0 text-base-content/60">{formatExpire(l.created_at, lang, tz)}</span>
+                  <span className="font-medium">{logActionLabels(lang)[l.action] ?? l.action}</span>
                   {l.target && <span>{l.target}</span>}
                   {l.detail && <span className="text-base-content/60">{l.detail}</span>}
                 </li>
@@ -135,7 +161,7 @@ export default async function AdminAccountPage() {
             </ul>
           )}
           <Link href={`/admin/logs?admin=${encodeURIComponent(admin.email)}`} className="link link-primary text-sm">
-            看我的全部操作
+            {t("看我的全部操作", "See all my activity")}
           </Link>
         </Section>
       </div>

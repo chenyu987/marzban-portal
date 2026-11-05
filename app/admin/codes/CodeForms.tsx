@@ -2,6 +2,7 @@
 
 import { startTransition, useActionState, useState } from "react";
 import { adminCreateCodes, adminVoidCode } from "../actions";
+import { useT } from "../../LangContext";
 
 // 生成兑换码。分两步选：先选档位（普通版、高速版…），再选时长（7 天体验、月付…，下面写着价格），
 // 不用在几十个选项的下拉框里找。天数默认是这个套餐的天数，− / + 加减（比如 7 天体验改成 10 天）；数量同样用 − / +。
@@ -10,6 +11,7 @@ type PlanOption = { id: string; name: string; group: string; period: string; pri
 
 export function CreateCodes({ plans, defaultGroup }: { plans: PlanOption[]; defaultGroup?: string }) {
   const [state, action, pending] = useActionState(adminCreateCodes, undefined);
+  const t = useT();
   const groups = [...new Set(plans.map((p) => p.group))];
   const [group, setGroup] = useState(defaultGroup && groups.includes(defaultGroup) ? defaultGroup : (groups[0] ?? ""));
   const [planId, setPlanId] = useState("");
@@ -22,7 +24,13 @@ export function CreateCodes({ plans, defaultGroup }: { plans: PlanOption[]; defa
     setPlanId(p.id);
     setDays(p.days);
   };
-  const label = plan ? (days === plan.days ? plan.name : plan.free ? `${plan.group} ${days}天体验` : `${plan.name}（${days} 天）`) : "";
+  const label = plan
+    ? days === plan.days
+      ? plan.name
+      : plan.free
+        ? t(`${plan.group} ${days}天体验`, `${plan.group} ${days}-day trial`)
+        : t(`${plan.name}（${days} 天）`, `${plan.name} (${days} days)`)
+    : "";
   return (
     // 不用 form action：那样生成完表单会被清空。留着刚才的选择，方便接着再生成
     <form
@@ -38,10 +46,10 @@ export function CreateCodes({ plans, defaultGroup }: { plans: PlanOption[]; defa
       <input type="hidden" name="days" value={plan ? days : ""} />
       <input type="hidden" name="count" value={count} />
       <div className="card-body gap-5 p-5">
-        <h2 className="text-lg font-bold">生成兑换码</h2>
+        <h2 className="text-lg font-bold">{t("生成兑换码", "Create codes")}</h2>
 
-        <Field label="档位">
-          <div className="flex flex-wrap gap-2" role="group" aria-label="档位">
+        <Field label={t("档位", "Tier")}>
+          <div className="flex flex-wrap gap-2" role="group" aria-label={t("档位", "Tier")}>
             {groups.map((g) => (
               <button
                 key={g}
@@ -59,8 +67,8 @@ export function CreateCodes({ plans, defaultGroup }: { plans: PlanOption[]; defa
           </div>
         </Field>
 
-        <Field label="时长">
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(6rem,1fr))] gap-2" role="group" aria-label="时长">
+        <Field label={t("时长", "Length")}>
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(6rem,1fr))] gap-2" role="group" aria-label={t("时长", "Length")}>
             {periods.map((p) => {
               const on = p.id === planId;
               return (
@@ -82,27 +90,27 @@ export function CreateCodes({ plans, defaultGroup }: { plans: PlanOption[]; defa
         </Field>
 
         <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
-          <Field label="天数">
-            <Stepper value={days} setValue={setDays} min={1} max={3650} unit="天" disabled={!plan} name="天数" />
+          <Field label={t("天数", "Days")}>
+            <Stepper value={days} setValue={setDays} min={1} max={3650} unit={t("天", "d")} disabled={!plan} name={t("天数", "Days")} />
           </Field>
-          <Field label="数量">
-            <Stepper value={count} setValue={setCount} min={1} max={100} unit="个" name="数量" />
+          <Field label={t("数量", "Quantity")}>
+            <Stepper value={count} setValue={setCount} min={1} max={100} unit={t("个", "")} name={t("数量", "Quantity")} />
           </Field>
-          <Field label="备注（选填）" grow>
-            <input name="note" maxLength={100} placeholder="比如「微信转账 张三」" className="input input-sm w-full" />
+          <Field label={t("备注（选填）", "Note (optional)")} grow>
+            <input name="note" maxLength={100} placeholder={t("比如「微信转账 张三」", "e.g. “WeChat transfer, Zhang San”")} className="input input-sm w-full" />
           </Field>
         </div>
 
         <button className="btn btn-primary" disabled={pending || !plan}>
           {pending && <span className="loading loading-spinner loading-sm" />}
-          {plan ? `生成 ${count} 个「${label}」` : "先选时长"}
+          {plan ? t(`生成 ${count} 个「${label}」`, `Create ${count} × “${label}”`) : t("先选时长", "Pick a length first")}
         </button>
 
         {state?.error && <div role="alert" className="alert alert-error alert-soft text-sm">{state.error}</div>}
         {state?.ok && (
           <div className="grid gap-3 sm:grid-cols-2">
-            <CopyBox title="只发兑换码" text={state.short ?? state.ok} testId="code-short" />
-            <CopyBox title="带用法的完整说明" text={state.long ?? state.ok} testId="code-long" />
+            <CopyBox title={t("只发兑换码", "Code only")} text={state.short ?? state.ok} testId="code-short" />
+            <CopyBox title={t("带用法的完整说明", "With instructions")} text={state.long ?? state.ok} testId="code-long" />
           </div>
         )}
       </div>
@@ -121,10 +129,11 @@ function Field({ label, grow, children }: { label: string; grow?: boolean; child
 
 // − 数字 + 的小加减器，数字也能直接改。输入框自带的上下小箭头藏掉，只留 − / + 一套
 function Stepper({ value, setValue, min, max, unit, disabled, name }: { value: number; setValue: (n: number) => void; min: number; max: number; unit: string; disabled?: boolean; name: string }) {
+  const t = useT();
   const clamp = (n: number) => Math.min(max, Math.max(min, n));
   return (
     <div className="join">
-      <button type="button" className="btn btn-sm join-item w-8 px-0" disabled={disabled || value <= min} onClick={() => setValue(clamp(value - 1))} aria-label={`${name}减一`}>
+      <button type="button" className="btn btn-sm join-item w-8 px-0" disabled={disabled || value <= min} onClick={() => setValue(clamp(value - 1))} aria-label={t(`${name}减一`, `${name} minus one`)}>
         −
       </button>
       <label className="input input-sm join-item w-[4.5rem] gap-1 px-2">
@@ -140,7 +149,7 @@ function Stepper({ value, setValue, min, max, unit, disabled, name }: { value: n
         />
         <span className="text-base-content/40">{unit}</span>
       </label>
-      <button type="button" className="btn btn-sm join-item w-8 px-0" disabled={disabled || value >= max} onClick={() => setValue(clamp(value + 1))} aria-label={`${name}加一`}>
+      <button type="button" className="btn btn-sm join-item w-8 px-0" disabled={disabled || value >= max} onClick={() => setValue(clamp(value + 1))} aria-label={t(`${name}加一`, `${name} plus one`)}>
         +
       </button>
     </div>
@@ -154,6 +163,7 @@ function CopyBox({ title, text, testId }: { title: string; text: string; testId:
 
 function CopyBoxInner({ title, text, testId }: { title: string; text: string; testId: string }) {
   const [copied, setCopied] = useState(false);
+  const t = useT();
   return (
     <div className="flex flex-col gap-2 rounded-box bg-base-200 p-3" data-testid={testId}>
       <div className="flex items-center justify-between gap-2">
@@ -166,7 +176,7 @@ function CopyBoxInner({ title, text, testId }: { title: string; text: string; te
             setCopied(true);
           }}
         >
-          {copied ? "已复制 ✓" : "复制"}
+          {copied ? t("已复制 ✓", "Copied ✓") : t("复制", "Copy")}
         </button>
       </div>
       <pre className="max-h-64 overflow-auto rounded-field bg-base-100 p-3 font-mono text-sm leading-relaxed whitespace-pre-wrap select-all">{text}</pre>
@@ -176,18 +186,19 @@ function CopyBoxInner({ title, text, testId }: { title: string; text: string; te
 
 export function VoidCode({ code, label }: { code: string; label: string }) {
   const [state, action, pending] = useActionState(adminVoidCode, undefined);
-  if (state?.ok) return <span className="text-base-content/60">已作废</span>;
+  const t = useT();
+  if (state?.ok) return <span className="text-base-content/60">{t("已作废", "Voided")}</span>;
   return (
     <form
       action={action}
       onSubmit={(e) => {
-        if (!confirm(`作废兑换码 ${label}？作废后客人就用不了了。`)) e.preventDefault();
+        if (!confirm(t(`作废兑换码 ${label}？作废后客人就用不了了。`, `Void code ${label}? Customers won't be able to use it.`))) e.preventDefault();
       }}
       className="inline"
     >
       <input type="hidden" name="code" value={code} />
       <button className="btn btn-ghost btn-xs" disabled={pending}>
-        作废
+        {t("作废", "Void")}
       </button>
       {state?.error && <span className="ml-1 text-error">{state.error}</span>}
     </form>

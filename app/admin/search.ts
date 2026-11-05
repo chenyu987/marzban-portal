@@ -6,13 +6,16 @@ import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
 import { formatOrderNo, formatSubCode, normalizeSubCode } from "@/lib/format";
 import { listUsers } from "@/lib/marzban";
+import { getT } from "@/lib/lang";
 
-export type SearchHit = { group: "客人" | "订阅" | "订单" | "页面"; title: string; sub: string; href: string };
+// group 是分组的键，显示的名字在 CommandPalette 里按语言取
+export type SearchHit = { group: "customer" | "sub" | "order" | "page"; title: string; sub: string; href: string };
 
 const like = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 export async function adminSearch(raw: string): Promise<SearchHit[]> {
   await requireAdmin();
+  const { t } = await getT();
   const q = raw.trim().slice(0, 64);
   if (!q) return [];
   const digits = q.replace(/[\s-]/g, "");
@@ -48,7 +51,7 @@ export async function adminSearch(raw: string): Promise<SearchHit[]> {
 
   const who = (r: { email: string; wechat: string | null }) => (r.wechat ? `${r.wechat} · ${r.email}` : r.email);
   const hits: SearchHit[] = customers.results.map((c) => ({
-    group: "客人",
+    group: "customer",
     title: c.wechat ?? c.email,
     sub: c.wechat ? c.email : "",
     href: `/admin/customers/${c.id}`,
@@ -56,14 +59,14 @@ export async function adminSearch(raw: string): Promise<SearchHit[]> {
   const seen = new Set<string>();
   for (const s of subs.results) {
     seen.add(s.marzban_username);
-    hits.push({ group: "订阅", title: s.marzban_username, sub: `${formatSubCode(s.code)} · ${who(s)}`, href: `/admin/users/${encodeURIComponent(s.marzban_username)}` });
+    hits.push({ group: "sub", title: s.marzban_username, sub: `${formatSubCode(s.code)} · ${who(s)}`, href: `/admin/users/${encodeURIComponent(s.marzban_username)}` });
   }
   for (const u of marzban?.users ?? []) {
-    if (seen.has(u.username) || hits.filter((h) => h.group === "订阅").length >= 8) continue;
-    hits.push({ group: "订阅", title: u.username, sub: u.note ? `备注 ${u.note}` : "Marzban 用户", href: `/admin/users/${encodeURIComponent(u.username)}` });
+    if (seen.has(u.username) || hits.filter((h) => h.group === "sub").length >= 8) continue;
+    hits.push({ group: "sub", title: u.username, sub: u.note ? t(`备注 ${u.note}`, `Note: ${u.note}`) : t("Marzban 用户", "Marzban user"), href: `/admin/users/${encodeURIComponent(u.username)}` });
   }
   for (const o of orders.results) {
-    hits.push({ group: "订单", title: `订单 ${formatOrderNo(o.no)}`, sub: who(o), href: `/admin?view=all&q=${o.no}` });
+    hits.push({ group: "order", title: t(`订单 ${formatOrderNo(o.no)}`, `Order ${formatOrderNo(o.no)}`), sub: who(o), href: `/admin?view=all&q=${o.no}` });
   }
   return hits;
 }

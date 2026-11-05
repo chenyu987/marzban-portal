@@ -5,8 +5,9 @@ import Link from "next/link";
 import AdminHeader from "../AdminHeader";
 import { SubLink } from "../Links";
 import { FilterBar, Pager, pageOf, param } from "../ui";
-import { LOG_ACTIONS as ACTIONS } from "@/lib/admin-account";
+import { LOG_ACTIONS, logActionLabels } from "@/lib/admin-account";
 import { getTz } from "@/lib/tz-server";
+import { getT } from "@/lib/lang";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ type Row = { id: number; admin_email: string; action: string; target: string | n
 const PAGE_SIZE = 50;
 const like = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
+// 「对谁」、「说明」是写日志时存下的中文，切到英文也照原样显示
 // 「对谁」能点进去：订阅 → 订阅详情，订单 → 订单列表，客人邮箱 → 客人，节点 / Host / 兑换码 → 对应页面
 function Target({ action, target }: { action: string; target: string | null }) {
   if (!target) return null;
@@ -32,9 +34,11 @@ function Target({ action, target }: { action: string; target: string | null }) {
 export default async function LogsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const me = await requireAdmin();
   const tz = await getTz();
+  const { t, lang } = await getT();
+  const ACTIONS = logActionLabels(lang);
   const sp = await searchParams;
   const admin = param(sp, "admin");
-  const action = param(sp, "action") in ACTIONS ? param(sp, "action") : "";
+  const action = param(sp, "action") in LOG_ACTIONS ? param(sp, "action") : "";
   const q = param(sp, "q");
   const page = pageOf(sp);
   const W = `WHERE (?1 = '' OR admin_email = ?1) AND (?2 = '' OR action = ?2) AND (?3 = '' OR target LIKE ?4 ESCAPE '\\' OR detail LIKE ?4 ESCAPE '\\')`;
@@ -50,19 +54,19 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   return (
     <div className="mx-auto max-w-5xl px-4 pb-16">
       <AdminHeader email={me.email} />
-      <h1 className="mt-4 mb-4 text-2xl font-bold">操作日志</h1>
+      <h1 className="mt-4 mb-4 text-2xl font-bold">{t("操作日志", "Activity log")}</h1>
       <FilterBar base="/admin/logs" active={!!(admin || action || q)}>
-        <input name="q" defaultValue={q} placeholder="搜对谁、说明" className="input input-sm w-48" />
-        <select name="admin" defaultValue={admin} className="select select-sm" aria-label="谁">
-          <option value="">所有人</option>
+        <input name="q" defaultValue={q} placeholder={t("搜对谁、说明", "Search target or details")} className="input input-sm w-48" />
+        <select name="admin" defaultValue={admin} className="select select-sm" aria-label={t("谁", "Who")}>
+          <option value="">{t("所有人", "Everyone")}</option>
           {admins.map((a) => (
             <option key={a.admin_email} value={a.admin_email}>
               {a.admin_email}
             </option>
           ))}
         </select>
-        <select name="action" defaultValue={action} className="select select-sm" aria-label="操作">
-          <option value="">所有操作</option>
+        <select name="action" defaultValue={action} className="select select-sm" aria-label={t("操作", "Action")}>
+          <option value="">{t("所有操作", "All actions")}</option>
           {Object.entries(ACTIONS).map(([k, v]) => (
             <option key={k} value={k}>
               {v}
@@ -70,23 +74,23 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           ))}
         </select>
       </FilterBar>
-      {results.length === 0 && <p className="text-sm text-base-content/60">没有记录。</p>}
+      {results.length === 0 && <p className="text-sm text-base-content/60">{t("没有记录。", "No entries.")}</p>}
       <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
         <table className="table table-sm">
           <thead>
             <tr>
-              <th>时间</th>
-              <th>谁</th>
-              <th>做了什么</th>
-              <th>对谁</th>
-              <th>说明</th>
+              <th>{t("时间", "Time")}</th>
+              <th>{t("谁", "Who")}</th>
+              <th>{t("做了什么", "Action")}</th>
+              <th>{t("对谁", "Target")}</th>
+              <th>{t("说明", "Details")}</th>
               <th>IP</th>
             </tr>
           </thead>
           <tbody>
             {results.map((l) => (
               <tr key={l.id} className={l.action === "login.fail" ? "text-error" : ""}>
-                <td className="whitespace-nowrap">{formatExpire(l.created_at, "zh", tz)}</td>
+                <td className="whitespace-nowrap">{formatExpire(l.created_at, lang, tz)}</td>
                 <td>{l.admin_email}</td>
                 <td className="whitespace-nowrap">{ACTIONS[l.action] ?? l.action}</td>
                 <td>

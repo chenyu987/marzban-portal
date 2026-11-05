@@ -3,8 +3,10 @@ import { formatExpire, formatMoney, formatOrderNo, parseOrderNo } from "@/lib/fo
 import { fromBeijingInput } from "@/lib/admin-users";
 import { site } from "@/site.config";
 import { CustomerLink, SubLink } from "./Links";
-import { FilterBar, ORDER_METHOD, ORDER_STATUS, Pager, pageOf, param } from "./ui";
+import { FilterBar, orderMethod, orderStatus, Pager, pageOf, param } from "./ui";
 import { getTz } from "@/lib/tz-server";
+import { getT } from "@/lib/lang";
+import type { T } from "@/lib/i18n";
 
 const PAGE_SIZE = 30;
 const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
@@ -32,11 +34,15 @@ type Row = {
 // 套餐按档位筛（同一档的月付、季付……一起），档位名就是 Plan.group
 const GROUPS = [...new Set(site.plans.map((p) => p.group ?? p.name))];
 const planIdsOf = (group: string) => site.plans.filter((p) => (p.group ?? p.name) === group).map((p) => p.id);
-const planName = (id: string | null) => (id ? (site.plans.find((p) => p.id === id)?.name ?? `${id}（已下架）`) : "只记账");
+const planName = (t: T, id: string | null) =>
+  id ? (site.plans.find((p) => p.id === id)?.name ?? t(`${id}（已下架）`, `${id} (retired)`)) : t("只记账", "Ledger only");
 
 // 全部订单：搜订单号 / 客人 / 订阅 / 付款人，按状态、怎么付、套餐、下单日期筛，翻页；顶上汇总筛出来的单
 export default async function OrdersTable({ sp }: { sp: Record<string, string | string[] | undefined> }) {
   const tz = await getTz();
+  const { t, lang } = await getT();
+  const ORDER_STATUS = orderStatus(t);
+  const ORDER_METHOD = orderMethod(t);
   const q = param(sp, "q");
   const status = param(sp, "status") in ORDER_STATUS ? param(sp, "status") : "";
   const method = param(sp, "method") in ORDER_METHOD ? param(sp, "method") : "";
@@ -105,25 +111,25 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
     <>
       <FilterBar base="/admin?view=all" active={active}>
         <input type="hidden" name="view" value="all" />
-        <input name="q" defaultValue={q} placeholder="订单号、客人、订阅、付款人" className="input input-sm w-52" />
-        <select name="status" defaultValue={status} className="select select-sm w-36" aria-label="状态">
-          <option value="">全部状态</option>
+        <input name="q" defaultValue={q} placeholder={t("订单号、客人、订阅、付款人", "Order no., customer, subscription, payer")} className="input input-sm w-52" />
+        <select name="status" defaultValue={status} className="select select-sm w-36" aria-label={t("状态", "Status")}>
+          <option value="">{t("全部状态", "All statuses")}</option>
           {Object.entries(ORDER_STATUS).map(([k, v]) => (
             <option key={k} value={k}>
               {v.text}
             </option>
           ))}
         </select>
-        <select name="method" defaultValue={method} className="select select-sm w-32" aria-label="怎么付">
-          <option value="">全部付款方式</option>
+        <select name="method" defaultValue={method} className="select select-sm w-32" aria-label={t("怎么付", "Payment")}>
+          <option value="">{t("全部付款方式", "All payment types")}</option>
           {Object.entries(ORDER_METHOD).map(([k, v]) => (
             <option key={k} value={k}>
               {v}
             </option>
           ))}
         </select>
-        <select name="plan" defaultValue={group} className="select select-sm w-36" aria-label="套餐">
-          <option value="">全部套餐</option>
+        <select name="plan" defaultValue={group} className="select select-sm w-36" aria-label={t("套餐", "Plan")}>
+          <option value="">{t("全部套餐", "All plans")}</option>
           {GROUPS.map((g) => (
             <option key={g} value={g}>
               {g}
@@ -131,19 +137,19 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
           ))}
         </select>
         <label className="flex items-center gap-1 text-sm text-base-content/60">
-          下单
-          <input type="date" name="from" defaultValue={from} className="input input-sm w-36" aria-label="从" />
-          到
-          <input type="date" name="to" defaultValue={to} className="input input-sm w-36" aria-label="到" />
+          {t("下单", "Ordered")}
+          <input type="date" name="from" defaultValue={from} className="input input-sm w-36" aria-label={t("从", "From")} />
+          {t("到", "to")}
+          <input type="date" name="to" defaultValue={to} className="input input-sm w-36" aria-label={t("到", "To")} />
         </label>
       </FilterBar>
 
       <div className="mb-2 flex flex-wrap gap-4 text-sm" data-testid="orders-summary">
         <span>
-          筛出 <b>{sum?.n ?? 0}</b> 单
+          {t("筛出", "Found")} <b>{sum?.n ?? 0}</b> {t("单", "orders")}
         </span>
         <span>
-          其中已付款 <b>{sum?.paid_n ?? 0}</b> 单，共 <b className="text-success">{money(sum?.paid ?? 0)}</b>
+          {t("其中已付款", "Paid:")} <b>{sum?.paid_n ?? 0}</b> {t("单，共", "orders, total")} <b className="text-success">{money(sum?.paid ?? 0)}</b>
         </span>
       </div>
 
@@ -151,14 +157,14 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
         <table className="table table-sm">
           <thead>
             <tr>
-              <th>订单</th>
-              <th>下单时间</th>
-              <th>客人</th>
-              <th>套餐</th>
-              <th>订阅</th>
-              <th className="text-right">金额</th>
-              <th>怎么付</th>
-              <th>状态</th>
+              <th>{t("订单", "Order")}</th>
+              <th>{t("下单时间", "Ordered")}</th>
+              <th>{t("客人", "Customer")}</th>
+              <th>{t("套餐", "Plan")}</th>
+              <th>{t("订阅", "Subscription")}</th>
+              <th className="text-right">{t("金额", "Amount")}</th>
+              <th>{t("怎么付", "Payment")}</th>
+              <th>{t("状态", "Status")}</th>
             </tr>
           </thead>
           <tbody>
@@ -167,15 +173,15 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
               return (
                 <tr key={o.id} className="hover" data-testid="order-row">
                   <td className="font-mono whitespace-nowrap">{formatOrderNo(o.no)}</td>
-                  <td className="whitespace-nowrap text-base-content/70">{formatExpire(o.created_at, "zh", tz)}</td>
+                  <td className="whitespace-nowrap text-base-content/70">{formatExpire(o.created_at, lang, tz)}</td>
                   <td>
                     <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} />
                   </td>
-                  <td className="whitespace-nowrap">{planName(o.plan_id)}</td>
-                  <td>{o.marzban_username ? <SubLink username={o.marzban_username} /> : <span className="text-base-content/40">新开</span>}</td>
+                  <td className="whitespace-nowrap">{planName(t, o.plan_id)}</td>
+                  <td>{o.marzban_username ? <SubLink username={o.marzban_username} /> : <span className="text-base-content/40">{t("新开", "New")}</span>}</td>
                   <td className="text-right whitespace-nowrap">
                     {money(o.amount)}
-                    {o.balance_used > 0 && <div className="text-xs text-base-content/50">余额抵 {money(o.balance_used)}</div>}
+                    {o.balance_used > 0 && <div className="text-xs text-base-content/50">{t(`余额抵 ${money(o.balance_used)}`, `${money(o.balance_used)} from balance`)}</div>}
                   </td>
                   <td className="whitespace-nowrap">
                     {ORDER_METHOD[o.method] ?? o.method}
@@ -188,14 +194,14 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
                   </td>
                   <td className="whitespace-nowrap">
                     <span className={`badge badge-sm ${st.badge}`}>{st.text}</span>
-                    {o.status === "paid" && o.method === "transfer" && !o.verified_at && <span className="badge badge-sm badge-info ml-1">待对账</span>}
+                    {o.status === "paid" && o.method === "transfer" && !o.verified_at && <span className="badge badge-sm badge-info ml-1">{t("待对账", "To reconcile")}</span>}
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        {rows.results.length === 0 && <p className="p-4 text-sm text-base-content/60">{active ? "没有符合条件的订单。" : "还没有订单。"}</p>}
+        {rows.results.length === 0 && <p className="p-4 text-sm text-base-content/60">{active ? t("没有符合条件的订单。", "No matching orders.") : t("还没有订单。", "No orders yet.")}</p>}
       </div>
       <Pager base="/admin" params={params} page={page} pageSize={PAGE_SIZE} total={sum?.n ?? 0} />
     </>

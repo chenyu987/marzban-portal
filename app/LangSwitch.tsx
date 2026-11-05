@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import type { Lang } from "@/lib/i18n";
 import { setLang } from "./actions";
@@ -11,14 +11,12 @@ const OPTIONS: { lang: Lang; label: string }[] = [
   { lang: "en", label: "English" },
 ];
 
-// 语言切换：页面底部一个（小），「账户」页一个（size="sm"）。记一年（登录着的也记到账号上，提醒邮件用），
-// 换了以后整页按新语言重新渲染。管理后台只有中文，不显示
+// 语言切换：页面底部一个（小），客人和后台的「账户」页各一个（size="sm"）。记一年（登录着的客人也记到账号上，提醒邮件用），
+// 换了以后整页按新语言重新渲染
 export default function LangSwitch({ size = "xs" }: { size?: "xs" | "sm" }) {
   const lang = useLang();
   const router = useRouter();
-  const path = usePathname();
   const [pending, start] = useTransition();
-  if (path.startsWith("/admin")) return null;
   function choose(next: Lang) {
     start(async () => {
       await setLang(next);

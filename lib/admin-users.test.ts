@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseOnHoldDays, createUserBody, describeChanges, fromBeijingInput, monthStartBeijing, expireRelative, onlineState, onlineText, parsePageSize, parseExpiredDays, parseNodeForm, validateHosts, parseUserForm, toBeijingInput } from "./admin-users";
+import { parseOnHoldDays, createUserBody, describeChanges, fromBeijingInput, monthStartBeijing, expireRelative, nodeStatusLabel, onlineState, onlineText, sortLabels, parsePageSize, parseExpiredDays, parseNodeForm, validateHosts, parseUserForm, toBeijingInput } from "./admin-users";
 
 const GB = 1024 ** 3;
 const form = (o: Record<string, string>) => (k: string) => o[k] ?? "";
@@ -63,6 +63,27 @@ describe("其他", () => {
     expect(onlineState(null, now * 1000).state).toBe("never");
     expect(onlineState(at(1), now * 1000).state).toBe("online");
     expect(onlineState(at(30), now * 1000).state).toBe("offline");
+  });
+  it("在线状态的英文", () => {
+    const at = (min: number) => new Date(now * 1000 - min * 60000).toISOString().replace("Z", "");
+    expect(onlineText(null, now * 1000, "en")).toBe("Never connected");
+    expect(onlineText(at(1), now * 1000, "en")).toBe("Online");
+    expect(onlineText(at(1 * 60 + 1), now * 1000, "en")).toBe("1 hour 1 minute ago");
+    expect(onlineText(at(3 * 24 * 60), now * 1000, "en")).toBe("3 days ago");
+    expect(onlineText(at(3 * 24 * 60 + 125), now * 1000, "en")).toBe("3 days 2 hours ago");
+  });
+  it("到期、排序、节点状态的英文", () => {
+    const ms = now * 1000;
+    expect(expireRelative(null, ms, "en")).toBe("Never expires");
+    expect(expireRelative(now + 86 * 86400 + 600, ms, "en")).toBe("Expires in 2 months 26 days");
+    expect(expireRelative(now + 86400 + 600, ms, "en")).toBe("Expires in 1 day");
+    expect(expireRelative(now - 3 * 86400 - 600, ms, "en")).toBe("Expired 3 days ago");
+    expect(expireRelative(now + 30, ms, "en")).toBe("Expires in under a minute");
+    expect(sortLabels("en").expire).toBe("Expiring soonest");
+    expect(sortLabels().expire).toBe("快到期的在前");
+    expect(nodeStatusLabel("error", "en")).toEqual({ text: "Error", badge: "badge-error" });
+    expect(nodeStatusLabel("error").text).toBe("出错");
+    expect(nodeStatusLabel("weird", "en").text).toBe("weird");
   });
   it("每页多少个", () => {
     expect(parsePageSize("200")).toBe(200);

@@ -14,6 +14,7 @@ describe("兑换码天数", () => {
     expect(parseCodeDays("3651", trial)).toHaveProperty("error");
     expect(parseCodeDays("2.5", trial)).toHaveProperty("error");
     expect(parseCodeDays("abc", trial)).toHaveProperty("error");
+    expect(parseCodeDays("0", trial, "en")).toEqual({ error: "Days must be a whole number from 1 to 3650" });
   });
 
   it("withCodeDays：体验改名字里的天数，付费套餐名字后面加天数；没改原样返回", () => {

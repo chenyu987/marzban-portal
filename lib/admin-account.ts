@@ -1,5 +1,6 @@
 // 管理员「我的账户」页用到的纯逻辑：认设备、偏好表单、日志里各种操作的中文名
 import { PAGE_SIZES, SORTS } from "./admin-users";
+import type { Lang } from "./i18n";
 
 // 操作日志里 action 的中文名（日志页、账户页「我的操作」共用）
 export const LOG_ACTIONS: Record<string, string> = {
@@ -38,10 +39,48 @@ export const LOG_ACTIONS: Record<string, string> = {
   "account.logout_others": "退出其他设备",
   "account.prefs": "改后台偏好",
 };
+const LOG_ACTIONS_EN: Record<string, string> = {
+  login: "Log in",
+  "login.fail": "Failed login",
+  logout: "Log out",
+  "order.confirm": "Confirm order",
+  "order.verify": "Reconcile: received",
+  "order.revoke": "Reconcile: not received, revoked",
+  "order.cancel": "Cancel order",
+  "balance.adjust": "Adjust balance",
+  "password.reset_link": "Create reset link",
+  "subscription.bind": "Link subscription",
+  "subscription.auto_bind": "Auto-link by WeChat ID",
+  "codes.create": "Create codes",
+  "code.void": "Void code",
+  "user.create": "Create subscription",
+  "user.edit": "Edit subscription",
+  "user.reset_usage": "Reset traffic",
+  "user.revoke_sub": "Reset subscription link",
+  "user.delete": "Delete subscription",
+  "user.change_plan": "Change plan",
+  "user.set_wechat": "Record WeChat ID",
+  "node.add": "Add node",
+  "node.edit": "Edit node",
+  "node.enable": "Enable node",
+  "node.disable": "Disable node",
+  "node.reconnect": "Reconnect node",
+  "node.delete": "Delete node",
+  "core.restart": "Restart Xray",
+  "hosts.save": "Save Hosts",
+  "users.delete_expired": "Delete expired subscriptions",
+  "users.reset_all_usage": "Reset all traffic",
+  "customer.delete": "Delete customer",
+  "account.password": "Change own password",
+  "account.logout_others": "Log out other devices",
+  "account.prefs": "Change admin preferences",
+};
+export const logActionLabels = (lang: Lang = "zh"): Record<string, string> => (lang === "en" ? LOG_ACTIONS_EN : LOG_ACTIONS);
 
 // 从 User-Agent 认出「Mac · Chrome」「iPhone · Safari」，账户页列登录设备用。认不出就写「未知设备」
-export function describeDevice(ua: string | null | undefined): string {
-  if (!ua) return "未知设备";
+export function describeDevice(ua: string | null | undefined, lang: Lang = "zh"): string {
+  const unknown = lang === "en" ? "Unknown device" : "未知设备";
+  if (!ua) return unknown;
   const os = /iPhone/.test(ua)
     ? "iPhone"
     : /iPad/.test(ua)
@@ -59,7 +98,9 @@ export function describeDevice(ua: string | null | undefined): string {
   const browser = /Edg\//.test(ua)
     ? "Edge"
     : /MicroMessenger/.test(ua)
-      ? "微信"
+      ? lang === "en"
+        ? "WeChat"
+        : "微信"
       : /Firefox\/|FxiOS/.test(ua)
         ? "Firefox"
         : /Chrome\/|CriOS/.test(ua)
@@ -67,18 +108,20 @@ export function describeDevice(ua: string | null | undefined): string {
           : /Safari\//.test(ua)
             ? "Safari"
             : "";
-  return [os, browser].filter(Boolean).join(" · ") || "未知设备";
+  return [os, browser].filter(Boolean).join(" · ") || unknown;
 }
 
 // 后台偏好表单：每页多少个、默认排序、时间怎么显示。空 = 用默认
-export function parsePrefsForm(get: (k: string) => string):
-  | { prefs: { pageSize: number | null; sort: string | null; time: "relative" | "absolute" } }
-  | { error: string } {
+export function parsePrefsForm(
+  get: (k: string) => string,
+  lang: Lang = "zh",
+): { prefs: { pageSize: number | null; sort: string | null; time: "relative" | "absolute" } } | { error: string } {
+  const en = lang === "en";
   const size = get("page_size").trim();
   const sort = get("sort").trim();
   const time = get("time").trim() || "relative";
-  if (size && !(PAGE_SIZES as readonly number[]).includes(Number(size))) return { error: "每页个数只能选列表里的" };
-  if (sort && !(sort in SORTS)) return { error: "排序方式不对" };
-  if (time !== "relative" && time !== "absolute") return { error: "时间显示方式不对" };
+  if (size && !(PAGE_SIZES as readonly number[]).includes(Number(size))) return { error: en ? "Pick a page size from the list" : "每页个数只能选列表里的" };
+  if (sort && !(sort in SORTS)) return { error: en ? "Invalid sort" : "排序方式不对" };
+  if (time !== "relative" && time !== "absolute") return { error: en ? "Invalid time display" : "时间显示方式不对" };
   return { prefs: { pageSize: size ? Number(size) : null, sort: sort || null, time } };
 }

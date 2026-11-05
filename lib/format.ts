@@ -1,5 +1,5 @@
 // 纯函数，前后端都能用，有单元测试（format.test.ts）。
-// 带 lang 参数的是客人页面也用的：不传就是中文（管理后台只有中文）
+// 带 lang 参数的跟着客人或管理员选的语言：不传就是中文
 type Lang = "zh" | "en";
 const LOCALE = { zh: "zh-CN", en: "en-US" } as const;
 

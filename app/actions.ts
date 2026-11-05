@@ -319,6 +319,17 @@ export async function redeem(_: FormState, form: FormData): Promise<FormState> {
 // 同一个客人最多同时挂几张没处理完的单，免得有人乱点堆一堆单
 const MAX_OPEN_ORDERS = 3;
 
+// 先开通后对账：客人点「我已付款」就开通，管理员之后才核对有没有收到钱。为了不被白嫖，每个客人同时最多一张
+// 「已开通、还没对账」的转账单：这张没对完账（确认到账或收回）之前，不能再下新单，也不能再点别的单的「我已付款」
+const UNVERIFIED_SQL = "SELECT 1 FROM orders WHERE customer_id = ? AND method = 'transfer' AND status = 'paid' AND verified_at IS NULL";
+const unverifiedError = (t: (zh: string, en: string) => string): FormState => ({
+  error: t(
+    "你上一笔付款我们还在核对，核对好之后才能再下单。着急的话请联系客服",
+    "We're still checking your last payment. You can place a new order once it's confirmed. Contact support if it's urgent",
+  ),
+  support: true,
+});
+
 // 在套餐页下单：建一张待付款的单（金额按现在的套餐价锁定）。客人转账时备注订单号，管理员确认收款后才开通。
 // target 和兑换码一样："new" 或者客人名下某个订阅的用户名（续期）
 // useBalance=1：用余额抵扣。余额够付全款就直接扣余额开通（buyWithBalance），不够就抵扣一部分、剩下的转账
@@ -340,6 +351,8 @@ export async function createOrder(prev: FormState, form: FormData): Promise<Form
       .first();
     if (!mine) return { error: t("请选择要续期的订阅", "Please choose a subscription to renew") };
   }
+
+  if (await db().prepare(UNVERIFIED_SQL).bind(customer.id).first()) return unverifiedError(t);
 
   const open = await db()
     .prepare("SELECT COUNT(*) AS n FROM orders WHERE customer_id = ? AND status IN ('pending', 'processing')")
@@ -396,10 +409,13 @@ export async function claimPaid(_: FormState, form: FormData): Promise<FormState
   const method = String(form.get("payMethod") ?? "");
   if (!site.payments.some((p) => pick(p.name, "zh") === method)) return { error: t("请选择你是用哪个付的款", "Please choose how you paid") };
   const payer = String(form.get("payer") ?? "").trim().slice(0, 40) || null;
+  // 下单时已经挡过一次，这里再挡：别的单可能是在上一张开通之前就下好的。条件写进 UPDATE，两张单同时点也只有一张能过
+  if (await db().prepare(UNVERIFIED_SQL).bind(customer.id).first()) return unverifiedError(t);
   const r = await db()
     .prepare(
-      `UPDATE orders SET claimed_at = ?, pay_method = ?, payer = ?
-       WHERE id = ? AND customer_id = ? AND status = 'pending' AND claimed_at IS NULL`,
+      `UPDATE orders SET claimed_at = ?1, pay_method = ?2, payer = ?3
+       WHERE id = ?4 AND customer_id = ?5 AND status = 'pending' AND claimed_at IS NULL
+         AND NOT EXISTS (${UNVERIFIED_SQL.replace("?", "?5")})`,
     )
     .bind(nowSec(), method, payer, id, customer.id)
     .run();

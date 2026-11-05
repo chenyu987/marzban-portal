@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
 import { findUser, userUsage, type MarzbanUser } from "@/lib/marzban";
-import { formatBytes, formatExpire, formatSubCode, RESET_LABEL, STATUS_LABEL, timeLeft } from "@/lib/format";
+import { formatBytes, formatExpire, formatSubCode, resetLabel, statusLabel, timeLeft } from "@/lib/format";
 import { monthStartBeijing, onlineText, toBeijingInput } from "@/lib/admin-users";
 import AdminHeader from "../../AdminHeader";
 import { adminEditUser } from "../../actions";
@@ -19,6 +19,7 @@ import BindButton from "../../BindButton";
 import { CustomerLink } from "../../Links";
 import CopyCode from "../../../dashboard/CopyCode";
 import { getTz } from "@/lib/tz-server";
+import { getT } from "@/lib/lang";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ export const dynamic = "force-dynamic";
 export default async function UserPage({ params }: { params: Promise<{ username: string }> }) {
   const admin = await requireAdmin();
   const tz = await getTz();
+  const { t, lang } = await getT();
   const username = decodeURIComponent((await params).username);
   let user: MarzbanUser | null;
   try {
@@ -35,7 +37,8 @@ export default async function UserPage({ params }: { params: Promise<{ username:
       <div className="mx-auto max-w-3xl px-4 pb-16">
         <AdminHeader email={admin.email} />
         <div role="alert" className="alert alert-error alert-soft mt-4">
-          查 Marzban 出错：{e instanceof Error ? e.message : String(e)}
+          {t("查 Marzban 出错：", "Marzban error: ")}
+          {e instanceof Error ? e.message : String(e)}
         </div>
       </div>
     );
@@ -68,86 +71,90 @@ export default async function UserPage({ params }: { params: Promise<{ username:
   const desc = (id: string) => {
     const p = findPlan(site.plans, id)!;
     const line = site.planGroups?.[p.group ?? p.name]?.lines?.at(-1);
-    return line ? pick(line, "zh") : describePlan(p);
+    return line ? pick(line, lang) : describePlan(p, lang);
   };
   const currentPlan = planRow && findPlan(site.plans, planRow.plan_id) ? { id: planRow.plan_id, name: findPlan(site.plans, planRow.plan_id)!.name, desc: desc(planRow.plan_id) } : null;
   const planOptions = site.plans.map((p) => ({ id: p.id, name: p.name, desc: desc(p.id) }));
-  const st = STATUS_LABEL[user.status] ?? { text: user.status, badge: "badge-neutral" };
-  const left = timeLeft(user.expire);
+  const st = statusLabel(user.status, lang);
+  const left = timeLeft(user.expire, undefined, lang);
 
   return (
     <div className="mx-auto max-w-3xl px-4 pb-16">
       <AdminHeader email={admin.email} />
       <Link href="/admin/users" className="link link-hover text-sm text-base-content/60">
-        ← 订阅列表
+        ← {t("订阅列表", "Subscriptions")}
       </Link>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <h1 className="text-2xl font-bold">{user.username}</h1>
         <span className={`badge ${st.badge}`}>{st.text}</span>
         {code && (
           <span className="text-sm text-base-content/60">
-            订阅编号 <b className="font-mono text-base-content"><CopyCode text={formatSubCode(code)} /></b>
+            {t("订阅编号", "Code")} <b className="font-mono text-base-content"><CopyCode text={formatSubCode(code)} /></b>
           </span>
         )}
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-2 text-sm" data-testid="sub-owner">
-        <span className="text-base-content/60">属于客人</span>
+        <span className="text-base-content/60">{t("属于客人", "Customer")}</span>
         {owner ? (
           <CustomerLink id={owner.id} email={owner.email} wechat={owner.wechat} />
         ) : legacy?.match_id ? (
           <>
             <span>
-              微信 <b>{legacy.wechat}</b>，同微信号的客人
+              {t("微信", "WeChat")} <b>{legacy.wechat}</b>
+              {t("，同微信号的客人", "; customer with the same WeChat ID:")}
             </span>
             <CustomerLink id={legacy.match_id} email={legacy.match_email ?? ""} />
             <BindButton customerId={legacy.match_id} username={user.username} who={legacy.match_email ?? ""} />
           </>
         ) : legacy ? (
           <span className="inline-flex items-center">
-            微信 <b className="ml-1">{legacy.wechat}</b>
-            <CopyButton text={legacy.wechat} label="复制微信号" />
-            （还没注册网站账号）
+            {t("微信", "WeChat")} <b className="ml-1">{legacy.wechat}</b>
+            <CopyButton text={legacy.wechat} label={t("复制微信号", "Copy WeChat ID")} />
+            {t("（还没注册网站账号）", "(no site account yet)")}
           </span>
         ) : (
-          <span className="text-base-content/50">没绑</span>
+          <span className="text-base-content/50">{t("没绑", "Not linked")}</span>
         )}
         <span className="text-base-content/40">｜</span>
-        <span className="text-base-content/60">最后连接 {onlineText(user.online_at, Date.now())}</span>
+        <span className="text-base-content/60">
+          {t("最后连接", "Last seen")} {onlineText(user.online_at, Date.now(), lang)}
+        </span>
       </div>
       {!owner && <BindToCustomer username={user.username} wechat={legacy?.wechat} />}
 
       <div className="mb-4 grid grid-cols-2 gap-4 rounded-box bg-base-100 p-4 shadow-sm">
         <div>
-          <div className="text-sm text-base-content/60">到期</div>
+          <div className="text-sm text-base-content/60">{t("到期", "Expires")}</div>
           <div className="font-medium">
             {user.status === "on_hold" && user.on_hold_expire_duration
-              ? `首次连上后 ${Math.round(user.on_hold_expire_duration / 86400)} 天`
-              : formatExpire(user.expire, "zh", tz)}
+              ? t(`首次连上后 ${Math.round(user.on_hold_expire_duration / 86400)} 天`, `${Math.round(user.on_hold_expire_duration / 86400)} days after first connection`)
+              : formatExpire(user.expire, lang, tz)}
           </div>
-          {user.status === "on_hold" ? <div className="text-sm text-base-content/60">还没连过，连上才开始计时</div> : left && <div className="text-sm text-base-content/60">{left.text}</div>}
+          {user.status === "on_hold" ? <div className="text-sm text-base-content/60">{t("还没连过，连上才开始计时", "Not connected yet; the clock starts on first connection")}</div> : left && <div className="text-sm text-base-content/60">{left.text}</div>}
         </div>
         <div>
-          <div className="text-sm text-base-content/60">流量</div>
+          <div className="text-sm text-base-content/60">{t("流量", "Traffic")}</div>
           <div className="font-medium">
-            {formatBytes(user.used_traffic)} / {user.data_limit ? formatBytes(user.data_limit) : "不限"}
+            {formatBytes(user.used_traffic)} / {user.data_limit ? formatBytes(user.data_limit) : t("不限", "Unlimited")}
           </div>
           <div className="text-sm text-base-content/60">
-            {user.data_limit ? (RESET_LABEL[user.data_limit_reset_strategy ?? ""] ?? "不重置") : ""}
-            {user.lifetime_used_traffic != null && `（累计 ${formatBytes(user.lifetime_used_traffic)}）`}
+            {user.data_limit ? (resetLabel(user.data_limit_reset_strategy ?? "", lang) ?? t("不重置", "No reset")) : ""}
+            {user.lifetime_used_traffic != null &&
+              t(`（累计 ${formatBytes(user.lifetime_used_traffic)}）`, ` (lifetime ${formatBytes(user.lifetime_used_traffic)})`)}
           </div>
         </div>
       </div>
 
       {usage && (
         <div className="mb-4 rounded-box bg-base-100 p-4 text-sm shadow-sm" data-testid="node-usage">
-          <div className="mb-1 text-base-content/60">本月各节点流量</div>
+          <div className="mb-1 text-base-content/60">{t("本月各节点流量", "Traffic by node this month")}</div>
           {usage.length === 0 ? (
-            <div className="text-base-content/50">本月还没用过</div>
+            <div className="text-base-content/50">{t("本月还没用过", "No usage this month")}</div>
           ) : (
             <div className="flex flex-col gap-1">
               {usage.map((u) => (
                 <div key={u.node_name} className="grid grid-cols-[6rem_1fr_5rem] items-center gap-2">
-                  <span className="truncate">{u.node_id === null ? "面板本机" : u.node_name}</span>
+                  <span className="truncate">{u.node_id === null ? t("面板本机", "Panel (local)") : u.node_name}</span>
                   <progress className="progress progress-primary w-full" value={u.used_traffic} max={usage[0].used_traffic} />
                   <b className="text-right">{formatBytes(u.used_traffic)}</b>
                 </div>
@@ -161,7 +168,7 @@ export default async function UserPage({ params }: { params: Promise<{ username:
 
       <UserActions username={user.username} url={user.subscription_url} links={user.links ?? []} />
 
-      <h2 className="mt-8 mb-2 text-lg font-bold">修改</h2>
+      <h2 className="mt-8 mb-2 text-lg font-bold">{t("修改", "Edit")}</h2>
       <UserForm
         action={adminEditUser}
         username={user.username}

@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { site } from "@/site.config";
-import Link from "next/link";
 import ContactSupport from "./ContactSupport";
 import ConfirmHost from "./ConfirmDialog";
 import { SiteProvider } from "./SiteContext";
@@ -29,7 +28,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: site.themeColor };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const { lang, t } = await getT();
+  const { lang } = await getT();
   const theme = themeAttr(parseTheme((await cookies()).get(THEME_COOKIE)?.value));
   return (
     <html lang={LOCALE[lang]} data-theme={theme}>
@@ -40,24 +39,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <WechatHint />
         <div className="flex-1">{children}</div>
         <footer className="flex flex-col items-center gap-3 border-t border-base-300/60 px-4 py-8 text-sm text-base-content/60">
-          <HideOnAdmin>
-          <nav className="flex flex-wrap justify-center gap-x-5 gap-y-1">
-            <Link href="/" className="link link-hover">
-              {t("首页", "Home")}
-            </Link>
-            <Link href="/plans" className="link link-hover">
-              {t("购买套餐", "Plans")}
-            </Link>
-            <Link href="/tutorial" className="link link-hover">
-              {t("安装教程", "Setup guide")}
-            </Link>
-            <Link href="/dashboard" className="link link-hover">
-              {t("我的订阅", "My subscription")}
-            </Link>
-          </nav>
-          {(site.contactEmail || site.supportWechat) && <ContactSupport className="justify-center" />}
+          <HideOnAdmin>{(site.contactEmail || site.supportWechat) && <ContactSupport className="justify-center" />}</HideOnAdmin>
           <LangSwitch />
-          </HideOnAdmin>
           <p className="text-xs text-base-content/40">
             © {new Date().getFullYear()} {site.brand}
           </p>

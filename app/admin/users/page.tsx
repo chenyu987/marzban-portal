@@ -2,8 +2,8 @@ import Link from "next/link";
 import { adminPrefs, requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
 import { getSystem, listUsers, type MarzbanUser, type SystemStats, type UserStatus } from "@/lib/marzban";
-import { formatBytes, formatExpire, RESET_LABEL, STATUS_LABEL } from "@/lib/format";
-import { expireRelative, onlineState, parsePageSize, PAGE_SIZES, SORTS, STATUS_FILTERS } from "@/lib/admin-users";
+import { formatBytes, formatExpire, resetLabel, statusLabel } from "@/lib/format";
+import { expireRelative, onlineState, parsePageSize, PAGE_SIZES, SORTS, sortLabels, STATUS_FILTERS } from "@/lib/admin-users";
 import AdminHeader from "../AdminHeader";
 import { CustomerLink } from "../Links";
 import CopyButton from "../CopyButton";
@@ -12,6 +12,7 @@ import { site } from "@/site.config";
 import BulkActions from "./BulkActions";
 import PageSize from "./PageSize";
 import { getTz } from "@/lib/tz-server";
+import { getT } from "@/lib/lang";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ export const dynamic = "force-dynamic";
 export default async function UsersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = await requireAdmin();
   const tz = await getTz();
+  const { t, lang } = await getT();
   const sp = await searchParams;
   const str = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string).trim() : "");
   const q = str("q");
@@ -90,62 +92,68 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       <AdminHeader email={admin.email} />
       <div className="mt-4 mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">订阅</h1>
-          <p className="text-sm text-base-content/60">每个订阅就是 Marzban 上的一个用户，直接读写 Marzban；一个客人名下可以有好几个订阅</p>
+          <h1 className="text-2xl font-bold">{t("订阅", "Subscriptions")}</h1>
+          <p className="text-sm text-base-content/60">
+            {t(
+              "每个订阅就是 Marzban 上的一个用户，直接读写 Marzban；一个客人名下可以有好几个订阅",
+              "Each subscription is a Marzban user, read and written directly on Marzban; a customer can have several",
+            )}
+          </p>
         </div>
         <Link href="/admin/users/new" className="btn btn-primary btn-sm">
-          新建订阅
+          {t("新建订阅", "New subscription")}
         </Link>
       </div>
 
       {system && (
         <div className="stats stats-vertical mb-4 w-full bg-base-100 shadow-sm sm:stats-horizontal">
           <div className="stat">
-            <div className="stat-title">在用 / 全部订阅</div>
+            <div className="stat-title">{t("在用 / 全部订阅", "Active / all subscriptions")}</div>
             <div className="stat-value text-2xl">
               {system.users_active} / {system.total_user}
             </div>
           </div>
           <div className="stat">
-            <div className="stat-title">总流量</div>
+            <div className="stat-title">{t("总流量", "Total traffic")}</div>
             <div className="stat-value text-2xl">{formatBytes(system.incoming_bandwidth + system.outgoing_bandwidth)}</div>
           </div>
           <div className="stat">
-            <div className="stat-title">面板内存</div>
+            <div className="stat-title">{t("面板内存", "Panel memory")}</div>
             <div className="stat-value text-2xl">
               {formatBytes(system.mem_used)} / {formatBytes(system.mem_total)}
             </div>
             <div className="stat-desc">
-              CPU {system.cpu_cores} 核，{system.cpu_usage.toFixed(0)}%
+              {t(`CPU ${system.cpu_cores} 核，${system.cpu_usage.toFixed(0)}%`, `CPU ${system.cpu_cores} core${system.cpu_cores === 1 ? "" : "s"}, ${system.cpu_usage.toFixed(0)}%`)}
             </div>
           </div>
         </div>
       )}
 
       <form className="mb-4 flex flex-wrap gap-2">
-        <input name="q" defaultValue={q} placeholder="订阅名或备注" className="input input-sm w-48" />
-        <select name="status" defaultValue={status ?? ""} className="select select-sm w-36">
-          <option value="">全部状态</option>
+        <input name="q" defaultValue={q} placeholder={t("订阅名或备注", "Name or note")} className="input input-sm w-48" />
+        <select name="status" defaultValue={status ?? ""} className="select select-sm w-36" aria-label={t("状态", "Status")}>
+          <option value="">{t("全部状态", "All statuses")}</option>
           {STATUS_FILTERS.map((s) => (
             <option key={s} value={s}>
-              {STATUS_LABEL[s]?.text ?? s}
+              {statusLabel(s, lang).text}
             </option>
           ))}
         </select>
-        <select name="sort" defaultValue={sort} className="select select-sm w-44">
-          {Object.entries(SORTS).map(([k, v]) => (
+        <select name="sort" defaultValue={sort} className="select select-sm w-44" aria-label={t("排序", "Sort")}>
+          {Object.entries(sortLabels(lang)).map(([k, v]) => (
             <option key={k} value={k}>
               {v}
             </option>
           ))}
         </select>
         {PAGE_SIZE !== defaultSize && <input type="hidden" name="size" value={PAGE_SIZE} />}
-        <button className="btn btn-sm">搜索</button>
+        <button className="btn btn-sm">{t("搜索", "Search")}</button>
       </form>
 
       {error && (
         <div role="alert" className="alert alert-error alert-soft">
-          查 Marzban 出错：{error}
+          {t("查 Marzban 出错：", "Marzban error: ")}
+          {error}
         </div>
       )}
 
@@ -154,20 +162,20 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
           <table className="table table-sm">
             <thead>
               <tr>
-                <th>订阅（Marzban 用户名）</th>
-                <th>客人</th>
-                <th>套餐</th>
-                <th>状态</th>
-                <th>到期</th>
-                <th>流量</th>
-                <th>备注</th>
+                <th>{t("订阅（Marzban 用户名）", "Subscription (Marzban user)")}</th>
+                <th>{t("客人", "Customer")}</th>
+                <th>{t("套餐", "Plan")}</th>
+                <th>{t("状态", "Status")}</th>
+                <th>{t("到期", "Expires")}</th>
+                <th>{t("流量", "Traffic")}</th>
+                <th>{t("备注", "Note")}</th>
               </tr>
             </thead>
             <tbody>
               {data.users.map((u) => {
                 const owner = owners.get(u.username);
-                const st = STATUS_LABEL[u.status] ?? { text: u.status, badge: "badge-neutral" };
-                const online = onlineState(u.online_at, now);
+                const st = statusLabel(u.status, lang);
+                const online = onlineState(u.online_at, now, lang);
                 return (
                   <tr key={u.username} className="hover" data-testid="marzban-user">
                     <td>
@@ -192,10 +200,10 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                       {owner ? (
                         <CustomerLink id={owner.id} email={owner.email} wechat={owner.wechat} />
                       ) : legacyWechat.has(u.username) ? (
-                        <span title="老订阅，客人还没绑网站账号" className="inline-flex items-center">
+                        <span title={t("老订阅，客人还没绑网站账号", "Legacy subscription, not linked to a site account yet")} className="inline-flex items-center">
                           {legacyWechat.get(u.username)}
-                          <CopyButton text={legacyWechat.get(u.username)!} label="复制微信号" />
-                          <span className="text-xs text-base-content/50">未注册</span>
+                          <CopyButton text={legacyWechat.get(u.username)!} label={t("复制微信号", "Copy WeChat ID")} />
+                          <span className="text-xs text-base-content/50">{t("未注册", "Not registered")}</span>
                         </span>
                       ) : (
                         <span className="text-base-content/40">-</span>
@@ -205,12 +213,12 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                     <td>
                       <span className={`badge badge-sm ${st.badge}`}>{st.text}</span>
                     </td>
-                    <td className="whitespace-nowrap" title={u.expire && prefs.time === "relative" ? formatExpire(u.expire, "zh", tz) : undefined}>
-                      {prefs.time === "absolute" ? formatExpire(u.expire, "zh", tz) : expireRelative(u.expire, now)}
+                    <td className="whitespace-nowrap" title={u.expire && prefs.time === "relative" ? formatExpire(u.expire, lang, tz) : undefined}>
+                      {prefs.time === "absolute" ? formatExpire(u.expire, lang, tz) : expireRelative(u.expire, now, lang)}
                     </td>
                     <td className="whitespace-nowrap">
-                      {formatBytes(u.used_traffic)} / {u.data_limit ? formatBytes(u.data_limit) : "不限"}
-                      {u.data_limit ? <div className="text-xs text-base-content/50">{RESET_LABEL[u.data_limit_reset_strategy ?? ""] ?? "不重置"}</div> : null}
+                      {formatBytes(u.used_traffic)} / {u.data_limit ? formatBytes(u.data_limit) : t("不限", "Unlimited")}
+                      {u.data_limit ? <div className="text-xs text-base-content/50">{resetLabel(u.data_limit_reset_strategy ?? "", lang) ?? t("不重置", "No reset")}</div> : null}
                     </td>
                     <td className="max-w-48 truncate text-base-content/60">{u.note || "-"}</td>
                   </tr>
@@ -218,23 +226,23 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
               })}
             </tbody>
           </table>
-          {data.users.length === 0 && <p className="py-4 text-sm text-base-content/60">没有符合条件的订阅。</p>}
+          {data.users.length === 0 && <p className="py-4 text-sm text-base-content/60">{t("没有符合条件的订阅。", "No matching subscriptions.")}</p>}
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm">
             <div className="flex items-center gap-4">
               <PageSize size={PAGE_SIZE} />
               <span className="text-base-content/60">
-                共 {data.total} 个，第 {page} / {pages} 页
+                {t(`共 ${data.total} 个，第 ${page} / ${pages} 页`, `${data.total} total · page ${page} of ${pages}`)}
               </span>
             </div>
             <div className="join">
               {page > 1 && (
                 <Link href={href(page - 1)} className="btn btn-sm join-item">
-                  上一页
+                  {t("上一页", "Previous")}
                 </Link>
               )}
               {page < pages && (
                 <Link href={href(page + 1)} className="btn btn-sm join-item">
-                  下一页
+                  {t("下一页", "Next")}
                 </Link>
               )}
             </div>

@@ -10,6 +10,8 @@ import { CreateCodes, VoidCode } from "./CodeForms";
 import { CustomerLink } from "../Links";
 import { FilterBar, Pager, pageOf, param } from "../ui";
 import { getTz } from "@/lib/tz-server";
+import { getT } from "@/lib/lang";
+import type { T } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -31,10 +33,10 @@ const PAGE_SIZE = 50;
 // 免费体验（0 元）兑换成功也不记订单（见 app/actions.ts 的 redeem），没有订单号不算卡住
 const FREE_IDS = site.plans.filter((p) => p.price === 0).map((p) => p.id);
 const FREE_SQL = FREE_IDS.length ? `r.plan_id IN (${FREE_IDS.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})` : "0";
-const STATES: Record<string, { label: string; sql: string }> = {
-  unused: { label: "没用过", sql: "r.used_by IS NULL" },
-  used: { label: "已用", sql: `r.used_by IS NOT NULL AND (r.order_id IS NOT NULL OR ${FREE_SQL})` },
-  stuck: { label: "卡住了，要核对", sql: `r.used_by IS NOT NULL AND r.order_id IS NULL AND NOT ${FREE_SQL}` },
+const STATES: Record<string, { label: (t: T) => string; sql: string }> = {
+  unused: { label: (t) => t("没用过", "Unused"), sql: "r.used_by IS NULL" },
+  used: { label: (t) => t("已用", "Used"), sql: `r.used_by IS NOT NULL AND (r.order_id IS NOT NULL OR ${FREE_SQL})` },
+  stuck: { label: (t) => t("卡住了，要核对", "Stuck, needs checking"), sql: `r.used_by IS NOT NULL AND r.order_id IS NULL AND NOT ${FREE_SQL}` },
 };
 const GROUPS = [...new Set(site.plans.map((p) => p.group ?? p.name))];
 const like = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -43,6 +45,7 @@ const like = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 export default async function CodesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = await requireAdmin();
   const tz = await getTz();
+  const { t, lang } = await getT();
   const sp = await searchParams;
   // 兼容以前的 ?unused=1
   const state = param(sp, "unused") === "1" ? "unused" : param(sp, "state") in STATES ? param(sp, "state") : "";
@@ -74,32 +77,35 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
   // 生成兑换码先选档位（group）再选时长（名字去掉档位剩下的「月付」「7天体验」）
   const plans = site.plans.map((p) => {
     const group = p.group ?? p.name;
-    return { id: p.id, name: p.name, group, period: p.name.slice(group.length).trim() || p.name, price: p.price === 0 ? "免费" : `${site.currency}${formatMoney(p.price)}`, free: p.price === 0, days: p.days };
+    return { id: p.id, name: p.name, group, period: p.name.slice(group.length).trim() || p.name, price: p.price === 0 ? t("免费", "Free") : `${site.currency}${formatMoney(p.price)}`, free: p.price === 0, days: p.days };
   });
   const params = { state, plan: group, q };
 
   return (
     <div className="mx-auto max-w-5xl px-4 pb-16">
       <AdminHeader email={admin.email} />
-      <h1 className="mt-4 mb-4 text-2xl font-bold">兑换码</h1>
+      <h1 className="mt-4 mb-4 text-2xl font-bold">{t("兑换码", "Redeem codes")}</h1>
       {/* 默认停在第一个 Pro 档位（分档时）：最常发的是它；不分档就是第一个 */}
       <CreateCodes plans={plans} defaultGroup={site.plans.find((p) => p.pro)?.group} />
 
       <h2 className="mt-8 mb-2 text-lg font-bold">
-        兑换码 <span className="text-sm font-normal text-base-content/60">（筛出 {count?.n ?? 0} 个，其中没用过 {count?.unused ?? 0} 个）</span>
+        {t("兑换码", "Codes")}{" "}
+        <span className="text-sm font-normal text-base-content/60">
+          {t(`（筛出 ${count?.n ?? 0} 个，其中没用过 ${count?.unused ?? 0} 个）`, `(${count?.n ?? 0} found, ${count?.unused ?? 0} unused)`)}
+        </span>
       </h2>
       <FilterBar base="/admin/codes" active={!!(state || group || q)}>
-        <input name="q" defaultValue={q} placeholder="兑换码、备注、客人" className="input input-sm w-52" />
-        <select name="state" defaultValue={state} className="select select-sm w-40" aria-label="状态">
-          <option value="">全部状态</option>
+        <input name="q" defaultValue={q} placeholder={t("兑换码、备注、客人", "Code, note, customer")} className="input input-sm w-52" />
+        <select name="state" defaultValue={state} className="select select-sm w-40" aria-label={t("状态", "Status")}>
+          <option value="">{t("全部状态", "All statuses")}</option>
           {Object.entries(STATES).map(([k, v]) => (
             <option key={k} value={k}>
-              {v.label}
+              {v.label(t)}
             </option>
           ))}
         </select>
-        <select name="plan" defaultValue={group} className="select select-sm w-36" aria-label="套餐">
-          <option value="">全部套餐</option>
+        <select name="plan" defaultValue={group} className="select select-sm w-36" aria-label={t("套餐", "Plan")}>
+          <option value="">{t("全部套餐", "All plans")}</option>
           {GROUPS.map((g) => (
             <option key={g} value={g}>
               {g}
@@ -107,16 +113,16 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
           ))}
         </select>
       </FilterBar>
-      {results.length === 0 && <p className="text-sm text-base-content/60">没有。</p>}
+      {results.length === 0 && <p className="text-sm text-base-content/60">{t("没有。", "None.")}</p>}
       <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
         <table className="table table-sm">
           <thead>
             <tr>
-              <th>兑换码</th>
-              <th>套餐</th>
-              <th>备注</th>
-              <th>状态</th>
-              <th>生成</th>
+              <th>{t("兑换码", "Code")}</th>
+              <th>{t("套餐", "Plan")}</th>
+              <th>{t("备注", "Note")}</th>
+              <th>{t("状态", "Status")}</th>
+              <th>{t("生成", "Created")}</th>
             </tr>
           </thead>
           <tbody>
@@ -128,36 +134,36 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
                   <td>{(() => {
                     const p = findPlan(site.plans, r.plan_id);
                     // 生成时改过天数的，名字跟着天数改（「高速版 10天体验」）
-                    return p ? withCodeDays(p, r.days).name : `${r.plan_id}（已下架）`;
+                    return p ? withCodeDays(p, r.days).name : t(`${r.plan_id}（已下架）`, `${r.plan_id} (retired)`);
                   })()}</td>
                   <td className="text-base-content/60">{r.note ?? ""}</td>
                   <td>
                     {r.used_by === null ? (
                       <span className="flex items-center gap-1">
-                        <span className="badge badge-sm badge-success">没用过</span>
+                        <span className="badge badge-sm badge-success">{t("没用过", "Unused")}</span>
                         <VoidCode code={r.code} label={label} />
                       </span>
                     ) : r.order_id === null && !FREE_IDS.includes(r.plan_id) ? (
                       // 占住了但没记账：兑换时 Marzban 出了问题，要去核对（见 docs/portal-deploy.md「兑换码卡住了」）
-                      <span className="badge badge-sm badge-error">卡住了，要核对</span>
+                      <span className="badge badge-sm badge-error">{t("卡住了，要核对", "Stuck, needs checking")}</span>
                     ) : (
                       <span className="flex flex-wrap items-center gap-1 text-sm">
-                        {r.email ? <CustomerLink id={r.used_by} email={r.email} wechat={r.wechat} /> : `客人 ${r.used_by}`}
-                        <span className="text-base-content/60">{formatExpire(r.used_at, "zh", tz)} 用的</span>
+                        {r.email ? <CustomerLink id={r.used_by} email={r.email} wechat={r.wechat} /> : t(`客人 ${r.used_by}`, `Customer ${r.used_by}`)}
+                        <span className="text-base-content/60">{t(`${formatExpire(r.used_at, lang, tz)} 用的`, `used ${formatExpire(r.used_at, lang, tz)}`)}</span>
                         {r.order_id === null ? (
-                          <span className="text-base-content/60">（免费体验，不记订单）</span>
+                          <span className="text-base-content/60">{t("（免费体验，不记订单）", "(free trial, no order)")}</span>
                         ) : (
                           <>
-                            <span className="text-base-content/60">，</span>
+                            <span className="text-base-content/60">{t("，", ",")}</span>
                             <Link href={`/admin?view=all&q=${r.order_no ?? r.order_id}`} className="link link-hover">
-                              订单 {formatOrderNo(r.order_no)}
+                              {t("订单", "Order")} {formatOrderNo(r.order_no)}
                             </Link>
                           </>
                         )}
                       </span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap text-base-content/60">{formatExpire(r.created_at, "zh", tz)}</td>
+                  <td className="whitespace-nowrap text-base-content/60">{formatExpire(r.created_at, lang, tz)}</td>
                 </tr>
               );
             })}

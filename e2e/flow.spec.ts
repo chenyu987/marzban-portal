@@ -7,7 +7,7 @@
 // 每次用新邮箱注册，不依赖之前的数据；管理员那一步直接调命令行脚本（本地库 + 假 Marzban）
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { site } from "../site.config";
 
 const run = (args: string[], input = "") =>
@@ -74,6 +74,11 @@ async function logout(page: Page) {
   await expect(page).toHaveURL(/\/login/);
 }
 
+// 核心测试（钱、开通、登录、权限、泄露配置）打 @core：推之前跑的就是这几个（preflight.sh --e2e）。
+// 其余的（页面细节、文案、手机样式）只在改到对应页面时跑，或者大改动前跑全套（preflight.sh --e2e --all）。
+// 新加的测试默认不是核心；钱、开通、权限相关的才加 CORE
+const CORE = { tag: "@core" };
+
 test("首页不公开介绍：只有登录和注册，注册按钮带上推荐码", async ({ page }) => {
   await page.goto("/?ref=ABCD2345");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -106,7 +111,7 @@ test("首页不公开介绍：只有登录和注册，注册按钮带上推荐�
   expect((await page.request.get(manifest.icons[0].src)).ok()).toBe(true);
 });
 
-test("没登录能打开的页面，浏览器拿到的 JS 里没有站点配置（管理员邮箱、收款码、套餐、客户端名字）", async ({ request }) => {
+test("没登录能打开的页面，浏览器拿到的 JS 里没有站点配置（管理员邮箱、收款码、套餐、客户端名字）", CORE, async ({ request }) => {
   const secrets = [...(site.admin?.emails ?? []), ...site.payments.map((p) => p.qr), ...site.plans.map((p) => p.name), "Shadowrocket", "openai.com"];
   for (const path of ["/", "/login", "/register", "/forgot"]) {
     const html = await (await request.get(path)).text();
@@ -119,7 +124,7 @@ test("没登录能打开的页面，浏览器拿到的 JS 里没有站点配置�
   }
 });
 
-test("后台域名的根目录直接进后台（带 Cloudflare Access 的头），客人域名不受影响", async ({ request }) => {
+test("后台域名的根目录直接进后台（带 Cloudflare Access 的头），客人域名不受影响", CORE, async ({ request }) => {
   const admin = await request.get("/", { headers: { "cf-access-jwt-assertion": "x" }, maxRedirects: 0 });
   expect(admin.status()).toBe(307);
   expect(admin.headers().location).toMatch(/\/admin$/);
@@ -143,8 +148,9 @@ test("打错网址：带品牌的 404，能回首页", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "这个页面不存在" })).toBeVisible();
   await page.getByRole("link", { name: "回首页" }).click();
   await expect(page).toHaveURL(/\/$/);
-  // 每页底部有导航和版权
-  await expect(page.locator("footer")).toContainText("安装教程");
+  // 每页底部有版权，不放站内导航（登录后顶部有，登录前用不上）
+  await expect(page.locator("footer")).toContainText("©");
+  await expect(page.locator("footer").getByRole("link", { name: "安装教程" })).toHaveCount(0);
 });
 
 test("网站刚更新、旧页面点登录：自动刷新一次，一分钟内再出错就停在提示上", async ({ page }) => {
@@ -181,7 +187,7 @@ test("在微信里打开：顶部提示换浏览器，别的浏览器没有", as
   await expect(page.getByText("在浏览器打开")).toHaveCount(0);
 });
 
-test("老客人注册：微信号对上的订阅自动绑过来，改微信号后还在，别人再用这个微信号拿不走", async ({ page, browser }) => {
+test("老客人注册：微信号对上的订阅自动绑过来，改微信号后还在，别人再用这个微信号拿不走", CORE, async ({ page, browser }) => {
   const stamp = Date.now();
   const wechat = `E2E-Claim-${stamp}`;
   const base = `e2e_claim_${stamp}`;
@@ -265,7 +271,7 @@ test("订阅没绑客人、也找不到这个微信号的客人：管理员先�
   await expect(page.getByTestId("sub-id")).toHaveCount(1);
 });
 
-test("防机器人：同一个 IP 一小时内最多注册 3 个账号", async ({ browser }) => {
+test("防机器人：同一个 IP 一小时内最多注册 3 个账号", CORE, async ({ browser }) => {
   const stamp = Date.now();
   // 本地没有 cf-connecting-ip 时不限；这里假装是线上的同一个 IP
   const ip = `198.51.100.${stamp % 250}`;
@@ -460,7 +466,7 @@ test("邀请朋友：每个朋友一行，写一共返了多少，点开看每�
   await expect(row.locator("summary")).toContainText("+¥18.00");
 });
 
-test("管理员删除客人：名下订阅从 Marzban 删掉，账号注销，记录留着，同一个邮箱能重新注册", async ({ page, browser }) => {
+test("管理员删除客人：名下订阅从 Marzban 删掉，账号注销，记录留着，同一个邮箱能重新注册", CORE, async ({ page, browser }) => {
   const stamp = Date.now();
   const wechat = `e2e_del_${stamp}`;
   const email = `e2e-del-${stamp}@example.test`;
@@ -600,7 +606,7 @@ test("没选过语言默认中文（site.config 没开 autoLang）：英文系�
   await ctx.close();
 });
 
-test("客人从注册到续费、忘记密码，管理员确认订单", async ({ page }) => {
+test("客人从注册到续费、忘记密码，管理员确认订单", CORE, async ({ page }) => {
   const email = `e2e-${Date.now()}@example.test`;
   const password = "E2eTest-1234";
   const newPassword = "E2eTest-5678";
@@ -711,6 +717,14 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await page.getByRole("link", { name: "续费", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/plans\\?renew=${username}`));
   await expect(page.locator(`input[name="target"][value="${username}"]`)).toBeChecked();
+  // 第一单还没对账（先开通后对账）：不能再下单，防止不付钱连着点「我已付款」白嫖
+  await page.locator('button[value="p1-month"]').click();
+  await confirmOk(page);
+  await expect(page.getByText("你上一笔付款我们还在核对")).toBeVisible();
+  await expect(page.locator(".card.border")).toHaveCount(0);
+  // 管理员对上账以后就能下了
+  sql(`UPDATE orders SET verified_at = paid_at WHERE customer_id = (SELECT id FROM customers WHERE email = '${email}') AND verified_at IS NULL AND status = 'paid'`);
+  await page.reload();
   // 续期付款：开通后回到订阅页，提醒客人在客户端里刷新订阅
   await page.locator('button[value="p1-month"]').click();
   await confirmOk(page);
@@ -825,7 +839,7 @@ test("客人从注册到续费、忘记密码，管理员确认订单", async ({
   await expect(page).toHaveURL(/\/dashboard/);
 });
 
-test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({ page }) => {
+test("余额付全款、余额抵扣一部分，再用兑换码续期", CORE, async ({ page }) => {
   const email = `e2e-balance-${Date.now()}@example.test`;
   page.on("dialog", (d) => d.accept());
   await register(page, email, "E2eTest-1234");
@@ -928,7 +942,7 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", async ({
   await expect(page.getByRole("heading", { name: "高速版（体验）" })).toHaveCount(0);
 });
 
-test("管理后台：登录、确认和取消订单、客人管理、兑换码、日志", async ({ page, browser }) => {
+test("管理后台：登录、确认和取消订单、客人管理、兑换码、日志", CORE, async ({ page, browser }) => {
   const stamp = Date.now();
   const customer = `e2e-admin-c-${stamp}@example.test`;
   const adminEmail = `e2e-admin-${stamp}@example.test`;
@@ -938,32 +952,36 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   // 管理员只能用命令建
   run(["admin:create", "--", adminEmail], `${adminPassword}\n${adminPassword}\n`);
 
-  // 客人下三张单：第一张用支付宝付、第三张用微信付（都马上开通），第二张不付
-  const claim = async (method: string, payer: string) => {
-    const card = page.locator(".card.border").first();
-    const id = (await card.locator(".card-title").innerText()).match(/\d{6}-\d{5}/)![0];
+  // 客人先下三张单，再付第一张（支付宝）和第三张（微信），第二张不付
+  const orderNo = async (card: Locator) => (await card.locator(".card-title").innerText()).match(/\d{6}-\d{5}/)![0];
+  const claim = async (card: Locator, method: string, payer: string) => {
     await card.getByLabel(method, { exact: true }).check();
     await card.getByLabel("付款人").fill(payer);
     await card.getByRole("button", { name: "我已付款" }).click();
-    await expect(page).toHaveURL(/\/dashboard/);
-    return id;
   };
   await register(page, customer, "E2eTest-1234");
   await page.goto("/plans");
   await page.locator('button[value="p1-month"]').click();
   await confirmOk(page);
-  const first = await claim("支付宝", "付款人甲");
-  await page.goto("/plans");
+  await expect(page.locator(".card.border")).toHaveCount(1);
   await page.locator('button[value="p1-quarter"]').click();
   await confirmOk(page);
-  await expect(page.locator(".card.border")).toHaveCount(1);
-  const second = (await page.locator(".card.border .card-title").first().innerText()).match(/\d{6}-\d{5}/)![0];
-  await page.getByRole("radio", { name: /新开一个订阅/ }).check();
+  await expect(page.locator(".card.border")).toHaveCount(2);
+  // 还没有订阅，三张都是新开
   await page.locator('button[value="p1-month"]').click();
   await confirmOk(page);
-  await expect(page.locator(".card.border")).toHaveCount(2);
-  const third = await claim("微信", "付款人乙");
-  await expect(page.getByTestId("sub-id")).toHaveCount(2);
+  await expect(page.locator(".card.border")).toHaveCount(3);
+  // 订单卡片新的在上面
+  const [third, second, first] = await Promise.all([0, 1, 2].map((i) => orderNo(page.locator(".card.border").nth(i))));
+  const cardOf = (no: string) => page.locator(".card.border", { hasText: no });
+  await claim(cardOf(first), "支付宝", "付款人甲");
+  await expect(page).toHaveURL(/\/dashboard/);
+  // 第一张还没对账：第三张点「我已付款」被挡住，不开通
+  await page.goto("/plans");
+  await claim(cardOf(third), "微信", "付款人乙");
+  await expect(cardOf(third).getByText("你上一笔付款我们还在核对")).toBeVisible();
+  await page.goto("/dashboard");
+  await expect(page.getByTestId("sub-id")).toHaveCount(1);
 
   // 客人的登录进不了后台：会被带到后台自己的登录页
   await page.goto("/admin");
@@ -988,6 +1006,13 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   await expect(firstCard).toContainText("付款人甲");
   await firstCard.getByRole("button", { name: "确认到账" }).click();
   await expect(admin.getByText(`订单 ${first} 已对账`)).toBeVisible();
+
+  // 第一张对完账，客人再付第三张就能开通了
+  await page.goto("/plans");
+  await claim(cardOf(third), "微信", "付款人乙");
+  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page.getByTestId("sub-id")).toHaveCount(2);
+  await admin.reload();
 
   // 第三张：没收到钱，收回：新开的订阅在 Marzban 停用
   const thirdCard = admin.getByTestId("unverified-order").filter({ hasText: `订单 ${third}` });
@@ -1387,6 +1412,12 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   // 后台页脚不放给客人的链接和联系客服
   await expect(admin.locator("footer").getByRole("link", { name: "购买套餐" })).toHaveCount(0);
   await expect(admin.locator("footer").getByText("联系客服")).toHaveCount(0);
+  // 后台也能切英文：导航、标题跟着变，切回中文后面的步骤照旧
+  await admin.getByTestId("admin-lang").getByRole("button", { name: "English" }).click();
+  await expect(admin.getByRole("heading", { name: "My account" })).toBeVisible();
+  await expect(admin.getByRole("banner").getByRole("link", { name: "Orders" })).toBeVisible();
+  await admin.getByTestId("admin-lang").getByRole("button", { name: "中文" }).click();
+  await expect(admin.getByRole("heading", { name: "我的账户" })).toBeVisible();
   // 偏好：每页 10 个、快到期的在前、具体日期 → 订阅列表打开就是这样
   const prefsCard = admin.getByTestId("admin-prefs");
   await prefsCard.getByLabel("订阅列表每页").selectOption("10");
