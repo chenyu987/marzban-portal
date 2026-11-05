@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatDate, formatExpire, isExpiredSub, formatMoney, maskEmail, formatRedeemCode, canRenewEarly, needsRenewal, sortSubs, daysRingPct, unlimitedRingPct, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft, formatOrderNo, parseOrderNo } from "./format";
+import { formatBytes, formatDate, formatExpire, isExpiredSub, formatMoney, maskEmail, formatRedeemCode, canRenewEarly, needsRenewal, sortSubs, daysRingPct, periodRingPct, parseMarzbanTime, unlimitedRingPct, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft, formatOrderNo, parseOrderNo } from "./format";
 import { hashPassword, verifyPassword } from "./password";
 
 describe("parseSubToken", () => {
@@ -75,6 +75,28 @@ describe("到期时间", () => {
     expect(daysRingPct(45, 30)).toBe(75);
     expect(daysRingPct(0, 30)).toBe(0);
     expect(daysRingPct(null, 30)).toBe(100);
+  });
+
+  it("periodRingPct：续费后是满的，之后按续费时剩的总时长变少", () => {
+    const D = 86400;
+    const now = 100 * D;
+    // 刚续完（剩 35 天）是满的；过了 7 天剩 28 天是 80%
+    expect(periodRingPct(now + 35 * D, now, now, 30)).toBe(100);
+    expect(periodRingPct(now + 28 * D, now - 7 * D, now, 30)).toBe(80);
+    expect(periodRingPct(now + 30 * D, now, now, 30)).toBe(100);
+    expect(periodRingPct(now - D, now - 31 * D, now, 30)).toBe(0);
+    expect(periodRingPct(null, now, now, 30)).toBe(100);
+    // 不知道开始时间、或者开始时间对不上的，按套餐天数算
+    expect(periodRingPct(now + 15 * D, null, now, 30)).toBe(50);
+    expect(periodRingPct(now + 15 * D, now + D, now, 30)).toBe(50);
+  });
+
+  it("parseMarzbanTime：不带时区的按 UTC，微秒截掉", () => {
+    expect(parseMarzbanTime("2026-11-03T10:59:00")).toBe(Date.UTC(2026, 10, 3, 10, 59) / 1000);
+    expect(parseMarzbanTime("2026-11-03T10:59:00.123456")).toBe(Date.UTC(2026, 10, 3, 10, 59) / 1000);
+    expect(parseMarzbanTime("2026-11-03T10:59:00+08:00")).toBe(Date.UTC(2026, 10, 3, 2, 59) / 1000);
+    expect(parseMarzbanTime(undefined)).toBeNull();
+    expect(parseMarzbanTime("abc")).toBeNull();
   });
 
   it("sortSubs：能用的在上，然后查不到的、过期的、删掉的；同一类保持原顺序", () => {

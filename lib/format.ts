@@ -28,12 +28,28 @@ export function isExpiredSub(user: { status: string; expire: number | null }, no
   return user.status === "expired" || (!!user.expire && user.expire * 1000 <= nowMs);
 }
 
-// 剩余天数圆环画多少（0～100）。按「这期一共多少天」算比例，每过一天少一截。
-// 提前续过好几期的（月付续了一次，剩 59 天）按套餐天数的整数倍算一期（60 天），不然一直是满的、看不出在变少
+// 剩余天数圆环画多少（0～100）。每次续费后是满的，之后按「剩余 ÷ 续费那一刻剩的总时长」慢慢变少。
+// start 是最近一次续费 / 开通的时间。不知道（或者对不上，比如在到期之后）时退回按套餐天数算（见 daysRingPct）
+export function periodRingPct(expire: number | null, start: number | null, nowSec: number, periodDays: number): number {
+  if (!expire) return 100;
+  const left = Math.max(0, expire - nowSec);
+  if (start !== null && start <= nowSec && start < expire) return Math.min(100, (left / (expire - start)) * 100);
+  return daysRingPct(Math.ceil(left / 86400), periodDays);
+}
+
+// 只知道剩余天数时：按套餐天数算一期，提前续过好几期的（月付续了一次，剩 59 天）按套餐天数的整数倍算一期（60 天）
 export function daysRingPct(daysLeft: number | null, periodDays: number): number {
   if (daysLeft === null) return 100;
   const total = Math.max(periodDays, Math.ceil(daysLeft / periodDays) * periodDays);
   return Math.min(100, (daysLeft / total) * 100);
+}
+
+// Marzban 返回的时间（created_at 之类）是 UTC 但不带时区，比如 2026-11-03T10:59:00.123456。转成 unix 秒，看不懂返回 null
+export function parseMarzbanTime(s: string | null | undefined): number | null {
+  if (!s) return null;
+  const iso = /[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s}Z`;
+  const ms = Date.parse(iso.replace(/(\.\d{3})\d+/, "$1"));
+  return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
 }
 
 // 「我的订阅」上订阅的排法：能用的在最上面，然后是暂时查不到的，再是过期的，最后是 Marzban 上已经删掉的。

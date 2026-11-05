@@ -4,7 +4,7 @@ import { requireCustomer } from "@/lib/session";
 import { findUser, userUsage, type MarzbanUser } from "@/lib/marzban";
 import { monthStartBeijing } from "@/lib/admin-users";
 import { latestPeak, peakRingPct } from "@/lib/usage-peak";
-import { daysRingPct, unlimitedRingPct, sortSubs, formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, canRenewEarly, isExpiredSub, needsRenewal, resetLabel, statusLabel, timeLeft } from "@/lib/format";
+import { periodRingPct, parseMarzbanTime, unlimitedRingPct, sortSubs, formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, canRenewEarly, isExpiredSub, needsRenewal, resetLabel, statusLabel, timeLeft } from "@/lib/format";
 import { AVAILABLE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
 import { site } from "@/site.config";
 import { describePlan, findPlan } from "@/lib/plans";
@@ -64,12 +64,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // 每个订阅现在的套餐（付款时自动记，管理员改套餐也改这里），用来当卡片标题；没记过的老订阅显示「我的订阅」
   const { results: paid } = await db()
     .prepare(
-      `SELECT p.marzban_username, p.plan_id FROM subscription_plans p
+      `SELECT p.marzban_username, p.plan_id, p.updated_at FROM subscription_plans p
        JOIN subscriptions s ON s.marzban_username = p.marzban_username WHERE s.customer_id = ?`,
     )
     .bind(customer.id)
-    .all<{ marzban_username: string; plan_id: string }>();
+    .all<{ marzban_username: string; plan_id: string; updated_at: number }>();
   const planOf = new Map(paid.map((o) => [o.marzban_username, o.plan_id]));
+  // 最近一次付款 / 兑换的时间：剩余天数圆环从这一刻的满圈开始倒数；没记过的按 Marzban 上的创建时间
+  const renewedAt = new Map(paid.map((o) => [o.marzban_username, o.updated_at]));
 
   // 一个订阅查失败不影响其他订阅显示。gone：Marzban 上已经没有这个用户（被删了）；user 为 null 且不是 gone：暂时连不上
   const now = Date.now();
@@ -178,7 +180,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         )}
         {subs.map(({ username, code, user, gone, monthUsed }) =>
           user ? (
-            <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} lang={lang} app={app} tz={tz} monthUsed={monthUsed} peak={peak} />
+            <SubscriptionCard key={username} user={user} code={code} planId={planOf.get(username)} lang={lang} app={app} tz={tz} monthUsed={monthUsed} peak={peak} periodStart={renewedAt.get(username) ?? parseMarzbanTime(user.created_at)} />
           ) : gone ? (
             <GoneCard key={username} username={username} code={code} planId={planOf.get(username)} lang={lang} />
           ) : (
@@ -252,7 +254,7 @@ function SubscriptionId({ code, lang }: { code: string | null; lang: Lang }) {
   );
 }
 
-function SubscriptionCard({ user, code, planId, lang, app, tz, monthUsed, peak }: { user: MarzbanUser; code: string | null; planId?: string; lang: Lang; app: ImportApp; tz: string; monthUsed: number | null; peak: number | null }) {
+function SubscriptionCard({ user, code, planId, lang, app, tz, monthUsed, peak, periodStart }: { user: MarzbanUser; code: string | null; planId?: string; lang: Lang; app: ImportApp; tz: string; monthUsed: number | null; peak: number | null; periodStart: number | null }) {
   const t = makeT(lang);
   const { title, subtitle } = planHeading(planId, lang);
   const status = statusLabel(user.status, lang);
@@ -262,13 +264,13 @@ function SubscriptionCard({ user, code, planId, lang, app, tz, monthUsed, peak }
   const pct = user.data_limit ? Math.min(100, (user.used_traffic / user.data_limit) * 100) : null;
   // 不限流量：本月已用是上个月最高那位的百分之几，只用来画弧（只按本月用量比，查不到本月用量就不比）
   const vsPeak = !user.data_limit && peak && monthUsed !== null ? peakRingPct(monthUsed, peak) : null;
-  // 剩余天数和这期套餐的总天数（不知道套餐就按 30 天画环）
+  // 剩余天数；圆环续费后是满的，之后按续费时剩的总时长变少；不知道续费时间时按套餐天数（不知道套餐就按 30 天）
   const daysLeft = user.expire ? Math.max(0, Math.ceil((user.expire * 1000 - Date.now()) / 86400_000)) : null;
   const plan = planId ? findPlan(site.plans, planId) : undefined;
   const period = plan?.days ?? 30;
   // 免费体验前几天不放续费按钮，最后 3 天的黄色提醒和到期后的红色提示照常
   const trial = !!plan?.codeOnly && plan.price === 0;
-  const daysPct = daysRingPct(daysLeft, period);
+  const daysPct = periodRingPct(user.expire, periodStart, Math.floor(Date.now() / 1000), period);
   // 买了还没连过（没有上线时间、也没用过流量）：多半是还不会装 App，卡片最上面放「下一步」引导，连上过一次就不再显示
   const neverUsed = !expired && !user.online_at && !(user.lifetime_used_traffic ?? user.used_traffic);
 
