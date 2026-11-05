@@ -148,8 +148,8 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
 
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-bold">订阅（{users.length}）</h2>
-        <Link href={`/admin/users/new?customer=${encodeURIComponent(c.wechat ?? c.email)}`} className="btn btn-sm btn-primary">
-          给这个客人新开订阅
+        <Link href={`/admin/users/new?customer=${encodeURIComponent(c.wechat ?? c.email)}`} className="btn btn-ghost btn-xs font-normal text-base-content/60">
+          + 新开订阅
         </Link>
       </div>
       {maybe.length > 0 && (
