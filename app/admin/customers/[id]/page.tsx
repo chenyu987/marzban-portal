@@ -14,6 +14,7 @@ import { orderMethod, orderStatus } from "../../ui";
 import BindButton from "../../BindButton";
 import { getTz } from "@/lib/tz-server";
 import { getT } from "@/lib/lang";
+import { planName as planLabel } from "@/lib/plan-text";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +93,8 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   // 每个订阅现在的状态从 Marzban 查，查不到也不影响页面
   const users = await Promise.all(
     subs.results.map(async ({ marzban_username, code, plan_id }) => {
-      const plan = plan_id ? (findPlan(site.plans, plan_id)?.name ?? plan_id) : null;
+      const found = plan_id ? findPlan(site.plans, plan_id) : undefined;
+      const plan = found ? planLabel(found, lang) : plan_id;
       try {
         return { username: marzban_username, code, plan, user: (await getUser(marzban_username)) as MarzbanUser | null };
       } catch {
@@ -250,7 +252,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                       {formatOrderNo(o.no)}
                     </Link>
                   </td>
-                  <td>{o.plan_id ? (findPlan(site.plans, o.plan_id)?.name ?? o.plan_id) : t("只记账", "Ledger only")}</td>
+                  <td>{o.plan_id ? ((p) => (p ? planLabel(p, lang) : o.plan_id))(findPlan(site.plans, o.plan_id)) : t("只记账", "Ledger only")}</td>
                   <td className="text-right whitespace-nowrap">
                     {money(o.amount)}
                     {o.balance_used > 0 && o.method === "transfer" && <div className="text-xs text-base-content/50">{t(`余额抵扣 ${money(o.balance_used)}`, `${money(o.balance_used)} from balance`)}</div>}
@@ -258,7 +260,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                   <td>{ORDER_METHOD[o.method] ?? o.method}</td>
                   <td>{o.marzban_username ? <SubLink username={o.marzban_username} /> : "-"}</td>
                   <td>
-                    <span className={`badge badge-sm ${ORDER_STATUS[o.status]?.badge ?? "badge-ghost"}`}>{ORDER_STATUS[o.status]?.text ?? o.status}</span>
+                    <span className={`badge badge-sm whitespace-nowrap ${ORDER_STATUS[o.status]?.badge ?? "badge-ghost"}`}>{ORDER_STATUS[o.status]?.text ?? o.status}</span>
                   </td>
                   <td className="whitespace-nowrap text-base-content/60">{formatExpire(o.paid_at ?? o.created_at, lang, tz)}</td>
                 </tr>

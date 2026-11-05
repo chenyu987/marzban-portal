@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/admin";
+import ResizableTable from "../ResizableTable";
 import { db } from "@/lib/env";
 import { formatDate, formatMoney, normalizeSubCode } from "@/lib/format";
 import { site } from "@/site.config";
@@ -114,10 +115,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         <p className="text-base-content/60">{query ? t("没有找到注册过的客人。", "No registered customers found.") : t("还没有客人。", "No customers yet.")}</p>
       ) : (
         <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
-          <table className="table table-sm">
+          <ResizableTable id="customers" className="table table-sm">
             <thead>
               <tr>
-                <th>{t("客人", "Customer")}</th>
+                <th>{t("微信号", "WeChat")}</th>
+                <th>{t("邮箱", "Email")}</th>
                 <th>{t("订阅", "Subscriptions")}</th>
                 <th className="text-right">{t("余额", "Balance")}</th>
                 <th className="text-right">{t("累计付款", "Total paid")}</th>
@@ -131,7 +133,10 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                 return (
                   <tr key={c.id} className="hover">
                     <td>
-                      <CustomerLink id={c.id} email={c.email} wechat={c.wechat} />
+                      <CustomerLink id={c.id} email={c.email} wechat={c.wechat} part="wechat" />
+                    </td>
+                    <td>
+                      <CustomerLink id={c.id} email={c.email} wechat={c.wechat} part="email" />
                     </td>
                     <td>
                       {names.length === 0 ? (
@@ -153,7 +158,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                 );
               })}
             </tbody>
-          </table>
+          </ResizableTable>
         </div>
       )}
       <Pager base="/admin/customers" params={params} page={page} pageSize={PAGE_SIZE} total={total?.n ?? 0} />
@@ -167,7 +172,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             )}
           </p>
           <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
-            <table className="table table-sm">
+            <ResizableTable id="customers-legacy" className="table table-sm">
               <thead>
                 <tr>
                   <th>{t("客人（微信号）", "Customer (WeChat ID)")}</th>
@@ -204,7 +209,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </ResizableTable>
           </div>
         </>
       )}

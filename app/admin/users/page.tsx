@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ResizableTable from "../ResizableTable";
 import { adminPrefs, requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
 import { getSystem, listUsers, type MarzbanUser, type SystemStats, type UserStatus } from "@/lib/marzban";
@@ -6,13 +7,14 @@ import { formatBytes, formatExpire, resetLabel, statusLabel } from "@/lib/format
 import { expireRelative, onlineState, parsePageSize, PAGE_SIZES, SORTS, sortLabels, STATUS_FILTERS } from "@/lib/admin-users";
 import AdminHeader from "../AdminHeader";
 import { CustomerLink } from "../Links";
-import CopyButton from "../CopyButton";
+import { CopyText } from "../CopyButton";
 import { findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
 import BulkActions from "./BulkActions";
 import PageSize from "./PageSize";
 import { getTz } from "@/lib/tz-server";
 import { getT } from "@/lib/lang";
+import { groupName } from "@/lib/plan-text";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +73,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       .prepare(`SELECT marzban_username, plan_id FROM marzban_users WHERE plan_id IS NOT NULL AND marzban_username IN (SELECT value FROM json_each(?))`)
       .bind(namesJson)
       .all<{ marzban_username: string; plan_id: string }>();
-    for (const r of plans) planOf.set(r.marzban_username, findPlan(site.plans, r.plan_id)?.group ?? r.plan_id);
+    for (const r of plans) planOf.set(r.marzban_username, ((p) => (p ? groupName(p.group ?? p.name, lang) : r.plan_id))(findPlan(site.plans, r.plan_id)));
   }
 
   const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
@@ -159,11 +161,12 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
 
       {data && (
         <div className="overflow-x-auto">
-          <table className="table table-sm">
+          <ResizableTable id="subscriptions" className="table table-sm">
             <thead>
               <tr>
                 <th>{t("订阅（Marzban 用户名）", "Subscription (Marzban user)")}</th>
-                <th>{t("客人", "Customer")}</th>
+                <th>{t("微信号", "WeChat")}</th>
+                <th>{t("邮箱", "Email")}</th>
                 <th>{t("套餐", "Plan")}</th>
                 <th>{t("状态", "Status")}</th>
                 <th>{t("到期", "Expires")}</th>
@@ -196,22 +199,31 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                         <span className="text-xs text-base-content/60">{online.text}</span>
                       </div>
                     </td>
+                    {/* 微信号、邮箱各一列，点文字就复制。没绑客人的老订阅只有记着的微信号，邮箱那格写「未注册」 */}
                     <td>
                       {owner ? (
-                        <CustomerLink id={owner.id} email={owner.email} wechat={owner.wechat} />
+                        <CustomerLink id={owner.id} email={owner.email} wechat={owner.wechat} copy part="wechat" />
                       ) : legacyWechat.has(u.username) ? (
-                        <span title={t("老订阅，客人还没绑网站账号", "Legacy subscription, not linked to a site account yet")} className="inline-flex items-center">
-                          {legacyWechat.get(u.username)}
-                          <CopyButton text={legacyWechat.get(u.username)!} label={t("复制微信号", "Copy WeChat ID")} />
-                          <span className="text-xs text-base-content/50">{t("未注册", "Not registered")}</span>
+                        <span title={t("老订阅，客人还没绑网站账号", "Legacy subscription, not linked to a site account yet")}>
+                          <CopyText text={legacyWechat.get(u.username)!} />
                         </span>
                       ) : (
                         <span className="text-base-content/40">-</span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap">{planOf.get(u.username) ?? <span className="text-base-content/40">-</span>}</td>
                     <td>
-                      <span className={`badge badge-sm ${st.badge}`}>{st.text}</span>
+                      {owner ? (
+                        <CustomerLink id={owner.id} email={owner.email} wechat={owner.wechat} copy part="email" />
+                      ) : legacyWechat.has(u.username) ? (
+                        <span className="text-xs whitespace-nowrap text-base-content/50">{t("未注册", "Not registered")}</span>
+                      ) : (
+                        <span className="text-base-content/40">-</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap">{planOf.get(u.username) ?? <span className="text-base-content/40">-</span>}</td>
+                    {/* 列多的时候这一格会被挤窄，「正常」「已停用」不能折成一个字一行 */}
+                    <td className="whitespace-nowrap">
+                      <span className={`badge badge-sm whitespace-nowrap ${st.badge}`}>{st.text}</span>
                     </td>
                     <td className="whitespace-nowrap" title={u.expire && prefs.time === "relative" ? formatExpire(u.expire, lang, tz) : undefined}>
                       {prefs.time === "absolute" ? formatExpire(u.expire, lang, tz) : expireRelative(u.expire, now, lang)}
@@ -225,7 +237,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                 );
               })}
             </tbody>
-          </table>
+          </ResizableTable>
           {data.users.length === 0 && <p className="py-4 text-sm text-base-content/60">{t("没有符合条件的订阅。", "No matching subscriptions.")}</p>}
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm">
             <div className="flex items-center gap-4">

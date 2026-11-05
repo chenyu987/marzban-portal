@@ -7,7 +7,8 @@ import { useT } from "../../LangContext";
 // 生成兑换码。分两步选：先选档位（普通版、高速版…），再选时长（7 天体验、月付…，下面写着价格），
 // 不用在几十个选项的下拉框里找。天数默认是这个套餐的天数，− / + 加减（比如 7 天体验改成 10 天）；数量同样用 − / +。
 // 生成按钮上写清这次要生成什么。生成后给两段直接发给客人的话：只有兑换码的短的，和带用法的长的，各自一键复制
-type PlanOption = { id: string; name: string; group: string; period: string; price: string; free: boolean; days: number };
+// group 是档位的键（中文，site.config 里的 Plan.group），groupLabel 是按语言显示的名字
+type PlanOption = { id: string; name: string; group: string; groupLabel: string; period: string; price: string; free: boolean; days: number };
 
 export function CreateCodes({ plans, defaultGroup }: { plans: PlanOption[]; defaultGroup?: string }) {
   const [state, action, pending] = useActionState(adminCreateCodes, undefined);
@@ -28,7 +29,7 @@ export function CreateCodes({ plans, defaultGroup }: { plans: PlanOption[]; defa
     ? days === plan.days
       ? plan.name
       : plan.free
-        ? t(`${plan.group} ${days}天体验`, `${plan.group} ${days}-day trial`)
+        ? t(`${plan.groupLabel} ${days}天体验`, `${plan.groupLabel}, ${days}-day trial`)
         : t(`${plan.name}（${days} 天）`, `${plan.name} (${days} days)`)
     : "";
   return (
@@ -61,7 +62,7 @@ export function CreateCodes({ plans, defaultGroup }: { plans: PlanOption[]; defa
                 }}
                 className={`btn btn-sm rounded-full ${g === group ? "btn-primary" : "btn-ghost bg-base-200 font-normal"}`}
               >
-                {g}
+                {plans.find((p) => p.group === g)?.groupLabel ?? g}
               </button>
             ))}
           </div>

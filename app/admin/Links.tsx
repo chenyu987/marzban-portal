@@ -1,30 +1,47 @@
 import Link from "next/link";
 import { getT } from "@/lib/lang";
-import CopyButton from "./CopyButton";
+import CopyButton, { CopyText } from "./CopyButton";
 
 // 后台里客人、订阅互相跳转的链接，所有页面统一用这两个，不用自己去搜
-// 客人显示微信号（客服最常用，点了进客人页），后面小字是邮箱；两个后面都有复制按钮，方便贴去微信、邮件里
-export async function CustomerLink({ id, email, wechat }: { id: number; email: string; wechat?: string | null }) {
+// 客人分两行：上面微信号（客服最常用），下面小字邮箱，各自一行不折行。
+// copy = false（默认）：两行都能点进客人页，后面各跟一个复制按钮；
+// copy = true：点文字就是复制，不跳转（订阅列表用：这里要的是把微信号、邮箱贴去微信或邮件）
+// part：表格里微信号、邮箱分成两列时，每一列只显示其中一样（没填微信号显示「-」）
+export async function CustomerLink({
+  id,
+  email,
+  wechat,
+  copy = false,
+  part,
+}: {
+  id: number;
+  email: string;
+  wechat?: string | null;
+  copy?: boolean;
+  part?: "wechat" | "email";
+}) {
   const { t } = await getT();
-  const copyEmail = t("复制邮箱", "Copy email");
   const href = `/admin/customers/${id}`;
-  if (!wechat)
-    return (
-      <span className="inline-flex items-center">
-        <Link href={href} className="link link-hover">
-          {email}
-        </Link>
-        <CopyButton text={email} label={copyEmail} />
-      </span>
-    );
+  const line = (text: string, label: string, small: boolean) => (
+    <span className={`inline-flex items-center whitespace-nowrap ${small ? "text-xs text-base-content/60" : ""}`}>
+      {copy ? (
+        <CopyText text={text} />
+      ) : (
+        <>
+          <Link href={href} className="link link-hover">
+            {text}
+          </Link>
+          <CopyButton text={text} label={label} />
+        </>
+      )}
+    </span>
+  );
+  if (part === "wechat") return wechat ? line(wechat, t("复制微信号", "Copy WeChat ID"), false) : <span className="text-base-content/40">-</span>;
+  if (part === "email") return line(email, t("复制邮箱", "Copy email"), false);
   return (
-    <span className="inline-flex flex-wrap items-center">
-      <Link href={href} className="link link-hover">
-        {wechat}
-        <span className="ml-1 text-xs text-base-content/50">{email}</span>
-      </Link>
-      <CopyButton text={wechat} label={t("复制微信号", "Copy WeChat ID")} />
-      <CopyButton text={email} label={copyEmail} />
+    <span className="inline-flex flex-col items-start leading-snug">
+      {wechat && line(wechat, t("复制微信号", "Copy WeChat ID"), false)}
+      {line(email, t("复制邮箱", "Copy email"), !!wechat)}
     </span>
   );
 }

@@ -1,4 +1,5 @@
 import { db } from "@/lib/env";
+import ResizableTable from "./ResizableTable";
 import { formatExpire, formatMoney, formatOrderNo, parseOrderNo } from "@/lib/format";
 import { fromBeijingInput } from "@/lib/admin-users";
 import { site } from "@/site.config";
@@ -6,7 +7,8 @@ import { CustomerLink, SubLink } from "./Links";
 import { FilterBar, orderMethod, orderStatus, Pager, pageOf, param } from "./ui";
 import { getTz } from "@/lib/tz-server";
 import { getT } from "@/lib/lang";
-import type { T } from "@/lib/i18n";
+import type { Lang, T } from "@/lib/i18n";
+import { groupName, planName as planLabel } from "@/lib/plan-text";
 
 const PAGE_SIZE = 30;
 const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
@@ -34,8 +36,11 @@ type Row = {
 // 套餐按档位筛（同一档的月付、季付……一起），档位名就是 Plan.group
 const GROUPS = [...new Set(site.plans.map((p) => p.group ?? p.name))];
 const planIdsOf = (group: string) => site.plans.filter((p) => (p.group ?? p.name) === group).map((p) => p.id);
-const planName = (t: T, id: string | null) =>
-  id ? (site.plans.find((p) => p.id === id)?.name ?? t(`${id}（已下架）`, `${id} (retired)`)) : t("只记账", "Ledger only");
+const planName = (t: T, lang: Lang, id: string | null) => {
+  const p = id ? site.plans.find((x) => x.id === id) : undefined;
+  if (p) return planLabel(p, lang);
+  return id ? t(`${id}（已下架）`, `${id} (retired)`) : t("只记账", "Ledger only");
+};
 
 // 全部订单：搜订单号 / 客人 / 订阅 / 付款人，按状态、怎么付、套餐、下单日期筛，翻页；顶上汇总筛出来的单
 export default async function OrdersTable({ sp }: { sp: Record<string, string | string[] | undefined> }) {
@@ -132,7 +137,7 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
           <option value="">{t("全部套餐", "All plans")}</option>
           {GROUPS.map((g) => (
             <option key={g} value={g}>
-              {g}
+              {groupName(g, lang)}
             </option>
           ))}
         </select>
@@ -154,12 +159,13 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
       </div>
 
       <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
-        <table className="table table-sm">
+        <ResizableTable id="orders" className="table table-sm">
           <thead>
             <tr>
               <th>{t("订单", "Order")}</th>
               <th>{t("下单时间", "Ordered")}</th>
-              <th>{t("客人", "Customer")}</th>
+              <th>{t("微信号", "WeChat")}</th>
+              <th>{t("邮箱", "Email")}</th>
               <th>{t("套餐", "Plan")}</th>
               <th>{t("订阅", "Subscription")}</th>
               <th className="text-right">{t("金额", "Amount")}</th>
@@ -175,9 +181,12 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
                   <td className="font-mono whitespace-nowrap">{formatOrderNo(o.no)}</td>
                   <td className="whitespace-nowrap text-base-content/70">{formatExpire(o.created_at, lang, tz)}</td>
                   <td>
-                    <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} />
+                    <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} part="wechat" />
                   </td>
-                  <td className="whitespace-nowrap">{planName(t, o.plan_id)}</td>
+                  <td>
+                    <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} part="email" />
+                  </td>
+                  <td className="whitespace-nowrap">{planName(t, lang, o.plan_id)}</td>
                   <td>{o.marzban_username ? <SubLink username={o.marzban_username} /> : <span className="text-base-content/40">{t("新开", "New")}</span>}</td>
                   <td className="text-right whitespace-nowrap">
                     {money(o.amount)}
@@ -200,7 +209,7 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
               );
             })}
           </tbody>
-        </table>
+        </ResizableTable>
         {rows.results.length === 0 && <p className="p-4 text-sm text-base-content/60">{active ? t("没有符合条件的订单。", "No matching orders.") : t("还没有订单。", "No orders yet.")}</p>}
       </div>
       <Pager base="/admin" params={params} page={page} pageSize={PAGE_SIZE} total={sum?.n ?? 0} />

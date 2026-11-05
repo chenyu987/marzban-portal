@@ -20,6 +20,7 @@ import { CustomerLink } from "../../Links";
 import CopyCode from "../../../dashboard/CopyCode";
 import { getTz } from "@/lib/tz-server";
 import { getT } from "@/lib/lang";
+import { planName as planLabel } from "@/lib/plan-text";
 
 export const dynamic = "force-dynamic";
 
@@ -73,8 +74,8 @@ export default async function UserPage({ params }: { params: Promise<{ username:
     const line = site.planGroups?.[p.group ?? p.name]?.lines?.at(-1);
     return line ? pick(line, lang) : describePlan(p, lang);
   };
-  const currentPlan = planRow && findPlan(site.plans, planRow.plan_id) ? { id: planRow.plan_id, name: findPlan(site.plans, planRow.plan_id)!.name, desc: desc(planRow.plan_id) } : null;
-  const planOptions = site.plans.map((p) => ({ id: p.id, name: p.name, desc: desc(p.id) }));
+  const currentPlan = planRow && findPlan(site.plans, planRow.plan_id) ? { id: planRow.plan_id, name: planLabel(findPlan(site.plans, planRow.plan_id)!, lang), desc: desc(planRow.plan_id) } : null;
+  const planOptions = site.plans.map((p) => ({ id: p.id, name: planLabel(p, lang), desc: desc(p.id) }));
   const st = statusLabel(user.status, lang);
   const left = timeLeft(user.expire, undefined, lang);
 

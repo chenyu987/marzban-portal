@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/admin";
+import ResizableTable from "../ResizableTable";
 import { db } from "@/lib/env";
 import { formatExpire } from "@/lib/format";
 import Link from "next/link";
@@ -76,7 +77,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
       </FilterBar>
       {results.length === 0 && <p className="text-sm text-base-content/60">{t("没有记录。", "No entries.")}</p>}
       <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
-        <table className="table table-sm">
+        <ResizableTable id="logs" className="table table-sm">
           <thead>
             <tr>
               <th>{t("时间", "Time")}</th>
@@ -101,7 +102,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
               </tr>
             ))}
           </tbody>
-        </table>
+        </ResizableTable>
       </div>
       <Pager base="/admin/logs" params={{ admin, action, q }} page={page} pageSize={PAGE_SIZE} total={count?.n ?? 0} />
     </div>

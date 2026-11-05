@@ -1,4 +1,5 @@
 import { withCodeDays } from "@/lib/redeem-codes";
+import ResizableTable from "../ResizableTable";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
@@ -11,6 +12,7 @@ import { CustomerLink } from "../Links";
 import { FilterBar, Pager, pageOf, param } from "../ui";
 import { getTz } from "@/lib/tz-server";
 import { getT } from "@/lib/lang";
+import { groupName, periodLabel, planName as planLabel } from "@/lib/plan-text";
 import type { T } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
@@ -77,7 +79,8 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
   // 生成兑换码先选档位（group）再选时长（名字去掉档位剩下的「月付」「7天体验」）
   const plans = site.plans.map((p) => {
     const group = p.group ?? p.name;
-    return { id: p.id, name: p.name, group, period: p.name.slice(group.length).trim() || p.name, price: p.price === 0 ? t("免费", "Free") : `${site.currency}${formatMoney(p.price)}`, free: p.price === 0, days: p.days };
+    const period = lang === "en" ? (p.price === 0 ? `${p.days}-day trial` : periodLabel(p.days, "en").label) : p.name.slice(group.length).trim() || p.name;
+    return { id: p.id, name: planLabel(p, lang), group, groupLabel: groupName(group, lang), period, price: p.price === 0 ? t("免费", "Free") : `${site.currency}${formatMoney(p.price)}`, free: p.price === 0, days: p.days };
   });
   const params = { state, plan: group, q };
 
@@ -108,14 +111,14 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
           <option value="">{t("全部套餐", "All plans")}</option>
           {GROUPS.map((g) => (
             <option key={g} value={g}>
-              {g}
+              {groupName(g, lang)}
             </option>
           ))}
         </select>
       </FilterBar>
       {results.length === 0 && <p className="text-sm text-base-content/60">{t("没有。", "None.")}</p>}
       <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">
-        <table className="table table-sm">
+        <ResizableTable id="codes" className="table table-sm">
           <thead>
             <tr>
               <th>{t("兑换码", "Code")}</th>
@@ -134,7 +137,7 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
                   <td>{(() => {
                     const p = findPlan(site.plans, r.plan_id);
                     // 生成时改过天数的，名字跟着天数改（「高速版 10天体验」）
-                    return p ? withCodeDays(p, r.days).name : t(`${r.plan_id}（已下架）`, `${r.plan_id} (retired)`);
+                    return p ? planLabel(withCodeDays(p, r.days), lang) : t(`${r.plan_id}（已下架）`, `${r.plan_id} (retired)`);
                   })()}</td>
                   <td className="text-base-content/60">{r.note ?? ""}</td>
                   <td>
@@ -168,7 +171,7 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
               );
             })}
           </tbody>
-        </table>
+        </ResizableTable>
       </div>
       <Pager base="/admin/codes" params={params} page={page} pageSize={PAGE_SIZE} total={count?.n ?? 0} />
     </div>

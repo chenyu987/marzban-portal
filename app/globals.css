@@ -102,3 +102,35 @@ html {
     animation: none;
   }
 }
+
+/* 后台表格拖动列宽（app/admin/ResizableTable.tsx）：表头右边缘的竖线把手；拖过以后放不下的字显示成「…」 */
+.resizable-table .col-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+.resizable-table .col-resizer::after {
+  content: "";
+  position: absolute;
+  top: 25%;
+  right: 0;
+  width: 2px;
+  height: 50%;
+  border-radius: 1px;
+  background: color-mix(in oklab, currentColor 15%, transparent);
+}
+.resizable-table th:hover .col-resizer::after,
+.resizable-table .col-resizer:active::after {
+  background: var(--color-primary);
+}
+.resizable-table[data-resized] td,
+.resizable-table[data-resized] th {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

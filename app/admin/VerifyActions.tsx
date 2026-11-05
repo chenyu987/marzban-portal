@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { adminRevokeOrder, adminVerifyOrder } from "./actions";
 import { useT } from "../LangContext";
 
-// 已开通、待对账的单：在账单里找到钱就「确认到账」，找不到就「没收到钱」把订阅收回。两个都先弹框再确认一次
+// 已开通、待对账的单（对账卡片右下角，两个小按钮，颜色淡一点，一屏好几张不刺眼）：在账单里找到钱就「确认到账」，找不到就「没收到钱」把订阅收回。两个都先弹框再确认一次
 export default function VerifyActions({ id, summary, isNew }: { id: number; summary: string; isNew: boolean }) {
   const [verifyState, verifyAction, verifying] = useActionState(adminVerifyOrder, undefined);
   const [revokeState, revokeAction, revoking] = useActionState(adminRevokeOrder, undefined);
@@ -12,8 +12,8 @@ export default function VerifyActions({ id, summary, isNew }: { id: number; summ
   const state = verifyState ?? revokeState;
   const done = !!state?.ok;
   return (
-    <div className="flex flex-col gap-2">
-      <div className={`flex flex-wrap gap-2 ${done ? "hidden" : ""}`}>
+    <div className="ml-auto flex flex-col gap-2">
+      <div className={`flex justify-end gap-1 ${done ? "hidden" : ""}`}>
         <form
           action={verifyAction}
           onSubmit={(e) => {
@@ -21,7 +21,7 @@ export default function VerifyActions({ id, summary, isNew }: { id: number; summ
           }}
         >
           <input type="hidden" name="id" value={id} />
-          <button className="btn btn-primary btn-sm" disabled={verifying || revoking}>
+          <button className="btn btn-soft btn-primary btn-sm" disabled={verifying || revoking}>
             {verifying && <span className="loading loading-spinner loading-xs" />}
             {t("确认到账", "Confirm received")}
           </button>
@@ -37,7 +37,7 @@ export default function VerifyActions({ id, summary, isNew }: { id: number; summ
           }}
         >
           <input type="hidden" name="id" value={id} />
-          <button className="btn btn-error btn-outline btn-sm" disabled={verifying || revoking}>
+          <button className="btn btn-ghost btn-sm text-error" disabled={verifying || revoking}>
             {revoking && <span className="loading loading-spinner loading-xs" />}
             {t("没收到钱，收回", "Not received, revoke")}
           </button>

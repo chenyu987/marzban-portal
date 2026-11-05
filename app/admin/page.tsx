@@ -1,5 +1,5 @@
 import { requireAdmin } from "@/lib/admin";
-import { db } from "@/lib/env";
+import { db, nowSec } from "@/lib/env";
 import { formatExpire, formatMoney, formatOrderNo } from "@/lib/format";
 import { findPlan } from "@/lib/plans";
 import { site } from "@/site.config";
@@ -12,7 +12,8 @@ import OrderActions from "./OrderActions";
 import VerifyActions from "./VerifyActions";
 import { getTz } from "@/lib/tz-server";
 import { getT } from "@/lib/lang";
-import { LOCALE, type Lang, type T } from "@/lib/i18n";
+import { groupName, planName as planLabel } from "@/lib/plan-text";
+import { LOCALE, pick, type Lang, type T } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -37,8 +38,11 @@ type Row = {
 };
 
 const money = (fen: number) => `${site.currency}${formatMoney(fen)}`;
-const planName = (t: T, id: string | null) =>
-  id ? (findPlan(site.plans, id)?.name ?? t(`${id}（已下架）`, `${id} (retired)`)) : t("（没有套餐）", "(no plan)");
+const planName = (t: T, lang: Lang, id: string | null) => {
+  const p = id ? findPlan(site.plans, id) : undefined;
+  if (p) return planLabel(p, lang);
+  return id ? t(`${id}（已下架）`, `${id} (retired)`) : t("（没有套餐）", "(no plan)");
+};
 // 确认框里用的纯文字
 const target = (t: T, o: Row) => (o.marzban_username ? t(`续期 ${o.marzban_username}`, `Renew ${o.marzban_username}`) : t("新开订阅", "New subscription"));
 // 客人实际要转的钱，抵扣了余额的写在后面
@@ -58,6 +62,27 @@ const exact = (lang: Lang, at: number | null) =>
     ? "-"
     : new Date(at * 1000).toLocaleString(LOCALE[lang], { timeZone: "Asia/Shanghai", hour12: false }).replace(/\//g, "-");
 const who = (o: Row) => <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} />;
+// 付款方式：数据库里存的是中文名（site.payments 的 zh），显示时按后台语言换；颜色按支付宝蓝、微信绿，一眼知道翻哪个账单
+const payName = (lang: Lang, method: string | null) => {
+  const p = site.payments.find((x) => pick(x.name, "zh") === method);
+  return p ? pick(p.name, lang) : (method ?? "-");
+};
+const payStyle = (method: string | null) =>
+  method?.includes("支付宝")
+    ? { cls: "bg-[#1677ff]/12 text-[#1677ff]", dot: "bg-[#1677ff]" }
+    : method?.includes("微信")
+      ? { cls: "bg-[#07c160]/12 text-[#07c160]", dot: "bg-[#07c160]" }
+      : { cls: "bg-base-200 text-base-content/70", dot: "bg-base-content/40" };
+// 客人点「我已付款」到现在多久了；超过一天算拖久了，卡片标橙
+function waited(t: T, at: number | null): { text: string; stale: boolean } {
+  if (at === null) return { text: "", stale: false };
+  const min = Math.max(0, Math.floor((nowSec() - at) / 60));
+  if (min < 60) return { text: t(`${min} 分钟前`, `${min} min ago`), stale: false };
+  const h = Math.floor(min / 60);
+  if (h < 24) return { text: t(`${h} 小时前`, `${h} h ago`), stale: false };
+  const d = Math.floor(h / 24);
+  return { text: t(`已等 ${d} 天`, `waiting ${d} d`), stale: true };
+}
 
 export default async function AdminHome({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = await requireAdmin();
@@ -96,41 +121,71 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
         <OrdersTable sp={sp} />
       ) : (
         <>
-      <h2 className="mb-1 text-xl font-bold">{t("已开通、待对账", "Activated, to reconcile")}</h2>
-      <p className="mb-4 text-sm text-base-content/60">
-        {t(
-          "客人付完款点「我已付款」就自动开通了。按点的时间、金额、付款方式和付款人去账单里找这笔钱：找到了点「确认到账」，找不到点「没收到钱」把订阅收回。",
-          "Orders activate as soon as the customer taps “I've paid”. Look for the payment in your statement by time, amount, method and payer: if it's there, tap “Confirm received”; if not, tap “Not received” to revoke the subscription.",
+      {/* 对账卡：拿着支付宝 / 微信账单一张张找钱。按对账时看的顺序分层：
+          ① 金额 + 付款方式（颜色区分去翻哪个账单）+ 等了多久（超过一天变橙，先处理老的）
+          ② 付款人和精确到秒的时间：和账单里那一条对
+          ③ 一行灰字：开了什么订阅、套餐、订单号
+          ④ 客人联系方式在左，两个小按钮在右。左边一条细色边代替整圈边框，宽屏一行三张 */}
+      <div className="mb-3 flex items-baseline gap-3">
+        <h2 className="text-xl font-bold">{t("已开通、待对账", "Activated, to reconcile")}</h2>
+        {unverified.length > 0 && (
+          <span className="text-sm text-base-content/50">
+            {t(`${unverified.length} 张 · 共 `, `${unverified.length} · total `)}
+            <b className="text-base-content/80">{money(unverified.reduce((sum, o) => sum + o.amount - o.balance_used, 0))}</b>
+          </span>
         )}
-      </p>
+      </div>
       {unverified.length === 0 && <p className="text-base-content/60">{t("没有要对账的单。", "Nothing to reconcile.")}</p>}
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {unverified.map((o) => {
-          const summary = `${t("订单", "Order")} ${formatOrderNo(o.no)}｜${o.email}｜${planName(t, o.plan_id)}｜${o.marzban_username}｜${t("应收", "Due")} ${money(o.amount - o.balance_used)}｜${o.pay_method ?? "?"}`;
+          const summary = `${t("订单", "Order")} ${formatOrderNo(o.no)}｜${o.email}｜${planName(t, lang, o.plan_id)}｜${o.marzban_username}｜${t("应收", "Due")} ${money(o.amount - o.balance_used)}｜${o.pay_method ?? "?"}`;
+          const wait = waited(t, o.claimed_at);
+          const pay = payStyle(o.pay_method);
           return (
-            <div key={o.id} className="card border border-info bg-base-100 shadow-sm" data-testid="unverified-order">
-              <div className="card-body gap-2 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-bold">
-                    {t("订单", "Order")} {formatOrderNo(o.no)}
-                  </span>
-                  <span className="badge badge-info gap-1">
-                    {o.new_sub ? t("新开", "New") : t("续期", "Renewal")} {o.marzban_username && <SubLink username={o.marzban_username} />}
-                  </span>
+            <div
+              key={o.id}
+              className={`group relative flex flex-col gap-3 overflow-hidden rounded-box bg-base-100 py-3 pr-3 pl-4 text-sm shadow-sm ring-1 ring-base-300/60 transition hover:shadow-md`}
+              data-testid="unverified-order"
+            >
+              <span aria-hidden className={`absolute inset-y-0 left-0 w-1 ${wait.stale ? "bg-warning" : "bg-info/70"}`} />
+
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-2xl leading-none font-bold tabular-nums tracking-tight">{money(o.amount - o.balance_used)}</div>
+                  {o.balance_used > 0 && (
+                    <div className="mt-1 text-xs text-base-content/50">{t(`另有余额抵扣 ${money(o.balance_used)}`, `+ ${money(o.balance_used)} from balance`)}</div>
+                  )}
                 </div>
-                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-                  <span className="text-base-content/60">{t("应收", "Due")}</span>
-                  <b>{due(t, o)}</b>
-                  <span className="text-base-content/60">{t("付款方式", "Method")}</span>
-                  <span>{o.pay_method ?? "-"}</span>
-                  <span className="text-base-content/60">{t("付款人", "Payer")}</span>
-                  <span>{o.payer ?? t("（没填）", "(not given)")}</span>
-                  <span className="text-base-content/60">{t("点已付款", "Marked paid")}</span>
-                  <span>{exact(lang, o.claimed_at)}</span>
-                  <span className="text-base-content/60">{t("客人", "Customer")}</span>
-                  <span>{who(o)}</span>
-                  <span className="text-base-content/60">{t("套餐", "Plan")}</span>
-                  <span>{planName(t, o.plan_id)}</span>
+                <div className="flex flex-col items-end gap-1">
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${pay.cls}`}>
+                    <span aria-hidden className={`size-1.5 rounded-full ${pay.dot}`} />
+                    {payName(lang, o.pay_method)}
+                  </span>
+                  <span className={`text-xs ${wait.stale ? "font-medium text-warning" : "text-base-content/50"}`}>{wait.text}</span>
+                </div>
+              </div>
+
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+                <dt className="text-base-content/50">{t("付款人", "Payer")}</dt>
+                <dd className="font-medium">{o.payer ?? <span className="font-normal text-base-content/40">{t("没填", "not given")}</span>}</dd>
+                <dt className="text-base-content/50">{t("点已付款", "Marked paid")}</dt>
+                <dd className="font-mono tabular-nums">{exact(lang, o.claimed_at)}</dd>
+              </dl>
+
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-base-content/60">
+                <span className="badge badge-xs badge-ghost gap-1 py-2 font-medium">
+                  {o.new_sub ? t("新开", "New") : t("续期", "Renewal")} {o.marzban_username && <SubLink username={o.marzban_username} />}
+                </span>
+                <span>{planName(t, lang, o.plan_id)}</span>
+                <span className="text-base-content/30">·</span>
+                <span className="font-mono">
+                  {t("订单", "Order")} {formatOrderNo(o.no)}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-end justify-between gap-2 border-t border-base-300/60 pt-2">
+                <div className="flex min-w-0 flex-col text-xs">
+                  <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} />
                 </div>
                 <VerifyActions id={o.id} summary={summary} isNew={!!o.new_sub} />
               </div>
@@ -150,7 +205,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
       <div className="grid gap-3 lg:grid-cols-2">
         {open.map((o) => {
           const stuck = o.status === "processing";
-          const summary = `${t("订单", "Order")} ${formatOrderNo(o.no)}｜${o.email}｜${planName(t, o.plan_id)}｜${target(t, o)}｜${t("应收", "Due")} ${money(o.amount - o.balance_used)}`;
+          const summary = `${t("订单", "Order")} ${formatOrderNo(o.no)}｜${o.email}｜${planName(t, lang, o.plan_id)}｜${target(t, o)}｜${t("应收", "Due")} ${money(o.amount - o.balance_used)}`;
           return (
             <div key={o.id} className={`card bg-base-100 shadow-sm ${stuck ? "border border-error" : o.claimed_at ? "border border-warning" : ""}`}>
               <div className="card-body gap-2 p-4">
@@ -170,7 +225,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
                   </span>
                 </div>
                 <div className="text-sm">
-                  {who(o)}｜{planName(t, o.plan_id)}｜
+                  {who(o)}｜{planName(t, lang, o.plan_id)}｜
                   {o.marzban_username ? (
                     <>
                       {t("续期", "Renew")} {sub(o)}

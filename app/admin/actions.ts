@@ -20,6 +20,7 @@ import { hashResetToken, newResetToken, RESET_TTL_ADMIN, resetLink } from "@/lib
 import { site } from "@/site.config";
 import { wechatError } from "@/lib/account";
 import { getT } from "@/lib/lang";
+import { planName as planLabel } from "@/lib/plan-text";
 
 // 和客人登录一样限制试密码；记在 login_failures 里，邮箱前面加 admin: 区分
 const FAIL_WINDOW = 15 * 60;
@@ -663,7 +664,7 @@ export async function adminSetSubWechat(_: FormState, form: FormData): Promise<F
 // 改套餐：按新套餐改 Marzban 上的流量上限、重置方式、设备数（ip=N）、档位对应的入站，到期时间不动；记下现在的套餐，客人订阅页标题跟着变
 export async function adminChangePlan(_: FormState, form: FormData): Promise<FormState> {
   const admin = await requireAdmin();
-  const { t } = await getT();
+  const { t, lang } = await getT();
   const username = String(form.get("username") ?? "");
   const plan = findPlan(site.plans, String(form.get("plan") ?? ""));
   if (!plan) return { error: t("请选套餐", "Choose a plan") };
@@ -688,5 +689,5 @@ export async function adminChangePlan(_: FormState, form: FormData): Promise<For
   const from = before ? (findPlan(site.plans, before.plan_id)?.name ?? before.plan_id) : "没记套餐";
   await logAdmin(admin, "user.change_plan", username, `${from} → ${plan.name}`);
   revalidatePath(`/admin/users/${encodeURIComponent(username)}`);
-  return { ok: t(`已改成 ${plan.name}：流量和设备数已按新套餐改好，到期时间没变`, `Switched to ${plan.name}: data and device limits updated, expiry unchanged`) };
+  return { ok: t(`已改成 ${plan.name}：流量和设备数已按新套餐改好，到期时间没变`, `Switched to ${planLabel(plan, lang)}: data and device limits updated, expiry unchanged`) };
 }
