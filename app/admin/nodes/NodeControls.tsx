@@ -71,7 +71,8 @@ export function NodeForm() {
   );
 }
 
-export function NodeActions({ node }: { node: MarzbanNode }) {
+// lead：放在按钮同一行左边的内容（节点卡片的本月流量条），按钮靠右；修改表单和结果提示在下面
+export function NodeActions({ node, lead }: { node: MarzbanNode; lead?: React.ReactNode }) {
   const { result, pending, run } = useRun();
   const [editing, setEditing] = useState(false);
   const t = useT();
@@ -80,7 +81,9 @@ export function NodeActions({ node }: { node: MarzbanNode }) {
   const disabled = node.status === "disabled";
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {lead}
+        <div className="ml-auto flex flex-wrap gap-2">
         <button type="button" className="btn btn-xs" disabled={pending || disabled} onClick={() => run(adminReconnectNode, { id }, () => true)}>
           {t("重连", "Reconnect")}
         </button>
@@ -112,6 +115,7 @@ export function NodeActions({ node }: { node: MarzbanNode }) {
           {t("删除", "Delete")}
         </button>
         {pending && <span className="loading loading-spinner loading-xs self-center" />}
+        </div>
       </div>
       {editing && (
         <div ref={setBox} className="flex flex-col gap-2">
@@ -138,7 +142,7 @@ export function CoreActions() {
     <div className="flex flex-col gap-2">
       <button
         type="button"
-        className="btn btn-sm btn-warning btn-outline self-start"
+        className="btn btn-ghost btn-sm self-end text-warning"
         disabled={pending}
         onClick={() => run(adminRestartCore, {}, () => confirm(t("重启 Xray？所有节点都会跟着重启，所有客人断开几秒后自动重连", "Restart Xray? All nodes restart too; every customer drops for a few seconds and reconnects")))}
       >

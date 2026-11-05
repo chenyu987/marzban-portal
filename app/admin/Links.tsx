@@ -46,10 +46,10 @@ export async function CustomerLink({
   );
 }
 
-// 订阅 = Marzban 上的一个用户，点进去是订阅详情
+// 订阅 = Marzban 上的一个用户，点进去是订阅详情。字体和微信号、邮箱一样（不用等宽字），同一张表里不显得乱
 export function SubLink({ username }: { username: string }) {
   return (
-    <Link href={`/admin/users/${encodeURIComponent(username)}`} className="link link-hover font-mono">
+    <Link href={`/admin/users/${encodeURIComponent(username)}`} className="link link-hover">
       {username}
     </Link>
   );

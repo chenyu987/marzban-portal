@@ -181,10 +181,10 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
                   <td className="font-mono whitespace-nowrap">{formatOrderNo(o.no)}</td>
                   <td className="whitespace-nowrap text-base-content/70">{formatExpire(o.created_at, lang, tz)}</td>
                   <td>
-                    <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} part="wechat" />
+                    <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} part="wechat" copy />
                   </td>
                   <td>
-                    <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} part="email" />
+                    <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} part="email" copy />
                   </td>
                   <td className="whitespace-nowrap">{planName(t, lang, o.plan_id)}</td>
                   <td>{o.marzban_username ? <SubLink username={o.marzban_username} /> : <span className="text-base-content/40">{t("新开", "New")}</span>}</td>

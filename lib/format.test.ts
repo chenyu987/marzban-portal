@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatDate, formatExpire, isExpiredSub, formatMoney, maskEmail, formatRedeemCode, canRenewEarly, needsRenewal, sortSubs, daysRingPct, periodRingPct, parseMarzbanTime, unlimitedRingPct, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft, formatOrderNo, parseOrderNo } from "./format";
+import { formatBytes, formatDate, formatExpire, isExpiredSub, formatMoney, maskEmail, formatRedeemCode, canRenewEarly, needsRenewal, sortSubs, daysRingPct, periodRingPct, parseMarzbanTime, unlimitedRingPct, newRedeemCode, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken, parseYuan, timeLeft, formatOrderNo, parseOrderNo, statusLabel } from "./format";
 import { hashPassword, verifyPassword } from "./password";
 
 describe("parseSubToken", () => {
@@ -220,5 +220,15 @@ describe("订单号", () => {
     expect(parseOrderNo(" 26110348213 ")).toBe("26110348213");
     expect(parseOrderNo("12")).toBeNull();
     expect(parseOrderNo("alice")).toBeNull();
+  });
+});
+
+describe("订阅状态的文字", () => {
+  it("后台用短的「停用」「到期」，客人页还是「已停用」「已到期」，英文一样", () => {
+    expect(statusLabel("disabled").text).toBe("已停用");
+    expect(statusLabel("disabled", "zh", { short: true }).text).toBe("停用");
+    expect(statusLabel("expired", "zh", { short: true })).toEqual({ text: "到期", badge: "badge-error" });
+    expect(statusLabel("active", "zh", { short: true }).text).toBe("正常");
+    expect(statusLabel("disabled", "en", { short: true }).text).toBe("Disabled");
   });
 });

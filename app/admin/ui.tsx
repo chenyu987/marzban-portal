@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getT } from "@/lib/lang";
+import FilterPopover from "./FilterPopover";
 import type { T } from "@/lib/i18n";
 
 // 后台列表页共用的几块：筛选栏、结果数和翻页、标签页。所有列表页长得一样，换页面不用重新找按钮
@@ -24,20 +25,10 @@ export function pageOf(sp: Record<string, string | string[] | undefined>): numbe
   return Math.max(1, Number.parseInt(param(sp, "page"), 10) || 1);
 }
 
-// 筛选栏：GET 表单，回车或点「筛选」都提交；有筛选条件时显示「清除」
-export async function FilterBar({ base, active, children }: { base: string; active: boolean; children: React.ReactNode }) {
-  const { t } = await getT();
-  return (
-    <form className="mb-3 flex flex-wrap items-center gap-2 rounded-box bg-base-100 p-2 shadow-sm">
-      {children}
-      <button className="btn btn-sm btn-primary">{t("筛选", "Filter")}</button>
-      {active && (
-        <Link href={base} className="btn btn-sm btn-ghost">
-          {t("清除", "Clear")}
-        </Link>
-      )}
-    </form>
-  );
+// 筛选栏：平时收成一个「筛选」按钮，点开浮在表格上面（见 FilterPopover.tsx）。GET 表单，回车或点「筛选」都提交。
+// active 留着给以后用（现在几项在浏览器里数）
+export function FilterBar({ base, children }: { base: string; active?: boolean; children: React.ReactNode }) {
+  return <FilterPopover base={base}>{children}</FilterPopover>;
 }
 
 // 表格下面：共几条、第几页、上一页下一页
@@ -88,7 +79,7 @@ export const orderStatus = (t: T): Record<string, { text: string; badge: string 
   processing: { text: t("开通中", "Provisioning"), badge: "badge-error" },
   paid: { text: t("已付款", "Paid"), badge: "badge-success" },
   cancelled: { text: t("已取消", "Cancelled"), badge: "badge-neutral" },
-  revoked: { text: t("没收到钱，已收回", "Not received, revoked"), badge: "badge-error badge-outline" },
+  revoked: { text: t("已收回", "Revoked"), badge: "badge-error badge-outline" },
 });
 export const orderMethod = (t: T): Record<string, string> => ({
   transfer: t("转账", "Transfer"),

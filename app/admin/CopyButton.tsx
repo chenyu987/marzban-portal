@@ -36,29 +36,33 @@ export default function CopyButton({ text, label }: { text: string; label: strin
   );
 }
 
-// 文字本身就是复制按钮：点一下复制，后面短暂出现 ✓。用在不用跳转的地方（比如订阅列表里的微信号、邮箱）
+// 文字本身就是复制按钮（和客人页的推荐码、订阅编号一样）：鼠标是小手，点一下复制，原来的字短暂换成「已复制 ✓」。
+// 「已复制 ✓」叠在原来文字的位置上，列宽不跟着跳。用在后台表格里的微信号、邮箱
 export function CopyText({ text, className = "" }: { text: string; className?: string }) {
   const t = useT();
   const [copied, setCopied] = useState(false);
+  async function copy(e: React.SyntheticEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // 浏览器不让写剪贴板就算了，还能手动选中
+    }
+  }
   return (
-    <button
-      type="button"
-      title={t("点一下复制", "Click to copy")}
-      className={`cursor-copy text-left whitespace-nowrap hover:underline ${className}`}
-      onClick={async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        } catch {
-          // 浏览器不让写剪贴板就算了，还能手动选中
-        }
-      }}
+    <span
+      role="button"
+      tabIndex={0}
+      title={t("点击复制", "Click to copy")}
+      onClick={copy}
+      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && copy(e)}
+      className={`inline-grid cursor-pointer whitespace-nowrap ${className}`}
     >
-      {text}
-      {copied && <span className="ml-1 text-success">✓</span>}
-    </button>
+      <span className={`col-start-1 row-start-1 ${copied ? "invisible" : ""}`}>{text}</span>
+      {copied && <span className="col-start-1 row-start-1 text-success">{t("已复制 ✓", "Copied ✓")}</span>}
+    </span>
   );
 }

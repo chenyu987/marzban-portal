@@ -1004,7 +1004,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   const firstCard = admin.getByTestId("unverified-order").filter({ hasText: `订单 ${first}` });
   await expect(firstCard).toContainText("支付宝");
   await expect(firstCard).toContainText("付款人甲");
-  await firstCard.getByRole("button", { name: "确认到账" }).click();
+  await firstCard.getByRole("button", { name: "到账", exact: true }).click();
   await expect(admin.getByText(`订单 ${first} 已对账`)).toBeVisible();
 
   // 第一张对完账，客人再付第三张就能开通了
@@ -1018,7 +1018,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   const thirdCard = admin.getByTestId("unverified-order").filter({ hasText: `订单 ${third}` });
   await expect(thirdCard).toContainText("付款人乙");
   const revokedUser = (await thirdCard.locator(".badge").innerText()).replace(/^新开\s*/, "");
-  await thirdCard.getByRole("button", { name: "没收到钱，收回" }).click();
+  await thirdCard.getByRole("button", { name: "收回", exact: true }).click();
   await expect(admin.getByText(`订单 ${third} 已收回`)).toBeVisible();
   expect(((await mockMarzban("GET", `/user/${revokedUser}`)) as { status?: string }).status).toBe("disabled");
 
@@ -1142,7 +1142,9 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   for (const row of await admin.getByTestId("order-row").all()) await expect(row).toContainText("已取消");
   await admin.goto(`/admin?view=all&q=${second}`);
   await expect(admin.getByTestId("order-row")).toHaveCount(1);
-  await admin.getByTestId("order-row").getByRole("link", { name: customer }).click();
+  // 订单表里的微信号、邮箱点了是复制，去客人页走订阅链接旁边的客人列表
+  await admin.goto(`/admin/customers?q=${encodeURIComponent(customer)}`);
+  await admin.getByRole("link", { name: customer }).click();
   await expect(admin.getByRole("heading", { name: customer })).toBeVisible();
 
   // 手机上：和客人页一样是右上角的整屏菜单，顶部不放导航；点页面过去后菜单自己收起
@@ -1266,7 +1268,7 @@ test("管理后台：登录、确认和取消订单、客人管理、兑换码�
   // 节点：看状态、重连出错的节点、加一个、改倍率、停用、删除；重启 Xray
   const nodeName = `e2e节点${stamp}`.slice(0, 32);
   await admin.goto("/admin/nodes");
-  await expect(admin.getByText("Xray 运行中")).toBeVisible();
+  await expect(admin.getByTestId("core")).toHaveAttribute("data-started", "1");
   const osaka = admin.getByTestId("node").filter({ hasText: "大阪" });
   await expect(osaka).toContainText("出错");
   await osaka.getByRole("button", { name: "重连" }).click();

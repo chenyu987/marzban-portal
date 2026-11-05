@@ -61,7 +61,7 @@ const exact = (lang: Lang, at: number | null) =>
   at === null
     ? "-"
     : new Date(at * 1000).toLocaleString(LOCALE[lang], { timeZone: "Asia/Shanghai", hour12: false }).replace(/\//g, "-");
-const who = (o: Row) => <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} />;
+const who = (o: Row) => <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} copy />;
 // 付款方式：数据库里存的是中文名（site.payments 的 zh），显示时按后台语言换；颜色按支付宝蓝、微信绿，一眼知道翻哪个账单
 const payName = (lang: Lang, method: string | null) => {
   const p = site.payments.find((x) => pick(x.name, "zh") === method);
@@ -185,7 +185,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
 
               <div className="flex flex-wrap items-end justify-between gap-2 border-t border-base-300/60 pt-2">
                 <div className="flex min-w-0 flex-col text-xs">
-                  <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} />
+                  <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} copy />
                 </div>
                 <VerifyActions id={o.id} summary={summary} isNew={!!o.new_sub} />
               </div>
@@ -194,14 +194,10 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
         })}
       </div>
 
-      <h2 className="mt-10 mb-1 text-xl font-bold">{t("待处理的订单", "Orders to handle")}</h2>
-      <p className="mb-4 text-sm text-base-content/60">
-        {t(
-          "客人点了「我已付款」但自动开通没成功的会留在这里，在账单里找到这笔钱再确认开通。没点「我已付款」的一般就是还没付。",
-          "Orders where the customer tapped “I've paid” but automatic activation failed stay here: find the payment in your statement, then confirm. Orders without “I've paid” usually just haven't been paid yet.",
-        )}
-      </p>
-      {open.length === 0 && <p className="text-base-content/60">{t("没有待处理的订单。", "No orders to handle.")}</p>}
+      {/* 卡住的、客人还没付的单：没有就整块不显示 */}
+      {open.length > 0 && (
+        <>
+      <h2 className="mt-10 mb-3 text-xl font-bold">{t("待处理的订单", "Orders to handle")}</h2>
       <div className="grid gap-3 lg:grid-cols-2">
         {open.map((o) => {
           const stuck = o.status === "processing";
@@ -260,6 +256,8 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
         })}
       </div>
 
+        </>
+      )}
         </>
       )}
     </div>

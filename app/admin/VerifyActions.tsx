@@ -23,7 +23,7 @@ export default function VerifyActions({ id, summary, isNew }: { id: number; summ
           <input type="hidden" name="id" value={id} />
           <button className="btn btn-soft btn-primary btn-sm" disabled={verifying || revoking}>
             {verifying && <span className="loading loading-spinner loading-xs" />}
-            {t("确认到账", "Confirm received")}
+            {t("到账", "Received")}
           </button>
         </form>
         <form
@@ -39,7 +39,7 @@ export default function VerifyActions({ id, summary, isNew }: { id: number; summ
           <input type="hidden" name="id" value={id} />
           <button className="btn btn-ghost btn-sm text-error" disabled={verifying || revoking}>
             {revoking && <span className="loading loading-spinner loading-xs" />}
-            {t("没收到钱，收回", "Not received, revoke")}
+            {t("收回", "Revoke")}
           </button>
         </form>
       </div>

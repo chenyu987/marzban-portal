@@ -150,20 +150,32 @@ export default async function CodesPage({ searchParams }: { searchParams: Promis
                       // 占住了但没记账：兑换时 Marzban 出了问题，要去核对（见 docs/portal-deploy.md「兑换码卡住了」）
                       <span className="badge badge-sm badge-error">{t("卡住了，要核对", "Stuck, needs checking")}</span>
                     ) : (
-                      <span className="flex flex-wrap items-center gap-1 text-sm">
-                        {r.email ? <CustomerLink id={r.used_by} email={r.email} wechat={r.wechat} /> : t(`客人 ${r.used_by}`, `Customer ${r.used_by}`)}
-                        <span className="text-base-content/60">{t(`${formatExpire(r.used_at, lang, tz)} 用的`, `used ${formatExpire(r.used_at, lang, tz)}`)}</span>
-                        {r.order_id === null ? (
-                          <span className="text-base-content/60">{t("（免费体验，不记订单）", "(free trial, no order)")}</span>
-                        ) : (
-                          <>
-                            <span className="text-base-content/60">{t("，", ",")}</span>
+                      // 两行：上面谁用的（微信号 · 邮箱，点字复制），下面小字什么时候用的、免费体验还是哪张订单
+                      <div className="flex flex-col gap-0.5 text-sm">
+                        <div className="flex flex-wrap items-baseline gap-x-2">
+                          {r.email ? (
+                            <>
+                              <CustomerLink id={r.used_by} email={r.email} wechat={r.wechat} copy part="wechat" />
+                              <span className="text-xs text-base-content/60">
+                                <CustomerLink id={r.used_by} email={r.email} wechat={r.wechat} copy part="email" />
+                              </span>
+                            </>
+                          ) : (
+                            t(`客人 ${r.used_by}`, `Customer ${r.used_by}`)
+                          )}
+                        </div>
+                        <div className="text-xs text-base-content/50">
+                          {t(`${formatExpire(r.used_at, lang, tz)} 用的`, `used ${formatExpire(r.used_at, lang, tz)}`)}
+                          {" · "}
+                          {r.order_id === null ? (
+                            t("免费体验，不记订单", "free trial, no order")
+                          ) : (
                             <Link href={`/admin?view=all&q=${r.order_no ?? r.order_id}`} className="link link-hover">
                               {t("订单", "Order")} {formatOrderNo(r.order_no)}
                             </Link>
-                          </>
-                        )}
-                      </span>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </td>
                   <td className="whitespace-nowrap text-base-content/60">{formatExpire(r.created_at, lang, tz)}</td>

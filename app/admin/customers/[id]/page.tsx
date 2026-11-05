@@ -177,7 +177,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
       {users.length === 0 && <p className="mb-2 text-sm text-base-content/60">{t("名下还没有订阅。可以新开一个，或者在下面把 Marzban 上已有的订阅绑过来。", "No subscriptions yet. Create one, or link an existing Marzban subscription below.")}</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         {users.map(({ username, code, plan, user }) => {
-          const st = user ? statusLabel(user.status, lang) : null;
+          const st = user ? statusLabel(user.status, lang, { short: true }) : null;
           const pct = user?.data_limit ? Math.min(100, (user.used_traffic / user.data_limit) * 100) : null;
           const left = user ? timeLeft(user.expire, undefined, lang) : null;
           return (
@@ -188,7 +188,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
               data-testid="customer-sub"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono font-bold">{username}</span>
+                <span className="font-bold">{username}</span>
                 {st ? <span className={`badge badge-sm ${st.badge}`}>{st.text}</span> : <span className="badge badge-sm badge-error">{t("Marzban 上查不到", "Not found on Marzban")}</span>}
               </div>
               <div className="text-xs text-base-content/50">

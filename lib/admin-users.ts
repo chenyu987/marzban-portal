@@ -13,12 +13,17 @@ export const SORTS: Record<string, string> = {
   expire: "快到期的在前",
   "-used_traffic": "流量用得多的在前",
   username: "按用户名",
+  // Marzban 不能按最后连接时间排，选了这个在后台自己排（见 sortByOnline）
+  "-online_at": "最近在线的在前",
 };
+// 这些排序 Marzban 的接口不认，要把订阅都取回来自己排
+export const LOCAL_SORTS = ["-online_at"];
 const SORTS_EN: Record<string, string> = {
   "-created_at": "Newest first",
   expire: "Expiring soonest",
   "-used_traffic": "Most traffic used",
   username: "By username",
+  "-online_at": "Recently online first",
 };
 export const sortLabels = (lang: Lang = "zh"): Record<string, string> => (lang === "en" ? SORTS_EN : SORTS);
 
@@ -137,6 +142,36 @@ export function onlineState(onlineAt: string | null | undefined, nowMs: number, 
     state: "offline",
     text: en ? `${parts.map(([n, , u]) => unitEn(n, u)).join(" ")} ago` : `${parts.map(([n, u]) => `${n} ${u}`).join(" ")}前`,
   };
+}
+
+// 订阅列表「在线」筛选：最近多少分钟内连过。「在线」和列表上的绿点一样是 2 分钟内
+export const ONLINE_WINDOWS = [2, 5, 30, 120, 300, 1440] as const;
+export function parseOnlineWindow(v: string): number | null {
+  const n = Number(v);
+  return (ONLINE_WINDOWS as readonly number[]).includes(n) ? n : null;
+}
+export function onlineWindowLabel(minutes: number, lang: Lang = "zh"): string {
+  const en = lang === "en";
+  if (minutes === 2) return en ? "Online now" : "在线";
+  if (minutes < 60) return en ? `Within ${minutes} min` : `${minutes} 分钟内在线`;
+  const h = minutes / 60;
+  return en ? `Within ${h} h` : `${h} 小时内在线`;
+}
+const onlineMs = (onlineAt: string | null | undefined) => {
+  if (!onlineAt) return Number.NEGATIVE_INFINITY;
+  const ms = Date.parse(/[zZ]|[+-]\d{2}:?\d{2}$/.test(onlineAt) ? onlineAt : `${onlineAt}Z`);
+  return Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms;
+};
+// 最近连过的在前，没连过的排最后（不改原数组）
+export function sortByOnline<T extends { online_at?: string | null }>(users: T[]): T[] {
+  return [...users].sort((a, b) => onlineMs(b.online_at) - onlineMs(a.online_at));
+}
+
+// 最后连接在 minutes 分钟以内（没连过的不算）
+export function onlineWithin(onlineAt: string | null | undefined, nowMs: number, minutes: number): boolean {
+  if (!onlineAt) return false;
+  const ms = Date.parse(/[zZ]|[+-]\d{2}:?\d{2}$/.test(onlineAt) ? onlineAt : `${onlineAt}Z`);
+  return !Number.isNaN(ms) && nowMs - ms < minutes * 60_000;
 }
 
 export function onlineText(onlineAt: string | null | undefined, nowMs: number, lang: Lang = "zh"): string {

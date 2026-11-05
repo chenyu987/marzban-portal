@@ -76,7 +76,7 @@ export default async function UserPage({ params }: { params: Promise<{ username:
   };
   const currentPlan = planRow && findPlan(site.plans, planRow.plan_id) ? { id: planRow.plan_id, name: planLabel(findPlan(site.plans, planRow.plan_id)!, lang), desc: desc(planRow.plan_id) } : null;
   const planOptions = site.plans.map((p) => ({ id: p.id, name: planLabel(p, lang), desc: desc(p.id) }));
-  const st = statusLabel(user.status, lang);
+  const st = statusLabel(user.status, lang, { short: true });
   const left = timeLeft(user.expire, undefined, lang);
 
   return (

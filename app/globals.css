@@ -134,3 +134,48 @@ html {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* 后台筛选面板（app/admin/FilterPopover.tsx）：输入框、下拉框去掉边框，浅底圆角胶囊，选中时一圈淡淡的主题色；
+   搜索框（name="q"）左边一个放大镜 */
+.filter-panel .input,
+.filter-panel .select {
+  height: 2.25rem;
+  border: none;
+  border-radius: 9999px;
+  /* 用不透明的颜色：新版 Chrome 下拉框弹出的选项列表会跟着用这个底色，半透明的话会和下面的表格叠在一起 */
+  background-color: color-mix(in oklab, var(--color-base-content) 6%, var(--color-base-100));
+  box-shadow: none;
+  font-size: 0.8125rem;
+  transition: background-color 0.15s, box-shadow 0.15s;
+}
+.filter-panel .input:hover,
+.filter-panel .select:hover {
+  background-color: color-mix(in oklab, var(--color-base-content) 9%, var(--color-base-100));
+}
+.filter-panel .input:focus,
+.filter-panel .input:focus-within,
+.filter-panel .select:focus,
+.filter-panel .select:focus-within,
+.filter-panel .input:focus-visible,
+.filter-panel .select:focus-visible {
+  outline: none;
+  background-color: var(--color-base-100);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-primary) 45%, transparent), 0 0 0 4px color-mix(in oklab, var(--color-primary) 12%, transparent);
+}
+.filter-panel input[name="q"] {
+  padding-left: 2.25rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%239ca3af'%3E%3Cpath d='M8.5 3a5.5 5.5 0 0 1 4.38 8.83l3.65 3.64a.75.75 0 1 1-1.06 1.06l-3.64-3.65A5.5 5.5 0 1 1 8.5 3Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 0.85rem center;
+  background-size: 14px;
+}
+/* 弹出的选项列表：实底、圆角、阴影 */
+.filter-panel .select::picker(select) {
+  border: 1px solid var(--color-base-300);
+  border-radius: 0.75rem;
+  background-color: var(--color-base-100);
+  box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.35);
+}
+.filter-panel label {
+  font-size: 0.75rem;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseOnHoldDays, createUserBody, describeChanges, fromBeijingInput, monthStartBeijing, expireRelative, nodeStatusLabel, onlineState, onlineText, sortLabels, parsePageSize, parseExpiredDays, parseNodeForm, validateHosts, parseUserForm, toBeijingInput } from "./admin-users";
+import { parseOnHoldDays, createUserBody, describeChanges, fromBeijingInput, monthStartBeijing, expireRelative, nodeStatusLabel, onlineState, onlineText, onlineWindowLabel, onlineWithin, parseOnlineWindow, sortByOnline, sortLabels, parsePageSize, parseExpiredDays, parseNodeForm, validateHosts, parseUserForm, toBeijingInput } from "./admin-users";
 
 const GB = 1024 ** 3;
 const form = (o: Record<string, string>) => (k: string) => o[k] ?? "";
@@ -175,5 +175,42 @@ describe("首次连上才开始计时", () => {
     expect(parseOnHoldDays("")).toEqual({ days: null });
     expect(parseOnHoldDays(" 7 ")).toEqual({ days: 7 });
     for (const bad of ["0", "1.5", "abc", "9999"]) expect(parseOnHoldDays(bad)).toHaveProperty("error");
+  });
+});
+
+describe("订阅列表的在线筛选", () => {
+  const now = Date.parse("2026-11-06T10:00:00Z");
+  const ago = (min: number) => new Date(now - min * 60000).toISOString().replace("Z", "");
+  it("只认列表里的几档", () => {
+    expect(parseOnlineWindow("30")).toBe(30);
+    expect(parseOnlineWindow("")).toBeNull();
+    expect(parseOnlineWindow("7")).toBeNull();
+  });
+  it("最后连接在这几分钟内才算，没连过的不算", () => {
+    expect(onlineWithin(ago(1), now, 2)).toBe(true);
+    expect(onlineWithin(ago(3), now, 2)).toBe(false);
+    expect(onlineWithin(ago(3), now, 5)).toBe(true);
+    expect(onlineWithin(ago(23 * 60), now, 1440)).toBe(true);
+    expect(onlineWithin(ago(25 * 60), now, 1440)).toBe(false);
+    expect(onlineWithin(null, now, 1440)).toBe(false);
+    expect(onlineWithin("2026-11-06T09:59:00+00:00", now, 2)).toBe(true);
+  });
+  it("名字", () => {
+    expect(onlineWindowLabel(2)).toBe("在线");
+    expect(onlineWindowLabel(30)).toBe("30 分钟内在线");
+    expect(onlineWindowLabel(120)).toBe("2 小时内在线");
+    expect(onlineWindowLabel(1440, "en")).toBe("Within 24 h");
+  });
+});
+
+describe("按最近在线排", () => {
+  it("最近连过的在前，没连过的在最后", () => {
+    const users = [
+      { username: "never", online_at: null },
+      { username: "old", online_at: "2026-11-01T00:00:00" },
+      { username: "new", online_at: "2026-11-06T09:00:00" },
+    ];
+    expect(sortByOnline(users).map((u) => u.username)).toEqual(["new", "old", "never"]);
+    expect(users[0].username).toBe("never");
   });
 });

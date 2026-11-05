@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import ResizableTable from "../ResizableTable";
 import { db } from "@/lib/env";
@@ -89,9 +90,6 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       <AdminHeader email={admin.email} />
       <div className="mt-4 mb-1 flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-2xl font-bold">{t("客人", "Customers")}</h1>
-        <span className="text-sm text-base-content/60">
-          {t("在网站上注册的人；每个客人名下可以有好几个订阅（Marzban 用户）", "People registered on the site; each can have several subscriptions (Marzban users)")}
-        </span>
       </div>
       <FilterBar base="/admin/customers" active={!!(query || has || sort !== "new")}>
         <input name="q" defaultValue={query} placeholder={t("邮箱、微信号、订阅名或订阅编号", "Email, WeChat ID, subscription name or code")} className="input input-sm w-64" />
@@ -125,6 +123,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                 <th className="text-right">{t("累计付款", "Total paid")}</th>
                 <th>{t("推荐人", "Referrer")}</th>
                 <th>{t("注册", "Joined")}</th>
+                <th className="w-20" />
               </tr>
             </thead>
             <tbody>
@@ -133,10 +132,10 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                 return (
                   <tr key={c.id} className="hover">
                     <td>
-                      <CustomerLink id={c.id} email={c.email} wechat={c.wechat} part="wechat" />
+                      <CustomerLink id={c.id} email={c.email} wechat={c.wechat} part="wechat" copy />
                     </td>
                     <td>
-                      <CustomerLink id={c.id} email={c.email} wechat={c.wechat} part="email" />
+                      <CustomerLink id={c.id} email={c.email} wechat={c.wechat} part="email" copy />
                     </td>
                     <td>
                       {names.length === 0 ? (
@@ -154,6 +153,13 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                     <td className="text-right">{money(c.paid)}</td>
                     <td>{c.referrer_id ? <CustomerLink id={c.referrer_id} email={c.referrer ?? ""} /> : <span className="text-base-content/40">-</span>}</td>
                     <td className="whitespace-nowrap text-base-content/60">{formatDate(c.created_at, lang, tz)}</td>
+                    {/* 微信号、邮箱点了是复制，进客人详情走这里 */}
+                    <td className="text-right">
+                      <Link href={`/admin/customers/${c.id}`} aria-label={`${t("详情", "Details")} ${c.email}`} className="btn btn-ghost btn-xs gap-0.5 font-normal whitespace-nowrap text-base-content/60">
+                        {t("详情", "Details")}
+                        <span aria-hidden>›</span>
+                      </Link>
+                    </td>
                   </tr>
                 );
               })}
@@ -167,8 +173,8 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           <h2 className="mt-10 mb-1 text-lg font-bold">{t("老客人（portal 上线前开的订阅）", "Legacy customers (subscriptions from before the portal)")}</h2>
           <p className="mb-3 text-sm text-base-content/60">
             {t(
-              "按微信号就知道是谁：一个微信号一行，名下的老订阅都列在后面。客人注册网站账号时填的微信号一样，就会出现「绑定」按钮，点一下他就能在网站上看到、续费。不自动绑：微信号别人也能填，要你确认是本人。",
-              "One row per WeChat ID, with its legacy subscriptions. When someone registers with the same WeChat ID, a “Link” button appears; one tap lets them see and renew it on the site. Not linked automatically: anyone can type a WeChat ID, so you confirm it's really them.",
+              "注册时微信号对上了会出现「绑定」，确认是本人再点。",
+              "A “Link” button appears when someone registers with the same WeChat ID; link only once you've confirmed it's them.",
             )}
           </p>
           <div className="overflow-x-auto rounded-box bg-base-100 shadow-sm">

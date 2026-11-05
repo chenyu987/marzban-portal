@@ -94,7 +94,6 @@ export default function CommandPalette() {
         <svg viewBox="0 0 20 20" className="size-4" aria-hidden>
           <path fill="currentColor" d="M8.5 3a5.5 5.5 0 0 1 4.38 8.83l3.65 3.64a.75.75 0 1 1-1.06 1.06l-3.64-3.65A5.5 5.5 0 1 1 8.5 3Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
         </svg>
-        <span className="hidden xl:inline">{t("搜索", "Search")}</span>
         <kbd className="kbd kbd-xs hidden lg:inline-flex">{mac ? "⌘K" : "Ctrl K"}</kbd>
       </button>
       <dialog ref={dialog} className="modal modal-top sm:modal-middle" aria-label={t("全局搜索", "Search everything")} onClose={() => setQ("")}>

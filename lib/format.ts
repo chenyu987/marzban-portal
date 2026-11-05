@@ -139,9 +139,13 @@ const STATUS_TEXT_EN: Record<string, string> = {
   on_hold: "Not activated",
 };
 
-export function statusLabel(status: string, lang: Lang = "zh"): { text: string; badge: string } {
+// 后台列表里写得短一点：「停用」「到期」（客人订阅页还是「已停用」「已到期」）
+const STATUS_TEXT_SHORT: Record<string, string> = { disabled: "停用", expired: "到期" };
+
+export function statusLabel(status: string, lang: Lang = "zh", opts: { short?: boolean } = {}): { text: string; badge: string } {
   const s = STATUS_LABEL[status] ?? { text: status, badge: "badge-neutral" };
-  return lang === "en" ? { ...s, text: STATUS_TEXT_EN[status] ?? status } : s;
+  if (lang === "en") return { ...s, text: STATUS_TEXT_EN[status] ?? status };
+  return opts.short && STATUS_TEXT_SHORT[status] ? { ...s, text: STATUS_TEXT_SHORT[status] } : s;
 }
 
 // 去掉容易看错的 0/O、1/I/L

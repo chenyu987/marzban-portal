@@ -3,8 +3,8 @@ import ResizableTable from "../ResizableTable";
 import { adminPrefs, requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/env";
 import { getSystem, listUsers, type MarzbanUser, type SystemStats, type UserStatus } from "@/lib/marzban";
-import { formatBytes, formatExpire, resetLabel, statusLabel } from "@/lib/format";
-import { expireRelative, onlineState, parsePageSize, PAGE_SIZES, SORTS, sortLabels, STATUS_FILTERS } from "@/lib/admin-users";
+import { formatBytes, formatExpire, statusLabel } from "@/lib/format";
+import { expireRelative, LOCAL_SORTS, ONLINE_WINDOWS, onlineState, onlineWindowLabel, onlineWithin, parseOnlineWindow, parsePageSize, sortByOnline, PAGE_SIZES, SORTS, sortLabels, STATUS_FILTERS } from "@/lib/admin-users";
 import AdminHeader from "../AdminHeader";
 import { CustomerLink } from "../Links";
 import { CopyText } from "../CopyButton";
@@ -14,6 +14,7 @@ import BulkActions from "./BulkActions";
 import PageSize from "./PageSize";
 import { getTz } from "@/lib/tz-server";
 import { getT } from "@/lib/lang";
+import { FilterBar } from "../ui";
 import { groupName } from "@/lib/plan-text";
 
 export const dynamic = "force-dynamic";
@@ -34,15 +35,22 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const sort = str("sort") in SORTS ? str("sort") : defaultSort;
   const page = Math.max(1, Number.parseInt(str("page"), 10) || 1);
   const PAGE_SIZE = str("size") ? parsePageSize(str("size")) : defaultSize;
+  const online = parseOnlineWindow(str("online"));
 
   let data: { users: MarzbanUser[]; total: number } | null = null;
   let system: SystemStats | null = null;
   let error = "";
   try {
-    [data, system] = await Promise.all([
-      listUsers({ offset: (page - 1) * PAGE_SIZE, limit: PAGE_SIZE, search: q || undefined, status, sort }),
-      getSystem(),
-    ]);
+    // 按在线筛、按最近在线排：Marzban 的接口都不认，先把（符合别的条件的）全部取回来，在这里筛、排完再分页。订阅不多，一次取得完
+    const localSort = LOCAL_SORTS.includes(sort);
+    const fetchUsers = online || localSort
+      ? listUsers({ offset: 0, limit: 5000, search: q || undefined, status, sort: localSort ? undefined : sort }).then((all) => {
+          let hit = online ? all.users.filter((u) => onlineWithin(u.online_at, Date.now(), online)) : all.users;
+          if (localSort) hit = sortByOnline(hit);
+          return { users: hit.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), total: hit.length };
+        })
+      : listUsers({ offset: (page - 1) * PAGE_SIZE, limit: PAGE_SIZE, search: q || undefined, status, sort });
+    [data, system] = await Promise.all([fetchUsers, getSystem()]);
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
@@ -81,6 +89,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     const qs = new URLSearchParams();
     if (q) qs.set("q", q);
     if (status) qs.set("status", status);
+    if (online) qs.set("online", String(online));
     if (sort !== defaultSort) qs.set("sort", sort);
     if (PAGE_SIZE !== defaultSize) qs.set("size", String(PAGE_SIZE));
     if (p > 1) qs.set("page", String(p));
@@ -95,12 +104,6 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       <div className="mt-4 mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold">{t("订阅", "Subscriptions")}</h1>
-          <p className="text-sm text-base-content/60">
-            {t(
-              "每个订阅就是 Marzban 上的一个用户，直接读写 Marzban；一个客人名下可以有好几个订阅",
-              "Each subscription is a Marzban user, read and written directly on Marzban; a customer can have several",
-            )}
-          </p>
         </div>
         <Link href="/admin/users/new" className="btn btn-primary btn-sm">
           {t("新建订阅", "New subscription")}
@@ -131,17 +134,25 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      <form className="mb-4 flex flex-wrap gap-2">
+      <FilterBar base="/admin/users">
+        <select name="online" defaultValue={online ?? ""} className="select select-sm w-36" aria-label={t("在线", "Online")}>
+          <option value="">{t("不限在线", "Any activity")}</option>
+          {ONLINE_WINDOWS.map((m) => (
+            <option key={m} value={m}>
+              {onlineWindowLabel(m, lang)}
+            </option>
+          ))}
+        </select>
         <input name="q" defaultValue={q} placeholder={t("订阅名或备注", "Name or note")} className="input input-sm w-48" />
         <select name="status" defaultValue={status ?? ""} className="select select-sm w-36" aria-label={t("状态", "Status")}>
           <option value="">{t("全部状态", "All statuses")}</option>
           {STATUS_FILTERS.map((s) => (
             <option key={s} value={s}>
-              {statusLabel(s, lang).text}
+              {statusLabel(s, lang, { short: true }).text}
             </option>
           ))}
         </select>
-        <select name="sort" defaultValue={sort} className="select select-sm w-44" aria-label={t("排序", "Sort")}>
+        <select name="sort" defaultValue={sort} data-default={defaultSort} className="select select-sm w-44" aria-label={t("排序", "Sort")}>
           {Object.entries(sortLabels(lang)).map(([k, v]) => (
             <option key={k} value={k}>
               {v}
@@ -149,8 +160,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
           ))}
         </select>
         {PAGE_SIZE !== defaultSize && <input type="hidden" name="size" value={PAGE_SIZE} />}
-        <button className="btn btn-sm">{t("搜索", "Search")}</button>
-      </form>
+      </FilterBar>
 
       {error && (
         <div role="alert" className="alert alert-error alert-soft">
@@ -177,7 +187,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
             <tbody>
               {data.users.map((u) => {
                 const owner = owners.get(u.username);
-                const st = statusLabel(u.status, lang);
+                const st = statusLabel(u.status, lang, { short: true });
                 const online = onlineState(u.online_at, now, lang);
                 return (
                   <tr key={u.username} className="hover" data-testid="marzban-user">
@@ -230,7 +240,6 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                     </td>
                     <td className="whitespace-nowrap">
                       {formatBytes(u.used_traffic)} / {u.data_limit ? formatBytes(u.data_limit) : t("不限", "Unlimited")}
-                      {u.data_limit ? <div className="text-xs text-base-content/50">{resetLabel(u.data_limit_reset_strategy ?? "", lang) ?? t("不重置", "No reset")}</div> : null}
                     </td>
                     <td className="max-w-48 truncate text-base-content/60">{u.note || "-"}</td>
                   </tr>
