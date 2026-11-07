@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Brand from "./Brand";
+import LangSwitch from "./LangSwitch";
 import Turnstile from "./Turnstile";
 import { useT } from "./LangContext";
 import type { FormState } from "./actions";
@@ -105,7 +106,7 @@ export default function AuthForm({ title, submitLabel, action, passwordAutoCompl
                   className="input w-full"
                 />
               </label>
-              <p className="mt-1 text-xs text-base-content/60">{t("为了方便客服联系你，提供必要的支持和更新", "So our support team can reach you with help and updates")}</p>
+              <WechatWhy />
             </div>
           )}
           {referral && (
@@ -129,15 +130,59 @@ export default function AuthForm({ title, submitLabel, action, passwordAutoCompl
             {pending && <span className="loading loading-spinner loading-sm" />}
             {submitLabel}
           </button>
-          <p className="text-center text-sm text-base-content/70">
-            {footer.text}
-            <Link href={footer.href} className="link link-primary ml-1">
-              {footer.link}
-            </Link>
-          </p>
+          {/* 最后一行：中间「已经有账号？登录」，右下角切换中英文。左右两格一样宽，中间那句才在正中 */}
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+            <span />
+            <p className="text-center text-sm text-base-content/70">
+              {footer.text}
+              <Link href={footer.href} className="link link-primary ml-1">
+                {footer.link}
+              </Link>
+            </p>
+            <div className="justify-self-end">
+              <LangSwitch compact />
+            </div>
+          </div>
         </div>
       </form>
       </div>
     </main>
+  );
+}
+
+// 微信号下面的一句说明，后面一个圆圈叹号：点开再多说几句（只用来干什么、不发广告），再点收起
+function WechatWhy() {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-1 text-xs text-base-content/60">
+      <div className="flex items-center gap-1">
+        <span>{t("为了方便客服联系你，提供必要的支持和更新", "So our support team can reach you with help and updates")}</span>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={t("为什么要填这个", "Why we ask")}
+          onClick={() => setOpen(!open)}
+          className={`inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors ${open ? "text-primary" : "text-base-content/40 hover:text-base-content/70"}`}
+        >
+          <svg viewBox="0 0 20 20" className="size-4" aria-hidden>
+            <path
+              fill="currentColor"
+              fillRule="evenodd"
+              d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
+      </div>
+      {open && (
+        <div className="mt-2 rounded-box bg-base-200 px-3 py-2 leading-relaxed text-base-content/70" data-testid="wechat-why">
+          {t(
+            "微信号只用来：开通遇到问题、订阅快到期、节点有调整时联系你，以及你找客服时确认是你本人。不会给你发任何广告，也不会给别人。",
+            "We only use it to reach you if setup goes wrong, your plan is about to expire, or servers change, and to confirm it's you when you contact support. No ads, ever, and we never share it.",
+          )}
+        </div>
+      )}
+    </div>
   );
 }

@@ -59,6 +59,8 @@ async function register(page: Page, email: string, password: string) {
   await page.getByPlaceholder("微信号").fill("e2e_wx_test");
   await page.getByRole("button", { name: "注册" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
+  // 注册时的语言记到账号上
+  expect(query(`SELECT lang FROM customers WHERE email = '${email}'`)).toEqual([{ lang: "zh" }]);
 }
 
 // 客人页面的确认框是页面里自己画的（不是浏览器的 confirm），点里面的确定按钮
@@ -523,6 +525,8 @@ test("管理员删除客人：名下订阅从 Marzban 删掉，账号注销，�
   await page.getByPlaceholder("微信号").fill(`${wechat}_2`);
   await page.getByRole("button", { name: "注册" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
+  // 注册时的语言记到账号上
+  expect(query(`SELECT lang FROM customers WHERE email = '${email}'`)).toEqual([{ lang: "zh" }]);
 });
 
 test("手机上下单：付款窗从底部弹出来，能关掉、刷新不再弹，在弹窗里点我已付款就开通", async ({ browser }) => {
@@ -837,6 +841,17 @@ test("客人从注册到续费、忘记密码，管理员确认订单", CORE, as
   await page.getByPlaceholder("密码", { exact: true }).fill(third);
   await page.getByRole("button", { name: "登录" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
+
+  // 语言跟着账号走：账号上记的是英文，换个没选过语言的浏览器（没有 lang cookie、浏览器是中文）登录，进去就是英文
+  sql(`UPDATE customers SET lang = 'en' WHERE email = '${newEmail}'`);
+  await logout(page);
+  await page.context().clearCookies({ name: "lang" });
+  await page.goto("/login");
+  await page.getByPlaceholder("邮箱").fill(newEmail);
+  await page.getByPlaceholder("密码", { exact: true }).fill(third);
+  await page.getByRole("button", { name: "登录" }).click();
+  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
 });
 
 test("余额付全款、余额抵扣一部分，再用兑换码续期", CORE, async ({ page }) => {

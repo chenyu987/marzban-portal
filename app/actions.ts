@@ -17,7 +17,8 @@ import { site } from "@/site.config";
 import { RENEW_REFRESH_HINT } from "@/lib/clients";
 import { AVAILABLE_SQL, LEDGER_SQL, RESERVED_SQL } from "@/lib/balance";
 import { canSendMail, sendMail } from "@/lib/mail";
-import { notifyClaimedOrder } from "@/lib/admin-alerts";
+import { notifyClaimedOrder, notifyNewCustomer } from "@/lib/admin-alerts";
+import { welcomeMail } from "@/lib/welcome-mail";
 import { hashResetToken, newResetToken, RESET_MAX_PER_HOUR, RESET_TTL_SELF, resetLink } from "@/lib/reset";
 import { getT } from "@/lib/lang";
 import { planName } from "@/lib/plan-text";
@@ -51,12 +52,12 @@ export async function register(_: FormState, form: FormData): Promise<FormState>
 
   // 推荐码可以不填；填了就必须是真的，免得客人以为填上了其实没记到
   const code = normalizeReferralCode(refInput);
-  let referrer: number | null = null;
+  let referrer: { id: number; email: string } | null = null;
   if (code === null) return { error: t("推荐码格式不对，是 8 位字母和数字", "Invalid referral code: it's 8 letters and numbers"), ...back };
   if (code) {
-    const r = await db().prepare("SELECT id FROM customers WHERE referral_code = ?").bind(code).first<{ id: number }>();
+    const r = await db().prepare("SELECT id, email FROM customers WHERE referral_code = ?").bind(code).first<{ id: number; email: string }>();
     if (!r) return { error: t("没有这个推荐码，请找朋友再确认一下，或者留空", "That referral code doesn't exist. Check with your friend, or leave it blank"), ...back };
-    referrer = r.id;
+    referrer = r;
   }
 
   const exists = await db().prepare("SELECT 1 FROM customers WHERE email = ?").bind(email).first();
@@ -64,14 +65,20 @@ export async function register(_: FormState, form: FormData): Promise<FormState>
 
   const row = await db()
     .prepare(
-      `INSERT INTO customers (email, password_hash, wechat, referral_code, referred_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
+      `INSERT INTO customers (email, password_hash, wechat, referral_code, referred_by, lang, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     )
-    .bind(email, await hashPassword(password), wechat, newReferralCode(), referrer, nowSec())
+    // 注册时用的语言记到账号上：以后换设备登录、发邮件都按它
+    .bind(email, await hashPassword(password), wechat, newReferralCode(), referrer?.id ?? null, lang, nowSec())
     .first<{ id: number }>();
   await recordHit("register", ip);
   // 管理员之前按这个微信号开过的订阅，直接绑过来，「我的订阅」里就能看到
-  await claimByWechat({ id: row!.id, email }, wechat);
+  const claimed = await claimByWechat({ id: row!.id, email }, wechat);
+  // 欢迎邮件给客人，「新客人」提醒给管理员。两封一起发，发不出去（没配发信、服务商出错）不影响注册
+  if (canSendMail()) {
+    const welcome = welcomeMail(lang, email, claimed.length);
+    await Promise.all([sendMail(email, welcome.subject, welcome.text), notifyNewCustomer({ email, wechat, referrer: referrer?.email ?? null, claimed })]);
+  }
   await createSession(row!.id);
   redirect("/dashboard");
 }
@@ -86,7 +93,7 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
   const password = String(form.get("password") ?? "");
   const ip = (await headers()).get("cf-connecting-ip") ?? "local";
   const since = nowSec() - FAIL_WINDOW;
-  const { t } = await getT();
+  const { t, lang } = await getT();
 
   const fails = await db()
     .prepare(
@@ -101,9 +108,9 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
   }
 
   const c = await db()
-    .prepare("SELECT id, password_hash FROM customers WHERE email = ?")
+    .prepare("SELECT id, password_hash, lang FROM customers WHERE email = ?")
     .bind(email)
-    .first<{ id: number; password_hash: string }>();
+    .first<{ id: number; password_hash: string; lang: string | null }>();
   // 邮箱不存在和密码错误给同一个提示，不让人试探哪些邮箱注册过
   if (!c || !(await verifyPassword(password, c.password_hash))) {
     // 顺手删掉过期的记录，表不会越来越大。防机器人的次数（lib/rate-limit.ts）也记在这张表里、要留一天，所以删一天以前的
@@ -114,6 +121,9 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
     return { error: t("邮箱或密码不对", "Wrong email or password"), email };
   }
   await db().prepare("DELETE FROM login_failures WHERE email = ?").bind(email).run();
+  // 语言跟着账号走：账号上记过就用它（换了设备、浏览器也一样）；没记过（老账号）就把现在的语言记上
+  if (c.lang) (await cookies()).set(LANG_COOKIE, parseLang(c.lang), { path: "/", maxAge: 365 * 86400, sameSite: "lax" });
+  else await db().prepare("UPDATE customers SET lang = ? WHERE id = ?").bind(lang, c.id).run();
   await createSession(c.id);
   redirect("/dashboard");
 }
