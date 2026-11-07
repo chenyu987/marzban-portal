@@ -36,7 +36,7 @@ export default function RulesToggle({ children }: { children: React.ReactNode })
   return (
     <>
       <button type="button" onClick={toggle} aria-expanded={open} className="btn btn-primary btn-sm mt-3">
-        {open ? t("收起添加步骤 ▴", "Hide the steps ▴") : t("我要加，展开添加步骤 ▾", "I want them, show the steps ▾")}
+        {open ? t("收起 ▴", "Hide ▴") : t("展开说明和添加步骤 ▾", "Details and steps ▾")}
       </button>
       <div hidden={!open} data-testid="rules-steps">
         {children}

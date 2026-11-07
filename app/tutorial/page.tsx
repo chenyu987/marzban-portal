@@ -61,44 +61,56 @@ function ClashVergeSteps({ os, lang, MySubs }: { os: "mac" | "windows"; lang: La
         <Shot name="mac-import" alt={t("Clash Verge 订阅页", "Clash Verge Profiles page")} />
       </li>
       <li>
-        <b>{t("加分流规则（可选）", "Add routing rules (optional)")}</b>
-        <div className="mt-2 rounded-box bg-base-200 p-3 text-sm">
-          {zh ? (
-            <ul className="list-disc space-y-1 pl-5">
-              <li>
-                <b>不加也能用</b>：所有网站都走节点，国外网站照样能上。只是国内网站也要绕到国外再回来，可能变慢；个别国内 App
-                会把你当成海外用户（比如视频提示地区限制、要额外验证）；而且国内网站也算套餐流量。
-              </li>
-              <li>
-                <b>加了以后</b>：淘宝、B 站、微信、网银这些国内网站直接连，和没开 VPN 一样快，也不占套餐流量；ChatGPT、Claude
-                和其他国外网站走节点。
-              </li>
-              <li>
-                <b>建议</b>：每天都开着用、用普通版（每月有流量上限）、或者开着 VPN 还要用国内网站的，花两分钟加上。只想先连上试试的，可以跳过，以后随时回来加。
-              </li>
-            </ul>
-          ) : (
-            <ul className="list-disc space-y-1 pl-5">
-              <li>
-                <b>It works without them</b>: every site goes through the server, so overseas sites open fine. But Chinese sites also take a trip
-                abroad and back, which can be slower; a few Chinese apps may treat you as an overseas user (region locks, extra checks); and
-                Chinese sites count against your data.
-              </li>
-              <li>
-                <b>With them</b>: Chinese sites such as Taobao, Bilibili, WeChat and online banking connect directly, as fast as with the VPN
-                off and without using your data; ChatGPT, Claude and other overseas sites go through the server.
-              </li>
-              <li>
-                <b>Our advice</b>: if you keep the VPN on every day, are on Standard (which has a monthly data cap), or use Chinese sites with the
-                VPN on, take two minutes to add them. If you just want to get connected first, skip this and come back any time.
-              </li>
-            </ul>
+        <b>{t("加分流规则（可选但强烈推荐）", "Add routing rules (optional but strongly recommended)")}</b>
+        {/* 外面只留一句话，详细说明和步骤都收在 RulesToggle 里，不想加的客人直接看下一步 */}
+        <div className="mt-1 text-sm text-base-content/70">
+          {t(
+            "让 ChatGPT、Claude 固定走海外节点，降低 AI 账号被风控的风险；国内网站直接连，速度不受影响，也不占套餐流量。不加也能正常使用，可以直接看下一步。",
+            "Keeps ChatGPT and Claude on overseas servers to lower the risk of AI account bans, and lets Chinese sites connect directly so they stay fast and don't use your data. Everything works without them, so you can go straight to the next step.",
           )}
-          <a href={`#${connectId}`} className="btn btn-outline btn-sm mt-3">
-            {t("不加，直接跳到「连接」↓", "Skip, go to Connect ↓")}
-          </a>
         </div>
         <RulesToggle>
+          <div className="mt-3 rounded-box bg-base-200 p-3 text-sm">
+            {zh ? (
+              <ul className="list-disc space-y-1 pl-5">
+                <li>
+                  <b>降低 AI 封号风险</b>：ChatGPT、Claude 对登录地区查得严，IP 一会儿在国内、一会儿在海外，容易触发验证甚至封号。加上规则后，它们固定走海外节点，访问来源更稳定。
+                </li>
+                <li>
+                  <b>国内网站更流畅</b>：淘宝、B 站、微信、网银这些国内网站和 App 直接连，速度和不开 VPN 一样，不会绕到国外再回来，也不占套餐流量。
+                </li>
+                <li>
+                  <b>不加会怎样</b>：所有网站都走节点，国外网站照样能上；只是国内网站会变慢、算进流量，个别国内 App 会把你当成海外用户。
+                </li>
+                <li>
+                  <b>建议</b>：用 ChatGPT、Claude 的，每天都开着 VPN 的，或者用普通版（每月有流量上限）的，花两分钟加上。
+                </li>
+              </ul>
+            ) : (
+              <ul className="list-disc space-y-1 pl-5">
+                <li>
+                  <b>Lower the risk of AI account bans</b>: ChatGPT and Claude watch where you connect from closely. Switching between Chinese and
+                  overseas IPs can trigger verification or even a ban. These rules always send them through an overseas server, so your connection
+                  looks consistent.
+                </li>
+                <li>
+                  <b>Chinese sites stay fast</b>: Taobao, Bilibili, WeChat, online banking and other Chinese sites and apps connect directly, as fast
+                  as with the VPN off, without a round trip abroad and without using your data.
+                </li>
+                <li>
+                  <b>Without them</b>: every site goes through the server, so overseas sites still work; Chinese sites are slower and count against
+                  your data, and a few Chinese apps may treat you as an overseas user.
+                </li>
+                <li>
+                  <b>Our advice</b>: if you use ChatGPT or Claude, keep the VPN on every day, or are on Standard (monthly data cap), take two
+                  minutes to add them.
+                </li>
+              </ul>
+            )}
+            <a href={`#${connectId}`} className="btn btn-outline btn-sm mt-3">
+              {t("不加了，跳到「连接」↓", "Skip, go to Connect ↓")}
+            </a>
+          </div>
           <div className="mt-3">
             {zh ? (
               <>
@@ -184,6 +196,68 @@ function Shot({ name, alt, narrow }: { name: string; alt: string; narrow?: boole
       loading="lazy"
       className={`mt-2 rounded-box border border-base-300 ${narrow ? "max-w-48" : "w-full max-w-md"}`}
     />
+  );
+}
+
+// 2026-11-07 起 Mac 和 Windows 主推 Clash Verge，Hiddify 收起来当备选，两边步骤一样只差安装包。
+// 下载固定在 site.downloads.hiddifyWindows 那个版本（v4.1.1）：截图是这个版本截的，新版界面变了；这个版本也有 Mac 的 dmg。
+// 截图是在 Windows 上截的，Mac 界面一样，共用
+function HiddifyAlt({ os, lang, MySubs }: { os: "mac" | "windows"; lang: Lang; MySubs: () => React.ReactNode }) {
+  const zh = lang === "zh";
+  const t = makeT(lang);
+  return (
+    <details className="collapse-arrow collapse mt-6 bg-base-200/60">
+      <summary className="collapse-title font-medium">
+        {t("备选：用 Hiddify（Clash Verge 装不上或连不上时）", "Alternative: Hiddify (if Clash Verge won't install or connect)")}
+      </summary>
+      <div className="collapse-content">
+        <Steps>
+          <li>
+            <b>{t("安装", "Install")}</b>
+            {t("：", ": ")}
+            <Ext href={DOWNLOADS.hiddifyWindows}>{t("下载 Hiddify", "Download Hiddify")}</Ext>
+            <div className="mt-1 text-sm text-base-content/70">
+              {os === "mac"
+                ? t(
+                    "下载 Hiddify-MacOS.dmg，打开后把 Hiddify 拖进「应用程序」。",
+                    "Download Hiddify-MacOS.dmg, open it and drag Hiddify into Applications.",
+                  )
+                : t("下载文件名带 Windows-Setup 的安装包。", "Download the installer with Windows-Setup in its name.")}
+            </div>
+          </li>
+          <li>
+            {zh ? (
+              <>
+                <b>导入订阅</b>：在 <MySubs /> 点「复制订阅链接」，然后在 Hiddify 里点「剪贴板」。
+              </>
+            ) : (
+              <>
+                <b>Import the subscription</b>: in <MySubs />, click &quot;Copy subscription link&quot;, then click Clipboard in Hiddify.
+              </>
+            )}
+            <Shot name="win-import" alt={t("Hiddify 从剪贴板添加", "Add from clipboard in Hiddify")} />
+          </li>
+          <li>
+            <b>{t("连接", "Connect")}</b>
+            {t("：点中间的连接按钮。", ": click the connect button in the middle.")}
+            <Shot name="win-connect" alt={t("Hiddify 已连接", "Hiddify connected")} />
+          </li>
+          <li>
+            <b>{t("切换节点", "Switch servers")}</b>
+            {t("：点右下角的箭头。", ": click the arrow in the bottom-right.")}
+            <Shot name="win-switch" alt={t("Hiddify 节点列表", "Hiddify server list")} />
+          </li>
+          <li>
+            <b>{t("日常使用", "Everyday use")}</b>
+            {t(
+              "：Hiddify 启动时会自动更新订阅并测速。发现节点连不上，点订阅左边的刷新按钮。",
+              ": Hiddify updates the subscription and tests speed when it starts. If servers stop working, click the refresh button to the left of the subscription.",
+            )}
+            <Shot name="win-refresh" alt={t("Hiddify 刷新订阅按钮", "Hiddify refresh button")} />
+          </li>
+        </Steps>
+      </div>
+    </details>
   );
 }
 
@@ -304,6 +378,7 @@ function tabs(lang: Lang): { id: Platform; label: string; content: React.ReactNo
         <>
           <h2 className="text-lg font-bold">Clash Verge</h2>
           <ClashVergeSteps os="mac" lang={lang} MySubs={MySubs} />
+          <HiddifyAlt os="mac" lang={lang} MySubs={MySubs} />
         </>
       ),
     },
@@ -314,54 +389,7 @@ function tabs(lang: Lang): { id: Platform; label: string; content: React.ReactNo
         <>
           <h2 className="text-lg font-bold">Clash Verge</h2>
           <ClashVergeSteps os="windows" lang={lang} MySubs={MySubs} />
-          {/* 2026-11-07 起 Windows 主推 Clash Verge，Hiddify 收起来当备选 */}
-          <details className="collapse-arrow collapse mt-6 bg-base-200/60">
-            <summary className="collapse-title font-medium">
-              {t("备选：用 Hiddify（Clash Verge 装不上或连不上时）", "Alternative: Hiddify (if Clash Verge won't install or connect)")}
-            </summary>
-            <div className="collapse-content">
-              <Steps>
-                <li>
-                  <b>{t("安装", "Install")}</b>
-                  {t("：", ": ")}
-                  <Ext href={DOWNLOADS.hiddifyWindows}>{t("下载 Hiddify", "Download Hiddify")}</Ext>
-                  <div className="mt-1 text-sm text-base-content/70">
-                    {t("下载文件名带 Windows-Setup 的安装包。", "Download the installer with Windows-Setup in its name.")}
-                  </div>
-                </li>
-                <li>
-                  {zh ? (
-                    <>
-                      <b>导入订阅</b>：在 <MySubs /> 点「复制订阅链接」，然后在 Hiddify 里点「剪贴板」。
-                    </>
-                  ) : (
-                    <>
-                      <b>Import the subscription</b>: in <MySubs />, click &quot;Copy subscription link&quot;, then click Clipboard in Hiddify.
-                    </>
-                  )}
-                  <Shot name="win-import" alt={t("Hiddify 从剪贴板添加", "Add from clipboard in Hiddify")} />
-                </li>
-                <li>
-                  <b>{t("连接", "Connect")}</b>
-                  {t("：点中间的连接按钮。", ": click the connect button in the middle.")}
-                  <Shot name="win-connect" alt={t("Hiddify 已连接", "Hiddify connected")} />
-                </li>
-                <li>
-                  <b>{t("切换节点", "Switch servers")}</b>
-                  {t("：点右下角的箭头。", ": click the arrow in the bottom-right.")}
-                  <Shot name="win-switch" alt={t("Hiddify 节点列表", "Hiddify server list")} />
-                </li>
-                <li>
-                  <b>{t("日常使用", "Everyday use")}</b>
-                  {t(
-                    "：Hiddify 启动时会自动更新订阅并测速。发现节点连不上，点订阅左边的刷新按钮。",
-                    ": Hiddify updates the subscription and tests speed when it starts. If servers stop working, click the refresh button to the left of the subscription.",
-                  )}
-                  <Shot name="win-refresh" alt={t("Hiddify 刷新订阅按钮", "Hiddify refresh button")} />
-                </li>
-              </Steps>
-            </div>
-          </details>
+          <HiddifyAlt os="windows" lang={lang} MySubs={MySubs} />
         </>
       ),
     },
