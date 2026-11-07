@@ -6,6 +6,7 @@ import { site } from "@/site.config";
 
 const DOWNLOADS = site.downloads;
 import CopyRules from "./CopyRules";
+import RulesToggle from "./RulesToggle";
 import Brand from "../Brand";
 import CustomerNav from "../CustomerNav";
 import ContactSupport from "../ContactSupport";
@@ -97,40 +98,42 @@ function ClashVergeSteps({ os, lang, MySubs }: { os: "mac" | "windows"; lang: La
             {t("不加，直接跳到「连接」↓", "Skip, go to Connect ↓")}
           </a>
         </div>
-        <div className="mt-3">
-          {zh ? (
-            <>
-              <b>怎么加</b>：右键刚导入的订阅 → 选「扩展覆写配置」→ 把下面的规则粘贴进去并保存。
-            </>
-          ) : (
-            <>
-              <b>How</b>: right-click the subscription you just imported → choose the extended override config option → paste the rules below
-              and save.
-            </>
-          )}
-        </div>
-        <Shot name="mac-override-menu" alt={t("右键订阅选扩展覆写配置", "Right-click the subscription to open the override config")} />
-        <Shot name="mac-override-edit" alt={t("粘贴规则", "Paste the rules")} />
-        <div className="mt-2">
-          <CopyRules />
-        </div>
-        <div className="text-sm text-base-content/70">
-          {t("保存后到左边「规则」页看一眼，能看到这些规则就说明生效了。", "After saving, check the Rules page on the left. If you see these rules, they're active.")}
-        </div>
-        <div className="mt-1 text-sm text-base-content/70">
-          {zh ? (
-            <>
-              复制规则总出错、或者用的是只能导入文件的 Clash 客户端：在 <MySubs /> 点「下载 Clash 配置文件」，里面已经带好这些规则，
-              直接导入就行。这个文件不会自动更新，节点有变化要重新下载。
-            </>
-          ) : (
-            <>
-              If pasting the rules keeps failing, or your Clash app only imports files: click &quot;Download Clash config&quot; in <MySubs />. The
-              file already includes these rules. It won&apos;t update itself, so download it again when servers change.
-            </>
-          )}
-        </div>
-        <Shot name="mac-rules" alt={t("规则页里能看到这些规则", "The rules appear on the Rules page")} />
+        <RulesToggle>
+          <div className="mt-3">
+            {zh ? (
+              <>
+                <b>怎么加</b>：右键刚导入的订阅 → 选「扩展覆写配置」→ 把下面的规则粘贴进去并保存。
+              </>
+            ) : (
+              <>
+                <b>How</b>: right-click the subscription you just imported → choose the extended override config option → paste the rules below
+                and save.
+              </>
+            )}
+          </div>
+          <Shot name="mac-override-menu" alt={t("右键订阅选扩展覆写配置", "Right-click the subscription to open the override config")} />
+          <Shot name="mac-override-edit" alt={t("粘贴规则", "Paste the rules")} />
+          <div className="mt-2">
+            <CopyRules />
+          </div>
+          <div className="text-sm text-base-content/70">
+            {t("保存后到左边「规则」页看一眼，能看到这些规则就说明生效了。", "After saving, check the Rules page on the left. If you see these rules, they're active.")}
+          </div>
+          <div className="mt-1 text-sm text-base-content/70">
+            {zh ? (
+              <>
+                复制规则总出错、或者用的是只能导入文件的 Clash 客户端：在 <MySubs /> 点「下载 Clash 配置文件」，里面已经带好这些规则，
+                直接导入就行。这个文件不会自动更新，节点有变化要重新下载。
+              </>
+            ) : (
+              <>
+                If pasting the rules keeps failing, or your Clash app only imports files: click &quot;Download Clash config&quot; in <MySubs />. The
+                file already includes these rules. It won&apos;t update itself, so download it again when servers change.
+              </>
+            )}
+          </div>
+          <Shot name="mac-rules" alt={t("规则页里能看到这些规则", "The rules appear on the Rules page")} />
+        </RulesToggle>
       </li>
       <li id={connectId} className="scroll-mt-24">
         {zh ? (
@@ -311,6 +314,54 @@ function tabs(lang: Lang): { id: Platform; label: string; content: React.ReactNo
         <>
           <h2 className="text-lg font-bold">Clash Verge</h2>
           <ClashVergeSteps os="windows" lang={lang} MySubs={MySubs} />
+          {/* 2026-11-07 起 Windows 主推 Clash Verge，Hiddify 收起来当备选 */}
+          <details className="collapse-arrow collapse mt-6 bg-base-200/60">
+            <summary className="collapse-title font-medium">
+              {t("备选：用 Hiddify（Clash Verge 装不上或连不上时）", "Alternative: Hiddify (if Clash Verge won't install or connect)")}
+            </summary>
+            <div className="collapse-content">
+              <Steps>
+                <li>
+                  <b>{t("安装", "Install")}</b>
+                  {t("：", ": ")}
+                  <Ext href={DOWNLOADS.hiddifyWindows}>{t("下载 Hiddify", "Download Hiddify")}</Ext>
+                  <div className="mt-1 text-sm text-base-content/70">
+                    {t("下载文件名带 Windows-Setup 的安装包。", "Download the installer with Windows-Setup in its name.")}
+                  </div>
+                </li>
+                <li>
+                  {zh ? (
+                    <>
+                      <b>导入订阅</b>：在 <MySubs /> 点「复制订阅链接」，然后在 Hiddify 里点「剪贴板」。
+                    </>
+                  ) : (
+                    <>
+                      <b>Import the subscription</b>: in <MySubs />, click &quot;Copy subscription link&quot;, then click Clipboard in Hiddify.
+                    </>
+                  )}
+                  <Shot name="win-import" alt={t("Hiddify 从剪贴板添加", "Add from clipboard in Hiddify")} />
+                </li>
+                <li>
+                  <b>{t("连接", "Connect")}</b>
+                  {t("：点中间的连接按钮。", ": click the connect button in the middle.")}
+                  <Shot name="win-connect" alt={t("Hiddify 已连接", "Hiddify connected")} />
+                </li>
+                <li>
+                  <b>{t("切换节点", "Switch servers")}</b>
+                  {t("：点右下角的箭头。", ": click the arrow in the bottom-right.")}
+                  <Shot name="win-switch" alt={t("Hiddify 节点列表", "Hiddify server list")} />
+                </li>
+                <li>
+                  <b>{t("日常使用", "Everyday use")}</b>
+                  {t(
+                    "：Hiddify 启动时会自动更新订阅并测速。发现节点连不上，点订阅左边的刷新按钮。",
+                    ": Hiddify updates the subscription and tests speed when it starts. If servers stop working, click the refresh button to the left of the subscription.",
+                  )}
+                  <Shot name="win-refresh" alt={t("Hiddify 刷新订阅按钮", "Hiddify refresh button")} />
+                </li>
+              </Steps>
+            </div>
+          </details>
         </>
       ),
     },
