@@ -13,11 +13,153 @@ import { requireCustomer } from "@/lib/session";
 import { getT } from "@/lib/lang";
 import { makeT, type Lang } from "@/lib/i18n";
 
-// iPhone 用 Shadowrocket，Mac 用 Clash Verge，Windows 和安卓用 Hiddify。
+// iPhone 用 Shadowrocket，Mac 和 Windows 用 Clash Verge，安卓用 Hiddify。
 // 手动导入 yaml 文件（「我的订阅」里的「下载 Clash 配置文件」）只当备选：那不是订阅，节点变了不会自动更新
 
 function Steps({ children }: { children: React.ReactNode }) {
   return <ol className="list-decimal space-y-3 pl-5">{children}</ol>;
+}
+
+// Mac 和 Windows 的 Clash Verge 步骤只差安装那一步。截图是在 Mac 上截的，Windows 界面一样，共用。
+// 分流规则是可选的：Marzban 默认的 Clash 配置是全局模式，不加规则所有网站都走节点，照样能连。
+// 两个标签页的锚点 id 带上系统名（mac-connect / windows-connect），不然跳转会跳到另一个标签页里
+function ClashVergeSteps({ os, lang, MySubs }: { os: "mac" | "windows"; lang: Lang; MySubs: () => React.ReactNode }) {
+  const zh = lang === "zh";
+  const t = makeT(lang);
+  const connectId = `${os}-connect`;
+  return (
+    <Steps>
+      <li>
+        <b>{t("安装", "Install")}</b>
+        {t("：", ": ")}
+        <Ext href={DOWNLOADS.clashVerge}>{t("下载 Clash Verge", "Download Clash Verge")}</Ext>
+        <div className="mt-1 text-sm text-base-content/70">
+          {os === "mac"
+            ? t(
+                "M 系列芯片的 Mac 选文件名带 aarch64 的 dmg，Intel 芯片的选带 x64 的。",
+                "On Apple silicon (M-series) Macs, pick the dmg with aarch64 in its name; on Intel Macs, pick the one with x64.",
+              )
+            : t(
+                "选文件名以 x64-setup.exe 结尾的安装包（绝大多数电脑都是这个），下载后双击安装。如果弹出「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」。",
+                "Pick the installer ending in x64-setup.exe (that's the right one for almost every PC) and double-click it. If you see \"Windows protected your PC\", click More info → Run anyway.",
+              )}
+        </div>
+      </li>
+      <li>
+        {zh ? (
+          <>
+            <b>导入订阅</b>：在本机打开 <MySubs /> 点「导入 Clash Verge」；或者打开 Clash Verge 左边的「订阅」，
+            把订阅链接粘贴到顶部输入框，点「导入」。
+          </>
+        ) : (
+          <>
+            <b>Import the subscription</b>: on this computer, open <MySubs /> and click &quot;Import to Clash Verge&quot;. Or open Profiles on
+            the left of Clash Verge, paste the subscription link into the box at the top, and click Import.
+          </>
+        )}
+        <Shot name="mac-import" alt={t("Clash Verge 订阅页", "Clash Verge Profiles page")} />
+      </li>
+      <li>
+        <b>{t("加分流规则（可选）", "Add routing rules (optional)")}</b>
+        <div className="mt-2 rounded-box bg-base-200 p-3 text-sm">
+          {zh ? (
+            <ul className="list-disc space-y-1 pl-5">
+              <li>
+                <b>不加也能用</b>：所有网站都走节点，国外网站照样能上。只是国内网站也要绕到国外再回来，可能变慢；个别国内 App
+                会把你当成海外用户（比如视频提示地区限制、要额外验证）；而且国内网站也算套餐流量。
+              </li>
+              <li>
+                <b>加了以后</b>：淘宝、B 站、微信、网银这些国内网站直接连，和没开 VPN 一样快，也不占套餐流量；ChatGPT、Claude
+                和其他国外网站走节点。
+              </li>
+              <li>
+                <b>建议</b>：每天都开着用、用普通版（每月有流量上限）、或者开着 VPN 还要用国内网站的，花两分钟加上。只想先连上试试的，可以跳过，以后随时回来加。
+              </li>
+            </ul>
+          ) : (
+            <ul className="list-disc space-y-1 pl-5">
+              <li>
+                <b>It works without them</b>: every site goes through the server, so overseas sites open fine. But Chinese sites also take a trip
+                abroad and back, which can be slower; a few Chinese apps may treat you as an overseas user (region locks, extra checks); and
+                Chinese sites count against your data.
+              </li>
+              <li>
+                <b>With them</b>: Chinese sites such as Taobao, Bilibili, WeChat and online banking connect directly, as fast as with the VPN
+                off and without using your data; ChatGPT, Claude and other overseas sites go through the server.
+              </li>
+              <li>
+                <b>Our advice</b>: if you keep the VPN on every day, are on Standard (which has a monthly data cap), or use Chinese sites with the
+                VPN on, take two minutes to add them. If you just want to get connected first, skip this and come back any time.
+              </li>
+            </ul>
+          )}
+          <a href={`#${connectId}`} className="btn btn-outline btn-sm mt-3">
+            {t("不加，直接跳到「连接」↓", "Skip, go to Connect ↓")}
+          </a>
+        </div>
+        <div className="mt-3">
+          {zh ? (
+            <>
+              <b>怎么加</b>：右键刚导入的订阅 → 选「扩展覆写配置」→ 把下面的规则粘贴进去并保存。
+            </>
+          ) : (
+            <>
+              <b>How</b>: right-click the subscription you just imported → choose the extended override config option → paste the rules below
+              and save.
+            </>
+          )}
+        </div>
+        <Shot name="mac-override-menu" alt={t("右键订阅选扩展覆写配置", "Right-click the subscription to open the override config")} />
+        <Shot name="mac-override-edit" alt={t("粘贴规则", "Paste the rules")} />
+        <div className="mt-2">
+          <CopyRules />
+        </div>
+        <div className="text-sm text-base-content/70">
+          {t("保存后到左边「规则」页看一眼，能看到这些规则就说明生效了。", "After saving, check the Rules page on the left. If you see these rules, they're active.")}
+        </div>
+        <div className="mt-1 text-sm text-base-content/70">
+          {zh ? (
+            <>
+              复制规则总出错、或者用的是只能导入文件的 Clash 客户端：在 <MySubs /> 点「下载 Clash 配置文件」，里面已经带好这些规则，
+              直接导入就行。这个文件不会自动更新，节点有变化要重新下载。
+            </>
+          ) : (
+            <>
+              If pasting the rules keeps failing, or your Clash app only imports files: click &quot;Download Clash config&quot; in <MySubs />. The
+              file already includes these rules. It won&apos;t update itself, so download it again when servers change.
+            </>
+          )}
+        </div>
+        <Shot name="mac-rules" alt={t("规则页里能看到这些规则", "The rules appear on the Rules page")} />
+      </li>
+      <li id={connectId} className="scroll-mt-24">
+        {zh ? (
+          <>
+            <b>连接</b>：回到「首页」，选一个节点，打开「系统代理」。
+          </>
+        ) : (
+          <>
+            <b>Connect</b>: go back to Home, pick a server and turn on System Proxy.
+          </>
+        )}
+        <Shot name="mac-connect" alt={t("首页选节点、打开系统代理", "Pick a server on Home and turn on System Proxy")} />
+      </li>
+      <li>
+        {zh ? (
+          <>
+            <b>日常使用</b>：在首页点「延迟测试」找延迟最低的节点。发现节点连不上，到「订阅」页点刷新按钮更新订阅。
+          </>
+        ) : (
+          <>
+            <b>Everyday use</b>: run the latency test on Home to find the fastest server. If servers stop working, click the refresh button on
+            the Profiles page to update the subscription.
+          </>
+        )}
+        <Shot name="mac-latency" alt={t("延迟测试按钮", "Latency test button")} />
+        <Shot name="mac-refresh" alt={t("订阅的刷新按钮", "Subscription refresh button")} />
+      </li>
+    </Steps>
+  );
 }
 
 function Ext({ href, children }: { href: string; children: React.ReactNode }) {
@@ -157,96 +299,8 @@ function tabs(lang: Lang): { id: Platform; label: string; content: React.ReactNo
       label: "Mac",
       content: (
         <>
-          <h2 className="text-lg font-bold">{t("Clash Verge（Windows 也能用）", "Clash Verge (also works on Windows)")}</h2>
-          <Steps>
-            <li>
-              <b>{t("安装", "Install")}</b>
-              {t("：", ": ")}
-              <Ext href={DOWNLOADS.clashVerge}>{t("下载 Clash Verge", "Download Clash Verge")}</Ext>
-              <div className="mt-1 text-sm text-base-content/70">
-                {t(
-                  "M 系列芯片的 Mac 选文件名带 aarch64 的 dmg，Intel 芯片的选带 x64 的。",
-                  "On Apple silicon (M-series) Macs, pick the dmg with aarch64 in its name; on Intel Macs, pick the one with x64.",
-                )}
-              </div>
-            </li>
-            <li>
-              {zh ? (
-                <>
-                  <b>导入订阅</b>：在本机打开 <MySubs /> 点「导入 Clash Verge」；或者打开 Clash Verge 左边的「订阅」，
-                  把订阅链接粘贴到顶部输入框，点「导入」。
-                </>
-              ) : (
-                <>
-                  <b>Import the subscription</b>: on this Mac, open <MySubs /> and click &quot;Import to Clash Verge&quot;. Or open Profiles on
-                  the left of Clash Verge, paste the subscription link into the box at the top, and click Import.
-                </>
-              )}
-              <Shot name="mac-import" alt={t("Clash Verge 订阅页", "Clash Verge Profiles page")} />
-            </li>
-            <li>
-              {zh ? (
-                <>
-                  <b>加分流规则</b>（推荐）：右键刚导入的订阅 → 选「扩展覆写配置」→ 把下面的规则粘贴进去并保存。作用是
-                  ChatGPT、Claude 和国外网站走代理，国内网站直连，国内网站不会因此变慢。
-                </>
-              ) : (
-                <>
-                  <b>Add routing rules</b> (recommended): right-click the subscription you just imported → choose the extended override config
-                  option → paste the rules below and save. ChatGPT, Claude and other overseas sites then go through the proxy while Chinese sites
-                  connect directly, so they don&apos;t slow down.
-                </>
-              )}
-              <Shot name="mac-override-menu" alt={t("右键订阅选扩展覆写配置", "Right-click the subscription to open the override config")} />
-              <Shot name="mac-override-edit" alt={t("粘贴规则", "Paste the rules")} />
-              <div className="mt-2">
-                <CopyRules />
-              </div>
-              <div className="text-sm text-base-content/70">
-                {t("保存后到左边「规则」页看一眼，能看到这些规则就说明生效了。", "After saving, check the Rules page on the left. If you see these rules, they're active.")}
-              </div>
-              <div className="mt-1 text-sm text-base-content/70">
-                {zh ? (
-                  <>
-                    复制规则总出错、或者用的是只能导入文件的 Clash 客户端：在 <MySubs /> 点「下载 Clash 配置文件」，里面已经带好这些规则，
-                    直接导入就行。这个文件不会自动更新，节点有变化要重新下载。
-                  </>
-                ) : (
-                  <>
-                    If pasting the rules keeps failing, or your Clash app only imports files: click &quot;Download Clash config&quot; in <MySubs />. The
-                    file already includes these rules. It won&apos;t update itself, so download it again when servers change.
-                  </>
-                )}
-              </div>
-              <Shot name="mac-rules" alt={t("规则页里能看到这些规则", "The rules appear on the Rules page")} />
-            </li>
-            <li>
-              {zh ? (
-                <>
-                  <b>连接</b>：回到「首页」，选一个节点，打开「系统代理」。
-                </>
-              ) : (
-                <>
-                  <b>Connect</b>: go back to Home, pick a server and turn on System Proxy.
-                </>
-              )}
-              <Shot name="mac-connect" alt={t("首页选节点、打开系统代理", "Pick a server on Home and turn on System Proxy")} />
-            </li>
-            <li>
-              {zh ? (
-                <>
-                  <b>日常使用</b>：在首页点「延迟测试」找延迟最低的节点。发现节点连不上，到「订阅」页点刷新按钮更新订阅。
-                </>
-              ) : (
-                <>
-                  <b>Everyday use</b>: run the latency test on Home to find the fastest server. If servers stop working, click the refresh button
-                  on the Profiles page to update the subscription.
-                </>
-              )}
-              <Shot name="mac-latency" alt={t("延迟测试按钮", "Latency test button")} />
-              <Shot name="mac-refresh" alt={t("订阅的刷新按钮", "Subscription refresh button")} />
-            </li>
-          </Steps>
+          <h2 className="text-lg font-bold">Clash Verge</h2>
+          <ClashVergeSteps os="mac" lang={lang} MySubs={MySubs} />
         </>
       ),
     },
@@ -255,46 +309,8 @@ function tabs(lang: Lang): { id: Platform; label: string; content: React.ReactNo
       label: "Windows",
       content: (
         <>
-          <h2 className="text-lg font-bold">Hiddify</h2>
-          <Steps>
-            <li>
-              <b>{t("安装", "Install")}</b>
-              {t("：", ": ")}
-              <Ext href={DOWNLOADS.hiddifyWindows}>{t("下载 Hiddify", "Download Hiddify")}</Ext>
-              <div className="mt-1 text-sm text-base-content/70">{t("下载文件名带 Windows-Setup 的安装包。", "Download the installer with Windows-Setup in its name.")}</div>
-            </li>
-            <li>
-              {zh ? (
-                <>
-                  <b>导入订阅</b>：在 <MySubs /> 点「复制订阅链接」，然后在 Hiddify 里点「剪贴板」。
-                </>
-              ) : (
-                <>
-                  <b>Import the subscription</b>: in <MySubs />, click &quot;Copy subscription link&quot;, then click Clipboard in Hiddify.
-                </>
-              )}
-              <Shot name="win-import" alt={t("Hiddify 从剪贴板添加", "Add from clipboard in Hiddify")} />
-            </li>
-            <li>
-              <b>{t("连接", "Connect")}</b>
-              {t("：点中间的连接按钮。", ": click the connect button in the middle.")}
-              <Shot name="win-connect" alt={t("Hiddify 已连接", "Hiddify connected")} />
-            </li>
-            <li>
-              <b>{t("切换节点", "Switch servers")}</b>
-              {t("：点右下角的箭头。", ": click the arrow in the bottom-right.")}
-              <Shot name="win-switch" alt={t("Hiddify 节点列表", "Hiddify server list")} />
-            </li>
-            <li>
-              <b>{t("日常使用", "Everyday use")}</b>
-              {t(
-                "：Hiddify 启动时会自动更新订阅并测速。发现节点连不上，点订阅左边的刷新按钮。",
-                ": Hiddify updates the subscription and tests speed when it starts. If servers stop working, click the refresh button to the left of the subscription.",
-              )}
-              <Shot name="win-refresh" alt={t("Hiddify 刷新订阅按钮", "Hiddify refresh button")} />
-            </li>
-          </Steps>
-          <p className="mt-4 text-sm text-base-content/70">{t("想用 Clash Verge 也可以，步骤和 Mac 一样。", "You can also use Clash Verge; the steps are the same as on Mac.")}</p>
+          <h2 className="text-lg font-bold">Clash Verge</h2>
+          <ClashVergeSteps os="windows" lang={lang} MySubs={MySubs} />
         </>
       ),
     },

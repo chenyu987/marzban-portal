@@ -37,7 +37,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const openedBase = opened ? findPlan(site.plans, opened) : undefined;
   const openedPlan = openedBase && withCodeDays(openedBase, Number(openedDays) || null);
   const { t, lang } = await getT();
-  // 大的「一键导入」按钮按客人现在用的设备选 App（iPhone Shadowrocket、Mac Clash Verge、Windows 和安卓 Hiddify）
+  // 大的「一键导入」按钮按客人现在用的设备选 App（iPhone Shadowrocket、Mac 和 Windows Clash Verge、安卓 Hiddify）
   const app = primaryApp(detectPlatform((await headers()).get("user-agent") ?? ""));
   const { results } = await db()
     .prepare("SELECT marzban_username, code, hidden_at FROM subscriptions WHERE customer_id = ? ORDER BY id")
