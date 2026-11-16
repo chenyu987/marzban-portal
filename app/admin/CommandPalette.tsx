@@ -15,6 +15,7 @@ const pages = (t: T): SearchHit[] => [
   { group: "page", title: t("兑换码", "Codes"), sub: "", href: "/admin/codes" },
   { group: "page", title: t("节点", "Nodes"), sub: "", href: "/admin/nodes" },
   { group: "page", title: "Host", sub: "", href: "/admin/hosts" },
+  { group: "page", title: t("域名切换", "Domain switch"), sub: t("节点被墙时把域名指到备用 IP", "Point a node domain at a standby IP"), href: "/admin/dns" },
   { group: "page", title: t("日志", "Logs"), sub: "", href: "/admin/logs" },
   { group: "page", title: t("我的账户", "My account"), sub: t("外观、偏好、登录设备、改密码", "Appearance, preferences, devices, password"), href: "/admin/account" },
 ];

@@ -9,9 +9,16 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { site } from "../site.config";
+import { wrangler } from "./wrangler";
 
-const run = (args: string[], input = "") =>
-  execFileSync("npm", ["run", "-s", ...args], { input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
+// 跑 package.json 里的管理员脚本（都是 "node ... scripts/xxx.mjs"）。直接用 node 跑，不经过 npm：
+// Windows 上 npm 是 npm.cmd，不开 shell 起不来
+const scripts = JSON.parse(readFileSync("package.json", "utf8")).scripts as Record<string, string>;
+const run = ([name, sep, ...rest]: string[], input = "") => {
+  const [node, ...nodeArgs] = scripts[name].split(" ");
+  if (node !== "node" || sep !== "--") throw new Error(`run() 只支持 "node ..." 脚本：${name}`);
+  return execFileSync(process.execPath, [...nodeArgs, ...rest], { input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
+};
 
 // 直接调假 Marzban 的接口（查用户、改到期时间、建用户）
 async function mockMarzban(method: string, path: string, body?: object) {
@@ -32,16 +39,9 @@ async function mockMarzban(method: string, path: string, body?: object) {
 const setMockExpire = (username: string, expire: number) => mockMarzban("PUT", `/user/${username}`, { expire });
 
 // 在本地库里直接执行一条 SQL（给测试账号加余额之类）
-const sql = (command: string) =>
-  execFileSync("npx", ["wrangler", "d1", "execute", "DB", "--local", "--command", command], { stdio: "ignore" });
+const sql = (command: string) => wrangler(["d1", "execute", "DB", "--local", "--command", command]);
 // 执行一条查询，返回结果行
-const query = (command: string) =>
-  JSON.parse(
-    execFileSync("npx", ["wrangler", "d1", "execute", "DB", "--local", "--json", "--command", command], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }),
-  )[0].results as Record<string, unknown>[];
+const query = (command: string) => JSON.parse(wrangler(["d1", "execute", "DB", "--local", "--json", "--command", command]))[0].results as Record<string, unknown>[];
 
 // 订阅的随机编号（订阅页上显示成 7F3A-9C21）
 const usernameCode = (username: string) => {

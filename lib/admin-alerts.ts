@@ -2,6 +2,7 @@
 // 用和客人邮件同一个发信（lib/mail.ts），没配发信就不发
 import { db } from "./env";
 import { canSendMail, sendMail } from "./mail";
+import { sendPush } from "./push";
 import { listNodes, type MarzbanNode } from "./marzban";
 import { planNodeAlerts, type AlertRow } from "./node-alerts";
 import { site } from "../site.config";
@@ -30,6 +31,8 @@ export async function runNodeAlerts(now: number): Promise<{ down: number; sent: 
   if (stmts.length) await db().batch(stmts);
   let sent = 0;
   if (canSendMail() && site.contactEmail) for (const m of plan.mails) if (await sendMail(site.contactEmail, m.subject, m.text)) sent++;
+  // 掉线 / 恢复也推到微信（Server酱，没配就不推）
+  for (const m of plan.mails) await sendPush(m.subject, m.text);
   return { down: plan.upsert.length, sent };
 }
 

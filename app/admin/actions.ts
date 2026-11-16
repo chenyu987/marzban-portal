@@ -21,6 +21,10 @@ import { site } from "@/site.config";
 import { wechatError } from "@/lib/account";
 import { getT } from "@/lib/lang";
 import { planName as planLabel } from "@/lib/plan-text";
+import { dnsZones, getRecord, setRecordIp } from "@/lib/cloudflare-dns";
+import { checkIPv4, inZone, switchable } from "@/lib/dns-switch";
+import { roleFor, roleText, type StandbyRole } from "@/lib/standby";
+import { lineState, standbyConfig, standbyIp } from "@/lib/standby-state";
 
 // 和客人登录一样限制试密码；记在 login_failures 里，邮箱前面加 admin: 区分
 const FAIL_WINDOW = 15 * 60;
@@ -560,6 +564,59 @@ export async function adminSaveHosts(_: FormState, form: FormData): Promise<Form
   await logAdmin(admin, "hosts.save", tag, `${before} 个 → ${r.hosts.length} 个${off ? `（${off} 个停用）` : ""}：${r.hosts.map((h) => h.remark).join("、")}`);
   revalidatePath("/admin/hosts");
   return { ok: t(`已保存 ${tag} 的 Host，客人更新订阅后生效`, `Saved Hosts for ${tag}; takes effect when customers update their subscription`) };
+}
+
+// ---- 域名切换（/admin/dns）----
+
+// 把节点域名的 A 记录改到另一个 IP（节点被墙时换到备用机）。浏览器只传域名、记录 id 和新 IP；
+// 记录现取一次，核对它确实在这个域名下、是灰色云朵的 A 记录，再改。只改 IP，TTL 和云朵状态不动
+export async function adminSwitchDns(_: FormState, form: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const { t } = await getT();
+  const cfg = dnsZones();
+  if ("error" in cfg) return { error: cfg.error };
+  const zone = cfg.zones.find((z) => z.zone === String(form.get("zone") ?? ""));
+  if (!zone) return { error: t("没配这个域名", "This domain isn't configured") };
+  const recordId = String(form.get("record") ?? "");
+  if (!/^[A-Za-z0-9]{1,64}$/.test(recordId)) return { error: t("记录不对", "Invalid record") };
+  const ip = checkIPv4(String(form.get("ip") ?? ""));
+  if ("error" in ip)
+    return { error: ip.error === "format" ? t("IP 格式不对，要是四段数字，用点隔开", "Invalid IP: four numbers separated by dots") : t("这是内网或保留地址，客人连不上", "That's a private or reserved address; customers can't reach it") };
+  let before: string;
+  let name: string;
+  let standby: { name: string; role: StandbyRole | null } | null = null;
+  try {
+    const r = await getRecord(zone, recordId);
+    if (!inZone(r.name, zone.zone) || !switchable(r)) return { error: t("这条记录不能在这里改（只改灰色云朵的 A 记录）", "This record can't be changed here (only DNS-only A records)") };
+    if (r.content === ip.ip) return { error: t(`${r.name} 已经是 ${ip.ip} 了`, `${r.name} already points to ${ip.ip}`) };
+    // 新 IP 是备用机：先按「切过去以后」算它该顶替谁，一台备用机同时被两个不同的节点指着就不让切
+    const sb = standbyConfig();
+    if (!("error" in sb) && sb.standbys.length) {
+      const state = await lineState();
+      const hit = sb.standbys.find((s) => standbyIp(s.name, state.nodes) === ip.ip);
+      if (hit) {
+        const after = state.records.map((x) => (x.id === r.id ? { ...x, content: ip.ip } : x));
+        const role = roleFor(ip.ip, after, state.hosts, state.inbounds);
+        if ("error" in role) return { error: t(`不能切到备用机 ${hit.name}：${role.error}`, `Can't switch to standby ${hit.name}: ${role.error}`) };
+        standby = { name: hit.name, role: role.role };
+      }
+    }
+    before = r.content;
+    name = r.name;
+    await setRecordIp(zone, recordId, ip.ip);
+  } catch (e) {
+    return { error: t(`改 DNS 失败：${errText(e)}`, `DNS update failed: ${errText(e)}`) };
+  }
+  await logAdmin(admin, "dns.switch", name, `${before} → ${ip.ip}${standby ? `（备用机 ${standby.name}，${roleText(standby.role)}）` : ""}`);
+  revalidatePath("/admin/dns");
+  if (standby)
+    return {
+      ok: t(
+        `${name} 已改到备用机 ${standby.name}。备用机下次来问时（一般 30 秒内）会自动${roleText(standby.role)}，之后客人陆续连上，不用更新订阅`,
+        `${name} now points to standby ${standby.name}. It picks this up on its next check (usually within 30s) and starts ${roleText(standby.role, true)}; customers follow without updating their subscription`,
+      ),
+    };
+  return { ok: t(`${name} 已改到 ${ip.ip}，客人的客户端一般 1～5 分钟内连到新 IP`, `${name} now points to ${ip.ip}; clients usually follow within 1-5 minutes`) };
 }
 
 // ---- 批量操作（/admin/users 页底）----

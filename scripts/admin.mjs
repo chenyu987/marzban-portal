@@ -3,6 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
+import { fileURLToPath } from "node:url";
 import { formatBytes, formatExpire } from "../lib/format.ts";
 import { site } from "../site.config.ts";
 
@@ -16,12 +17,15 @@ export const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 
 // 跑一条 SQL，返回结果行。remote 为 true 写线上库，否则写本地开发库
 export function d1(remote, sql) {
-  const out = execFileSync(
-    "npx",
-    ["wrangler", "d1", "execute", "DB", remote ? "--remote" : "--local", "--json", "--command", sql],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
-  );
+  const out = wrangler(["d1", "execute", "DB", remote ? "--remote" : "--local", "--json", "--command", sql]);
   return JSON.parse(out)[0].results;
+}
+
+// 直接用 node 跑 wrangler，不经过 npx：Windows 上 npx 是 npx.cmd，不开 shell 起不来，
+// 开 shell 又会把 SQL 里的引号和换行搞乱
+const wranglerBin = fileURLToPath(new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url));
+export function wrangler(args) {
+  return execFileSync(process.execPath, [wranglerBin, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 }
 
 export async function confirmYes(prompt) {

@@ -1,6 +1,6 @@
 // 跑测试前：确认只连本地假 Marzban，并把本地数据库的结构更新到最新
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { wrangler } from "./wrangler";
 
 export default function setup() {
   const vars = readFileSync(".dev.vars", "utf8");
@@ -14,5 +14,5 @@ export default function setup() {
   if (!/^ADMIN_DEV_NO_ACCESS\s*=\s*1\s*$/m.test(vars)) {
     throw new Error(".dev.vars 里要有 ADMIN_DEV_NO_ACCESS=1（见 .dev.vars.example），管理后台的测试才能跑");
   }
-  execFileSync("npx", ["wrangler", "d1", "migrations", "apply", "DB", "--local"], { stdio: "ignore" });
+  wrangler(["d1", "migrations", "apply", "DB", "--local"]);
 }

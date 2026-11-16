@@ -28,7 +28,7 @@ function Target({ action, target }: { action: string; target: string | null }) {
   if (action.startsWith("user.")) return <SubLink username={target} />;
   if (["balance.adjust", "password.reset_link", "subscription.bind", "subscription.auto_bind"].includes(action))
     return <Link href={`/admin/customers?q=${encodeURIComponent(target)}`} className="link link-hover">{target}</Link>;
-  const page = action.startsWith("node.") || action === "core.restart" ? "/admin/nodes" : action === "hosts.save" ? "/admin/hosts" : action.startsWith("code") ? "/admin/codes" : action.startsWith("users.") ? "/admin/users" : "";
+  const page = action.startsWith("node.") || action === "core.restart" ? "/admin/nodes" : action === "hosts.save" ? "/admin/hosts" : action.startsWith("dns.") || action.startsWith("standby.") || action.startsWith("probe.") ? "/admin/dns" : action.startsWith("code") ? "/admin/codes" : action.startsWith("users.") ? "/admin/users" : "";
   return page ? <Link href={page} className="link link-hover">{target}</Link> : <>{target}</>;
 }
 
@@ -42,7 +42,8 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const action = param(sp, "action") in LOG_ACTIONS ? param(sp, "action") : "";
   const q = param(sp, "q");
   const page = pageOf(sp);
-  const W = `WHERE (?1 = '' OR admin_email = ?1) AND (?2 = '' OR action = ?2) AND (?3 = '' OR target LIKE ?4 ESCAPE '\\' OR detail LIKE ?4 ESCAPE '\\')`;
+  // probe.heartbeat 是检测机「最后一次报告」的那一行（原地更新），不算操作，不在这里列
+  const W = `WHERE action != 'probe.heartbeat' AND (?1 = '' OR admin_email = ?1) AND (?2 = '' OR action = ?2) AND (?3 = '' OR target LIKE ?4 ESCAPE '\\' OR detail LIKE ?4 ESCAPE '\\')`;
   const [{ results }, { results: admins }, count] = await Promise.all([
     db()
       .prepare(`SELECT id, admin_email, action, target, detail, ip, created_at FROM admin_logs ${W} ORDER BY id DESC LIMIT ?5 OFFSET ?6`)

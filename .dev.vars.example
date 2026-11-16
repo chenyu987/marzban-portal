@@ -6,3 +6,10 @@ MARZBAN_PASSWORD=admin
 MAIL_DEV_LOG=1
 # 本地开发管理后台：跳过 Cloudflare Access（只在 localhost 访问时生效，线上不会生效）
 ADMIN_DEV_NO_ACCESS=1
+# 后台「域名切换」：本地连假 Marzban 里的假 Cloudflare，token 随便写
+CF_API_BASE=http://localhost:8010/cf
+DNS_ZONES=[{"zone":"example.test","token":"dev"}]
+# 备用机：名字是假 Marzban 里的节点名，token 是本地模拟遥控程序时带的口令
+STANDBYS=[{"name":"备用 1","token":"dev-standby-token-0123456789"}]
+# 国内检测机：本地模拟 ops/scripts/block-probe.py 来报告时带的口令
+PROBES=[{"name":"家里-联通","token":"dev-probe-token-0123456789ab"}]

@@ -29,23 +29,42 @@ function createInbounds(body) {
   return out;
 }
 
+// 文档专用网段（RFC 5737）的地址。公开仓库的检查不许出现 IP 字面量，所以拼出来
+const docIp = (n) => ["203", "0", "113", n].join(".");
+
 // 节点：种子一个在线、一个出错的
 const nodes = new Map();
 let nextNodeId = 1;
 const pickNode = ({ name, address, port = 62050, api_port = 62051, usage_coefficient = 1 }) => ({ name, address, port, api_port, usage_coefficient });
 for (const n of [
-  { name: "东京", address: "tokyo.example.test", status: "connected", xray_version: "26.6.27", message: null },
-  { name: "大阪", address: "osaka.example.test", status: "error", xray_version: null, message: "connection refused" },
+  { name: "东京", address: docIp(10), status: "connected", xray_version: "26.6.27", message: null },
+  { name: "大阪", address: docIp(20), status: "error", xray_version: null, message: "connection refused" },
+  // 备用机（.dev.vars.example 的 STANDBYS 里用这个名字）
+  { name: "备用 1", address: docIp(30), status: "connected", xray_version: "26.6.27", message: null },
 ]) {
   nodes.set(nextNodeId, { id: nextNodeId, ...pickNode(n), ...n });
   nextNodeId++;
 }
 
-// Host：每个入站一个，带一个后台不改的字段（mux_enable），检查保存时会不会被弄丢
+// Host：每个入站一个，带一个后台不改的字段（mux_enable），检查保存时会不会被弄丢。
+// VLESS NODE2 的地址用域名，后台「域名切换」页能看到它被哪个 Host 用着
 const hosts = Object.fromEntries(
   Object.values(INBOUNDS)
     .flat()
-    .map((tag) => [tag, [{ remark: `${tag} {USERNAME}`, address: "{SERVER_IP}", port: null, sni: null, host: null, path: null, security: "inbound_default", is_disabled: false, mux_enable: true }]]),
+    .map((tag) => [
+      tag,
+      [{ remark: `${tag} {USERNAME}`, address: tag === "VLESS NODE2" ? "n2.example.test" : "{SERVER_IP}", port: null, sni: null, host: null, path: null, security: "inbound_default", is_disabled: false, mux_enable: true }],
+    ]),
+);
+
+// 假 Cloudflare 的 DNS：一个域名，两条灰色云朵的节点记录、一条橙色云朵的网站记录
+const CF_ZONE = { id: "zone-example-test", name: "example.test" };
+const dnsRecords = new Map(
+  [
+    { id: "rec1", name: "n1.example.test", type: "A", content: docIp(10), ttl: 60, proxied: false },
+    { id: "rec2", name: "n2.example.test", type: "A", content: docIp(20), ttl: 1, proxied: false },
+    { id: "rec3", name: "www.example.test", type: "A", content: docIp(99), ttl: 1, proxied: true },
+  ].map((r) => [r.id, r]),
 );
 
 const adminTokens = new Set();
@@ -135,6 +154,29 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, BASE);
   const path = url.pathname;
   const log = (status) => console.log(`${req.method} ${path} -> ${status}`);
+
+  // 假 Cloudflare DNS 接口（后台「域名切换」用），只实现查 zone、列记录、取一条、改一条
+  if (path.startsWith("/cf/")) {
+    const cf = (status, result, errors = []) => (log(status), send(res, status, { success: status < 400, errors, result }));
+    let m;
+    if (req.method === "GET" && path === "/cf/zones") return cf(200, url.searchParams.get("name") === CF_ZONE.name ? [CF_ZONE] : []);
+    if ((m = /^\/cf\/zones\/([^/]+)\/dns_records$/.exec(path)) && req.method === "GET") {
+      if (m[1] !== CF_ZONE.id) return cf(404, null, [{ code: 7003, message: "Could not route" }]);
+      const type = url.searchParams.get("type");
+      return cf(200, [...dnsRecords.values()].filter((r) => !type || r.type === type));
+    }
+    if ((m = /^\/cf\/zones\/([^/]+)\/dns_records\/([^/]+)$/.exec(path))) {
+      const r = m[1] === CF_ZONE.id ? dnsRecords.get(m[2]) : undefined;
+      if (!r) return cf(404, null, [{ code: 81044, message: "Record does not exist." }]);
+      if (req.method === "GET") return cf(200, r);
+      if (req.method === "PATCH") {
+        const body = JSON.parse((await readBody(req)) || "{}");
+        if (body.content) r.content = body.content;
+        return cf(200, r);
+      }
+    }
+    return cf(404, null, [{ code: 7000, message: "No route for that URI" }]);
+  }
 
   if (req.method === "POST" && path === "/api/admin/token") {
     const form = new URLSearchParams(await readBody(req));

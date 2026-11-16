@@ -21,6 +21,7 @@ const groups = (t: T): { href: string; label: string }[][] => [
   [
     { href: "/admin/nodes", label: t("节点", "Nodes") },
     { href: "/admin/hosts", label: "Host" },
+    { href: "/admin/dns", label: t("域名", "DNS") },
   ],
   [{ href: "/admin/logs", label: t("日志", "Logs") }],
 ];
