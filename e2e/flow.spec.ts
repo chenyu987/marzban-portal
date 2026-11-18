@@ -957,6 +957,59 @@ test("余额付全款、余额抵扣一部分，再用兑换码续期", CORE, as
   await expect(page.getByRole("heading", { name: "高速版（体验）" })).toHaveCount(0);
 });
 
+test("升级套餐：到期时间不变，补剩余天数的差价；余额付和转账都行", CORE, async ({ page }) => {
+  const email = `e2e-upgrade-${Date.now()}@example.test`;
+  page.on("dialog", (d) => d.accept());
+  await register(page, email, "E2eTest-1234");
+  sql(`INSERT INTO balance_entries (customer_id, amount, kind, created_at) SELECT id, 10000, 'adjust', unixepoch() FROM customers WHERE email = '${email}'`);
+
+  // 先用余额买一个高速版月付（¥45，30 天）
+  await page.goto("/plans");
+  await page.locator('button[value="p3-month"]').click();
+  await confirmOk(page);
+  await expect(page.getByText("用余额开通成功")).toBeVisible();
+  await page.goto("/dashboard");
+  const username = usernameOf(await page.getByTestId("sub-id").first().innerText());
+  const before = await mockMarzban("GET", `/user/${username}`) as { expire: number; note: string };
+  expect(before.note).toContain("ip=2");
+
+  // 订阅卡片上的「升级套餐」→ 列出更高的档，差价 = 月付差 × 剩余天数 ÷ 30：双设备 (58-45)×30/30 = ¥13
+  await page.getByRole("link", { name: "升级套餐" }).click();
+  await expect(page).toHaveURL(/\/plans\/upgrade\?sub=/);
+  await expect(page.getByTestId("upgrade-price")).toHaveText("¥13");
+  // 余额（剩 ¥55）够：直接升级，到期时间不变、设备数变成 3
+  await page.getByRole("button", { name: "用余额付 ¥13 升级" }).click();
+  await expect(page).toHaveURL(/\/dashboard\?upgraded=1/);
+  await expect(page.getByTestId("upgraded")).toContainText("到期时间不变");
+  await expect(page.locator(".card-title").filter({ hasText: "高速版双设备" })).toBeVisible();
+  await expect(page.getByTestId("balance")).toHaveText("¥42.00");
+  const mid = await mockMarzban("GET", `/user/${username}`) as { expire: number; note: string };
+  expect(mid.expire).toBe(before.expire);
+  expect(mid.note).toContain("ip=3");
+  // 套餐记成新的档，订阅页圆环的起点（updated_at）不变
+  const planRow = query(`SELECT plan_id FROM marzban_users WHERE marzban_username = '${username}'`)[0];
+  expect(planRow.plan_id).toBe("p4-month");
+
+  // 再升到 4 设备（(68-58)×30/30 = ¥10），不用余额：下转账单，到套餐页付款，点「我已付款」马上生效
+  await page.goto(`/plans/upgrade?sub=${username}`);
+  await expect(page.getByTestId("upgrade-price")).toHaveText("¥10");
+  await page.getByLabel(/用余额抵扣/).uncheck();
+  await page.getByRole("button", { name: "付 ¥10 升级" }).click();
+  await expect(page).toHaveURL(/\/plans$/);
+  const card = page.locator(".card.border").first();
+  await expect(card).toContainText("请转账 ¥10");
+  await expect(card).toContainText("到期时间不变");
+  await card.getByLabel("支付宝", { exact: true }).check();
+  await card.getByRole("button", { name: "我已付款" }).click();
+  await expect(page).toHaveURL(/\/dashboard\?upgraded=1/);
+  const after = await mockMarzban("GET", `/user/${username}`) as { expire: number; note: string };
+  expect(after.expire).toBe(before.expire);
+  expect(after.note).toContain("ip=5");
+  expect(query(`SELECT kind, from_plan_id, amount FROM orders WHERE marzban_username = '${username}' AND method = 'transfer'`)).toEqual([
+    { kind: "upgrade", from_plan_id: "p4-month", amount: 1000 },
+  ]);
+});
+
 test("管理后台：登录、确认和取消订单、客人管理、兑换码、日志", CORE, async ({ page, browser }) => {
   const stamp = Date.now();
   const customer = `e2e-admin-c-${stamp}@example.test`;

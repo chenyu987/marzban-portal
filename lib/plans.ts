@@ -119,3 +119,29 @@ export function renewUserBody(current: { expire: number | null; note?: string | 
     ...inboundsField(vless),
   };
 }
+
+// 升级套餐：到期时间不变，只补剩下天数的差价。
+// 按两档月付价格算：(新档月付 − 旧档月付) ÷ 30 × 剩余天数，向上取整到元，最少 1 元。
+// 只列月付价格更高的档；当前套餐查不到、是免费体验、已经到期、永不到期的都不能升级（返回空）
+export type UpgradeOption = { plan: Plan; price: number };
+export function upgradeOptions(plans: Plan[], currentId: string | undefined, expire: number | null, now: number): UpgradeOption[] {
+  const current = currentId ? findPlan(plans, currentId) : undefined;
+  if (!current || current.codeOnly || !expire || expire <= now) return [];
+  const group = (p: Plan) => p.group ?? p.name;
+  const monthly = (g: string) => forSale(plans).find((p) => group(p) === g && p.days === 30);
+  const from = monthly(group(current));
+  if (!from) return [];
+  const days = Math.ceil((expire - now) / DAY);
+  const seen = new Set<string>();
+  const out: UpgradeOption[] = [];
+  for (const p of forSale(plans)) {
+    const g = group(p);
+    if (seen.has(g)) continue;
+    seen.add(g);
+    const to = monthly(g);
+    if (!to || to.price <= from.price) continue;
+    const yuan = Math.max(1, Math.ceil(((to.price - from.price) * days) / 30 / 100));
+    out.push({ plan: to, price: yuan * 100 });
+  }
+  return out;
+}

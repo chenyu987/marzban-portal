@@ -31,6 +31,13 @@ describe("客户端", () => {
     expect(CLASH_RULES.indexOf("GEOIP,CN,DIRECT")).toBeLessThan(CLASH_RULES.indexOf("MATCH,"));
   });
 
+  it("Steam 下载直连，不走节点（一个游戏几十 G）", () => {
+    for (const r of ["DOMAIN-SUFFIX,steamcontent.com,DIRECT", "DOMAIN,dl.steam.clngaa.com,DIRECT", "DOMAIN,st.dl.eccdnx.com,DIRECT", "DOMAIN,xz.pphimalayanrt.com,DIRECT"]) {
+      expect(CLASH_RULES).toContain(r);
+      expect(CLASH_RULES.indexOf(r)).toBeLessThan(CLASH_RULES.indexOf("MATCH,"));
+    }
+  });
+
   it("按 User-Agent 认设备", () => {
     expect(detectPlatform("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)")).toBe("ios");
     // 订阅页的大按钮跟着设备换：iPhone Shadowrocket、Mac 和 Windows Clash Verge、安卓 Hiddify，看不出来给 Shadowrocket

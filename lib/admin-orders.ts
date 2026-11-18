@@ -4,10 +4,10 @@
 // 两个入口：客人点「我已付款」马上开通（先开通后对账，verified_at 留空）；管理员在后台「确认收款并开通」（同时算对过账）
 import "server-only";
 import { db, nowSec } from "./env";
-import { findPlan } from "./plans";
+import { changePlanBody, findPlan, planInbounds } from "./plans";
 import { formatExpire, formatOrderNo } from "./format";
 import { provisionTarget } from "./orders";
-import { findUser, modifyUser } from "./marzban";
+import { findUser, modifyUser, vlessInbounds } from "./marzban";
 import { site } from "../site.config";
 import { makeT, type Lang } from "./i18n";
 
@@ -20,6 +20,7 @@ type OrderRow = {
   status: string;
   plan_id: string | null;
   marzban_username: string | null;
+  kind: string | null;
 };
 
 const DAY = 86400;
@@ -33,7 +34,7 @@ export async function confirmTransferOrder(
   const t = makeT(lang);
   const label = () => orderLabel(orderId, lang);
   const o = await db()
-    .prepare("SELECT id, customer_id, method, status, plan_id, marzban_username FROM orders WHERE id = ?")
+    .prepare("SELECT id, customer_id, method, status, plan_id, marzban_username, kind FROM orders WHERE id = ?")
     .bind(orderId)
     .first<OrderRow>();
   if (!o || (by !== "admin" && o.customer_id !== by.customerId)) return { error: t("没有这张订单", "No such order") };
@@ -60,7 +61,8 @@ export async function confirmTransferOrder(
 
   let result;
   try {
-    result = await provisionTarget(o.customer_id, subs, target, plan, now);
+    const kind = o.kind === "upgrade" ? "upgrade" : null;
+    result = await provisionTarget(o.customer_id, subs, target, plan, now, lang, kind);
   } catch (e) {
     await revert();
     return { error: t(`连 Marzban 出错，单退回「等付款」，可以再点一次：${e instanceof Error ? e.message : e}`, `Marzban error; the order is back to unpaid, you can try again: ${e instanceof Error ? e.message : e}`) };
@@ -96,11 +98,12 @@ export async function confirmTransferOrder(
       .prepare("UPDATE orders SET status = 'paid', paid_at = ?, marzban_username = ?, new_sub = ?, verified_at = ? WHERE id = ?")
       .bind(now, result.username, target === "new" ? 1 : 0, by === "admin" ? now : null, orderId),
   ]);
+  const what = o.kind === "upgrade" ? t(`升级到 ${plan.name}：`, `upgraded to ${plan.name}: `) : "";
   return {
     ok: t(
-      `${await label()} 已确认：${target === "new" ? "新开" : "续期"} ${result.username}，到期 ${formatExpire(result.expire)}` +
+      `${await label()} 已确认：${what}${target === "new" ? "新开" : o.kind === "upgrade" ? "" : "续期"} ${result.username}，到期 ${formatExpire(result.expire)}` +
         (result.warning ? `。⚠️ ${result.warning}，去面板手动把流量清零` : ""),
-      `${await label()} confirmed: ${target === "new" ? "created" : "renewed"} ${result.username}, expires ${formatExpire(result.expire, "en")}` +
+      `${await label()} confirmed: ${what}${target === "new" ? "created" : o.kind === "upgrade" ? "" : "renewed"} ${result.username}, expires ${formatExpire(result.expire, "en")}` +
         (result.warning ? `. ⚠️ ${result.warning}; reset the traffic manually in the panel` : ""),
     ),
   };
@@ -135,19 +138,27 @@ export async function revokeOrder(orderId: number, lang: Lang = "zh"): Promise<A
   const label = await orderLabel(orderId, lang);
   const o = await db()
     .prepare(
-      `SELECT id, plan_id, marzban_username, new_sub FROM orders
+      `SELECT id, plan_id, marzban_username, new_sub, kind, from_plan_id FROM orders
        WHERE id = ? AND method = 'transfer' AND status = 'paid' AND verified_at IS NULL`,
     )
     .bind(orderId)
-    .first<{ id: number; plan_id: string | null; marzban_username: string | null; new_sub: number | null }>();
+    .first<{ id: number; plan_id: string | null; marzban_username: string | null; new_sub: number | null; kind: string | null; from_plan_id: string | null }>();
   if (!o || !o.marzban_username) return { error: t(`${label} 不是待对账的单了，刷新看看`, `${label} is no longer waiting to be reconciled; refresh`) };
   const plan = o.plan_id ? findPlan(site.plans, o.plan_id) : undefined;
   const username = o.marzban_username;
   let done: string;
+  let revertPlan: D1PreparedStatement | null = null;
   try {
     const u = await findUser(username);
     if (!u) return { error: t(`Marzban 上查不到 ${username}，去面板看看`, `${username} not found on Marzban; check the panel`) };
-    if (o.new_sub) {
+    if (o.kind === "upgrade") {
+      // 升级单：换回升级前的套餐（到期时间本来就没动）
+      const from = o.from_plan_id ? findPlan(site.plans, o.from_plan_id) : undefined;
+      if (!from) return { error: t(`升级前的套餐 ${o.from_plan_id} 已经下架，去后台「改套餐」手动改回去`, `The original plan ${o.from_plan_id} is retired; change ${username}'s plan back manually`) };
+      await modifyUser(username, changePlanBody(u, from, planInbounds(from, await vlessInbounds(), site.proOnlyInbounds)));
+      revertPlan = db().prepare("UPDATE marzban_users SET plan_id = ? WHERE marzban_username = ?").bind(from.id, username);
+      done = t(`${username} 换回 ${from.name}`, `${username} switched back to ${from.name}`);
+    } else if (o.new_sub) {
       await modifyUser(username, { status: "disabled" });
       done = t(`已停用 ${username}`, `disabled ${username}`);
     } else {
@@ -163,6 +174,7 @@ export async function revokeOrder(orderId: number, lang: Lang = "zh"): Promise<A
   await db().batch([
     db().prepare("UPDATE orders SET status = 'revoked', note = '没收到钱，已收回' WHERE id = ?").bind(orderId),
     db().prepare("DELETE FROM balance_entries WHERE order_id = ? AND kind IN ('referral_reward', 'purchase')").bind(orderId),
+    ...(revertPlan ? [revertPlan] : []),
   ]);
   return { ok: t(`${label} 已收回：${done}`, `${label} revoked: ${done}`) };
 }

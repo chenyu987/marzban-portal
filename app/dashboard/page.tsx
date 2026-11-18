@@ -7,7 +7,7 @@ import { latestPeak, peakRingPct } from "@/lib/usage-peak";
 import { periodRingPct, parseMarzbanTime, unlimitedRingPct, sortSubs, formatSubCode, formatBytes, formatDate, formatExpire, formatMoney, maskEmail, canRenewEarly, isExpiredSub, needsRenewal, resetLabel, statusLabel, timeLeft } from "@/lib/format";
 import { AVAILABLE_SQL, REFERRAL_REWARDS_SQL, type RewardRow } from "@/lib/balance";
 import { site } from "@/site.config";
-import { describePlan, findPlan } from "@/lib/plans";
+import { describePlan, findPlan, upgradeOptions } from "@/lib/plans";
 import BindForm from "./BindForm";
 import HideButton from "./HideButton";
 import CopyCode from "./CopyCode";
@@ -27,12 +27,12 @@ import { getTz } from "@/lib/tz-server";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ renewed?: string; opened?: string; days?: string }> }) {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ renewed?: string; upgraded?: string; opened?: string; days?: string }> }) {
   const customer = await requireCustomer();
   const tz = await getTz();
   // 上个月用得最多的那个订阅用了多少：不限流量的圆环按它当满圈，没算出来时按对数刻度画
   const peak = await latestPeak().catch(() => null);
-  const { renewed, opened, days: openedDays } = await searchParams;
+  const { renewed, upgraded, opened, days: openedDays } = await searchParams;
   // 兑换码新开了订阅跳过来：标出是什么套餐（码上改过天数的按码上的天数叫，比如「高速版 10天体验」）
   const openedBase = opened ? findPlan(site.plans, opened) : undefined;
   const openedPlan = openedBase && withCodeDays(openedBase, Number(openedDays) || null);
@@ -130,6 +130,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <span>
             <b>{t("续期成功。", "Renewed. ")}</b>
             {RENEW_REFRESH_HINT[lang]}{t("。", ".")}
+          </span>
+        </div>
+      )}
+
+      {upgraded && (
+        <div role="alert" className="alert alert-success alert-soft mb-4" data-testid="upgraded">
+          <span>
+            <b>{t("升级成功，到期时间不变。", "Upgraded. The expiry date stays the same. ")}</b>
+            {t("不用重新导入，打开客户端点一下刷新按钮就行。", "No need to import again: open your app and tap refresh to get the new servers.")}
           </span>
         </div>
       )}
@@ -365,6 +374,13 @@ function SubscriptionCard({ user, code, planId, lang, app, tz, monthUsed, peak, 
               {t("提前续费", "Renew early")}
             </Link>
           )
+        )}
+
+        {/* 能升到更高的档（加设备、换更快的线路）时放一个小入口：到期时间不变，只补差价 */}
+        {upgradeOptions(site.plans, planId, user.expire, Math.floor(Date.now() / 1000)).length > 0 && (
+          <Link href={`/plans/upgrade?sub=${encodeURIComponent(user.username)}`} className="btn btn-outline btn-primary btn-sm self-start">
+            {t("升级套餐", "Upgrade plan")}
+          </Link>
         )}
 
         <SubscriptionLink username={user.username} url={user.subscription_url} primary={app} />

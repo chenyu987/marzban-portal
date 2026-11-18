@@ -33,6 +33,7 @@ type Row = {
   pay_method: string | null;
   payer: string | null;
   new_sub: number | null;
+  kind: string | null;
   paid_at: number | null;
   created_at: number;
 };
@@ -44,7 +45,7 @@ const planName = (t: T, lang: Lang, id: string | null) => {
   return id ? t(`${id}（已下架）`, `${id} (retired)`) : t("（没有套餐）", "(no plan)");
 };
 // 确认框里用的纯文字
-const target = (t: T, o: Row) => (o.marzban_username ? t(`续期 ${o.marzban_username}`, `Renew ${o.marzban_username}`) : t("新开订阅", "New subscription"));
+const target = (t: T, o: Row) => (o.kind === "upgrade" ? t(`升级 ${o.marzban_username}（到期不变）`, `Upgrade ${o.marzban_username} (same expiry)`) : o.marzban_username ? t(`续期 ${o.marzban_username}`, `Renew ${o.marzban_username}`) : t("新开订阅", "New subscription"));
 // 客人实际要转的钱，抵扣了余额的写在后面
 const due = (t: T, o: Row) =>
   `${money(o.amount - o.balance_used)}${
@@ -53,7 +54,7 @@ const due = (t: T, o: Row) =>
       : ""
   }`;
 
-const SELECT = `SELECT o.id, o.no, c.id AS customer_id, c.email, c.wechat, o.amount, o.balance_used, o.method, o.status, o.plan_id, o.marzban_username,
+const SELECT = `SELECT o.id, o.no, o.kind, c.id AS customer_id, c.email, c.wechat, o.amount, o.balance_used, o.method, o.status, o.plan_id, o.marzban_username,
   o.claimed_at, o.pay_method, o.payer, o.new_sub, o.paid_at, o.created_at FROM orders o JOIN customers c ON c.id = o.customer_id`;
 
 // 客人点「我已付款」的时间精确到秒（北京时间），和账单里的到账时间对
@@ -174,7 +175,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
 
               <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-base-content/60">
                 <span className="badge badge-xs badge-ghost gap-1 py-2 font-medium">
-                  {o.new_sub ? t("新开", "New") : t("续期", "Renewal")} {o.marzban_username && <SubLink username={o.marzban_username} />}
+                  {o.new_sub ? t("新开", "New") : o.kind === "upgrade" ? t("升级", "Upgrade") : t("续期", "Renewal")} {o.marzban_username && <SubLink username={o.marzban_username} />}
                 </span>
                 <span>{planName(t, lang, o.plan_id)}</span>
                 <span className="text-base-content/30">·</span>
@@ -224,7 +225,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
                   {who(o)}｜{planName(t, lang, o.plan_id)}｜
                   {o.marzban_username ? (
                     <>
-                      {t("续期", "Renew")} {sub(o)}
+                      {o.kind === "upgrade" ? t("升级", "Upgrade") : t("续期", "Renew")} {sub(o)}
                     </>
                   ) : (
                     t("新开订阅", "New subscription")

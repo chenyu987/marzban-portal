@@ -12,7 +12,7 @@ import Brand from "../Brand";
 import CustomerNav from "../CustomerNav";
 import { getT } from "@/lib/lang";
 import { pick } from "@/lib/i18n";
-import { periodLabel, planName } from "@/lib/plan-text";
+import { groupName, periodLabel, planName } from "@/lib/plan-text";
 import { getTz } from "@/lib/tz-server";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
       .all<{ marzban_username: string; code: string | null }>(),
     db()
       .prepare(
-        `SELECT id, no, amount, balance_used, plan_id, marzban_username, status, claimed_at, created_at FROM orders
+        `SELECT id, no, amount, balance_used, plan_id, marzban_username, status, claimed_at, created_at, kind FROM orders
          WHERE customer_id = ? AND status IN ('pending', 'processing') ORDER BY id DESC`,
       )
       .bind(customer.id)
@@ -48,6 +48,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
         status: string;
         claimed_at: number | null;
         created_at: number;
+        kind: string | null;
       }>(),
     db().prepare(AVAILABLE_SQL).bind(customer.id).first<{ balance: number; reserved: number }>(),
   ]);
@@ -108,6 +109,8 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
                 no: formatOrderNo(o.no),
                 planName: (() => {
                   const plan = findPlan(site.plans, o.plan_id);
+                  // 升级单只换档，没有「月付」这回事，只写档位名
+                  if (plan && o.kind === "upgrade") return groupName(plan.group ?? plan.name, lang);
                   return plan ? planName(plan, lang) : o.plan_id;
                 })(),
                 amount: price(o.amount - o.balance_used),
@@ -115,7 +118,9 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
                 target: o.marzban_username
                   ? (() => {
                       const label = subscriptions.find((s) => s.username === o.marzban_username)?.label ?? "-";
-                      return t(`给订阅 ${label} 续期`, `renew subscription ${label}`);
+                      return o.kind === "upgrade"
+                        ? t(`升级订阅 ${label}（到期时间不变）`, `upgrade subscription ${label} (same expiry date)`)
+                        : t(`给订阅 ${label} 续期`, `renew subscription ${label}`);
                     })()
                   : t("新开订阅", "new subscription"),
                 createdAt: formatDate(o.created_at, lang, tz),

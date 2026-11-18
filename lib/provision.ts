@@ -9,7 +9,7 @@
 //   - 确认不了   → stuck：兑换码不放回，交给管理员核对
 import type { Plan } from "../site.config.example";
 // 带 .ts 后缀：命令行脚本用 node 直接跑这个文件
-import { newUserBody, planInbounds, renewUserBody } from "./plans.ts";
+import { changePlanBody, newUserBody, planInbounds, renewUserBody } from "./plans.ts";
 
 export type ProvisionUser = {
   username: string;
@@ -22,7 +22,7 @@ export type ProvisionOps = {
   // 查不到返回 null；网络或别的错误直接抛出
   findUser: (username: string) => Promise<ProvisionUser | null>;
   createUser: (body: ReturnType<typeof newUserBody>) => Promise<ProvisionUser>;
-  modifyUser: (username: string, body: ReturnType<typeof renewUserBody>) => Promise<ProvisionUser>;
+  modifyUser: (username: string, body: ReturnType<typeof renewUserBody> | ReturnType<typeof changePlanBody>) => Promise<ProvisionUser>;
   resetUsage: (username: string) => Promise<unknown>;
   // 分档用：Marzban 上全部 VLESS 入站的 tag，和 site.config 的 proOnlyInbounds。proOnly 空着就不分档，也不会去查入站
   vlessInbounds: () => Promise<string[]>;
@@ -114,5 +114,32 @@ export async function provisionRenew(
     return { kind: "done", username, expire };
   } catch (e) {
     return { kind: "done", username, expire, warning: `已续期，但已用流量没能清零：${errText(e)}` };
+  }
+}
+
+// 升级套餐：到期时间不变，只按新套餐改流量、设备数（备注 ip=N）和入站。
+// 改套餐重复做一遍结果一样，所以出错时只要看备注：已经是新的 → 当成功；还是原来的 → 没改，可以重试；都不是 → 交给管理员
+export async function provisionUpgrade(ops: ProvisionOps, current: ProvisionUser, plan: Plan): Promise<ProvisionResult> {
+  const { username } = current;
+  let vless: string[] | undefined;
+  try {
+    vless = await inboundsFor(ops, plan);
+  } catch (e) {
+    return { kind: "retry", reason: `查 Marzban 入站失败，还没升级 ${username}：${errText(e)}` };
+  }
+  const body = changePlanBody(current, plan, vless);
+  try {
+    await ops.modifyUser(username, body);
+    return { kind: "done", username, expire: current.expire };
+  } catch (e) {
+    let after: ProvisionUser | null;
+    try {
+      after = await ops.findUser(username);
+    } catch (e2) {
+      return { kind: "stuck", username, reason: `升级 ${username} 出错（${errText(e)}），之后也查不到它现在的状态（${errText(e2)}）` };
+    }
+    if (after && (after.note ?? "") === body.note) return { kind: "done", username, expire: after.expire };
+    if (after && (after.note ?? "") === (current.note ?? "")) return { kind: "retry", reason: `升级 ${username} 失败：${errText(e)}` };
+    return { kind: "stuck", username, reason: `升级 ${username} 出错（${errText(e)}），之后备注对不上，需要人工核对` };
   }
 }

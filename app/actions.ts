@@ -11,9 +11,10 @@ import { findUser, lookupSubscription, revokeSubscription } from "@/lib/marzban"
 import { formatExpire, formatMoney, isExpiredSub, newReferralCode, normalizeRedeemCode, normalizeReferralCode, parseSubToken } from "@/lib/format";
 import { findPlan, forSale } from "@/lib/plans";
 import { type ProvisionResult } from "@/lib/provision";
-import { provisionTarget } from "@/lib/orders";
+import { provisionTarget, upgradeQuote } from "@/lib/orders";
 import { confirmTransferOrder, orderLabel } from "@/lib/admin-orders";
 import { site } from "@/site.config";
+import type { Plan } from "@/site.config.example";
 import { RENEW_REFRESH_HINT } from "@/lib/clients";
 import { AVAILABLE_SQL, LEDGER_SQL, RESERVED_SQL } from "@/lib/balance";
 import { canSendMail, sendMail } from "@/lib/mail";
@@ -430,7 +431,7 @@ export async function claimPaid(_: FormState, form: FormData): Promise<FormState
     .bind(nowSec(), method, payer, id, customer.id)
     .run();
   if (r.meta.changes !== 1) return { error: t("这张单已经处理过了，请刷新页面", "This order has already been processed. Please refresh the page") };
-  const order = await db().prepare("SELECT marzban_username, amount FROM orders WHERE id = ?").bind(id).first<{ marzban_username: string | null; amount: number }>();
+  const order = await db().prepare("SELECT marzban_username, amount, kind FROM orders WHERE id = ?").bind(id).first<{ marzban_username: string | null; amount: number; kind: string | null }>();
 
   const result = await confirmTransferOrder(id, { customerId: customer.id });
   // 提醒管理员去对账（发到客服邮箱）；发不出去不影响客人
@@ -455,7 +456,7 @@ export async function claimPaid(_: FormState, form: FormData): Promise<FormState
     };
   }
   // 开通好了，直接去「我的订阅」拿订阅；续期的提醒客人在客户端里刷新订阅
-  redirect(order?.marzban_username ? "/dashboard?renewed=1" : "/dashboard");
+  redirect(order?.kind === "upgrade" ? "/dashboard?upgraded=1" : order?.marzban_username ? "/dashboard?renewed=1" : "/dashboard");
 }
 
 // 忘记密码：给这个邮箱发一封带重置链接的邮件。不管邮箱有没有注册过都给同样的提示，不让人试探哪些邮箱注册过
@@ -548,24 +549,37 @@ export async function resetPassword(_: FormState, form: FormData): Promise<FormS
 // Marzban 确认没改就退回余额；可能改了就不退，单停在「开通中」，管理员用 npm run orders -- confirm 核对
 export async function buyWithBalance(_: FormState, form: FormData): Promise<FormState> {
   const customer = await requireCustomer();
-  const { t, lang } = await getT();
+  const { t } = await getT();
   const plan = findPlan(forSale(site.plans), String(form.get("plan") ?? ""));
   if (!plan) return { error: t("这个套餐已经下架了，请刷新页面再选", "This plan is no longer available. Please refresh and choose again") };
   const target = String(form.get("target") ?? "new");
-  const { results } = await db()
-    .prepare("SELECT marzban_username FROM subscriptions WHERE customer_id = ? ORDER BY id")
-    .bind(customer.id)
-    .all<{ marzban_username: string }>();
-  const subs = results.map((r) => r.marzban_username);
+  const subs = await customerSubs(customer.id);
   if (target !== "new" && !subs.includes(target)) return { error: t("请选择要续期的订阅", "Please choose a subscription to renew") };
+  return payWithBalance(customer.id, subs, { plan, price: plan.price, target, kind: null, fromPlanId: null });
+}
 
+const customerSubs = async (customerId: number) =>
+  (
+    await db()
+      .prepare("SELECT marzban_username FROM subscriptions WHERE customer_id = ? ORDER BY id")
+      .bind(customerId)
+      .all<{ marzban_username: string }>()
+  ).results.map((r) => r.marzban_username);
+
+// 一笔要付的钱：新开 / 续期时 price 就是套餐价；升级（kind = upgrade）时是补的差价，fromPlanId 记升级前的套餐（收回时换回去）
+type Purchase = { plan: Plan; price: number; target: string; kind: "upgrade" | null; fromPlanId: string | null };
+
+// 全额用余额付：建单、扣余额、在 Marzban 开通 / 续期 / 升级，Marzban 没动过就退回余额
+async function payWithBalance(customerId: number, subs: string[], { plan, price, target, kind, fromPlanId }: Purchase): Promise<FormState> {
+  const customer = { id: customerId };
+  const { t, lang } = await getT();
   const now = nowSec();
   const order = await db()
     .prepare(
-      `INSERT INTO orders (customer_id, amount, balance_used, method, status, plan_id, marzban_username, created_at)
-       VALUES (?, ?, ?, 'balance', 'processing', ?, ?, ?) RETURNING id`,
+      `INSERT INTO orders (customer_id, amount, balance_used, method, status, plan_id, marzban_username, created_at, kind, from_plan_id)
+       VALUES (?, ?, ?, 'balance', 'processing', ?, ?, ?, ?, ?) RETURNING id`,
     )
-    .bind(customer.id, plan.price, plan.price, plan.id, target === "new" ? null : target, now)
+    .bind(customer.id, price, price, plan.id, target === "new" ? null : target, now, kind, fromPlanId)
     .first<{ id: number }>();
   const orderId = order!.id;
   // 扣款是一条带条件的 INSERT：能用的余额（减掉抵扣在没付款单上的）不够就插不进去。两个请求同时买，也不会把余额扣成负数
@@ -575,7 +589,7 @@ export async function buyWithBalance(_: FormState, form: FormData): Promise<Form
        SELECT ?1, -?2, 'purchase', ?3, ?4
        WHERE ${LEDGER_SQL} - ${RESERVED_SQL} >= ?2`,
     )
-    .bind(customer.id, plan.price, orderId, now)
+    .bind(customer.id, price, orderId, now)
     .run();
   if (charge.meta.changes !== 1) {
     await db().prepare("DELETE FROM orders WHERE id = ?").bind(orderId).run();
@@ -594,7 +608,7 @@ export async function buyWithBalance(_: FormState, form: FormData): Promise<Form
 
   let result: ProvisionResult;
   try {
-    const r = await provisionTarget(customer.id, subs, target, plan, now, lang);
+    const r = await provisionTarget(customer.id, subs, target, plan, now, lang, kind);
     if ("error" in r) {
       await refund();
       return { error: `${r.error}${t("（余额没有扣）", " (your balance was not charged)")}` };
@@ -648,7 +662,52 @@ export async function buyWithBalance(_: FormState, form: FormData): Promise<Form
   }
   revalidatePath("/dashboard");
   revalidatePath("/plans");
+  if (kind === "upgrade") return { ok: t("升级成功", "Upgraded") };
   return { ok: doneMessage(lang, target === "new", true, planName(plan, lang), username, result.expire, !!result.warning) };
+}
+
+// 升级套餐（订阅卡片上的「升级套餐」）：到期时间不变，补剩余天数的差价。差价在服务器重新算，不信表单里的数。
+// 余额够就直接扣余额升级；不够就建一张转账单（可以用余额抵扣一部分），付款流程和普通下单一样
+export async function createUpgradeOrder(prev: FormState, form: FormData): Promise<FormState> {
+  const customer = await requireCustomer();
+  const { t } = await getT();
+  const target = String(form.get("target") ?? "");
+  const subs = await customerSubs(customer.id);
+  if (!subs.includes(target)) return { error: t("没有这个订阅，请刷新页面", "Subscription not found. Please refresh the page") };
+  const now = nowSec();
+  const { current, options } = await upgradeQuote(target, now);
+  const opt = options.find((o) => o.plan.id === String(form.get("plan") ?? ""));
+  if (!current || !opt) return { error: t("这个升级现在不能买了（价格可能变了），请刷新页面再选", "This upgrade isn't available any more (the price may have changed). Please refresh and choose again") };
+  const purchase: Purchase = { plan: opt.plan, price: opt.price, target, kind: "upgrade", fromPlanId: current.id };
+
+  const avail = await db().prepare(AVAILABLE_SQL).bind(customer.id).first<{ balance: number; reserved: number }>();
+  const balance = form.get("useBalance") === "1" ? Math.max(0, (avail?.balance ?? 0) - (avail?.reserved ?? 0)) : 0;
+  if (balance >= opt.price) {
+    const r = await payWithBalance(customer.id, subs, purchase);
+    if (r?.ok) redirect("/dashboard?upgraded=1");
+    return r;
+  }
+  if (site.payments.length === 0) return { error: t("余额不够付这次升级", "Not enough balance for this upgrade") };
+  if (await db().prepare(UNVERIFIED_SQL).bind(customer.id).first()) return unverifiedError(t);
+  const open = await db()
+    .prepare("SELECT COUNT(*) AS n, SUM(kind = 'upgrade' AND marzban_username = ?2) AS up FROM orders WHERE customer_id = ?1 AND status IN ('pending', 'processing')")
+    .bind(customer.id, target)
+    .first<{ n: number; up: number | null }>();
+  if ((open?.up ?? 0) > 0) return { error: t("这个订阅已经有一张没付款的升级单，先付款或者取消它", "This subscription already has an unpaid upgrade order. Pay or cancel it first") };
+  if ((open?.n ?? 0) >= MAX_OPEN_ORDERS) return { error: t("你还有没付款的单，先付款或者取消不要的单再下新的", "You have unpaid orders. Pay or cancel them before placing a new one") };
+  const order = await db()
+    .prepare(
+      `INSERT INTO orders (customer_id, amount, balance_used, method, status, plan_id, marzban_username, created_at, kind, from_plan_id)
+       SELECT ?1, ?2, ?3, 'transfer', 'pending', ?4, ?5, ?6, 'upgrade', ?7
+       WHERE ?3 = 0 OR ${LEDGER_SQL} - ${RESERVED_SQL} >= ?3
+       RETURNING id`,
+    )
+    .bind(customer.id, opt.price, balance, opt.plan.id, target, now, current.id)
+    .first<{ id: number }>();
+  if (!order) return { error: t("余额刚刚变了，请刷新页面再下单", "Your balance just changed. Please refresh and order again") };
+  revalidatePath("/plans");
+  revalidatePath("/dashboard");
+  return { ok: t("下单成功，请按说明付款", "Order placed. Please pay as described"), orderId: order.id };
 }
 
 // 兑换码、余额开通成功后的提示

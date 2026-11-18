@@ -80,10 +80,13 @@ function ClashVergeSteps({ os, lang, MySubs }: { os: "mac" | "windows"; lang: La
                   <b>国内网站更流畅</b>：淘宝、B 站、微信、网银这些国内网站和 App 直接连，速度和不开 VPN 一样，不会绕到国外再回来，也不占套餐流量。
                 </li>
                 <li>
+                  <b>Steam 下游戏不占流量</b>：Steam 下载游戏直接连，不绕节点，几十 G 的游戏也不占套餐流量；商店、好友照常走节点。
+                </li>
+                <li>
                   <b>不加会怎样</b>：所有网站都走节点，国外网站照样能上；只是国内网站会变慢、算进流量，个别国内 App 会把你当成海外用户。
                 </li>
                 <li>
-                  <b>建议</b>：用 ChatGPT、Claude 的，每天都开着 VPN 的，或者用普通版（每月有流量上限）的，花两分钟加上。
+                  <b>建议</b>：用 ChatGPT、Claude 的，玩 Steam 的，每天都开着 VPN 的，或者用普通版（每月有流量上限）的，花两分钟加上。
                 </li>
               </ul>
             ) : (
@@ -98,11 +101,15 @@ function ClashVergeSteps({ os, lang, MySubs }: { os: "mac" | "windows"; lang: La
                   as with the VPN off, without a round trip abroad and without using your data.
                 </li>
                 <li>
+                  <b>Steam downloads don't use your data</b>: Steam game downloads connect directly instead of going through the server, so even
+                  huge games don't count against your data. The store and friends list still go through the server.
+                </li>
+                <li>
                   <b>Without them</b>: every site goes through the server, so overseas sites still work; Chinese sites are slower and count against
                   your data, and a few Chinese apps may treat you as an overseas user.
                 </li>
                 <li>
-                  <b>Our advice</b>: if you use ChatGPT or Claude, keep the VPN on every day, or are on Standard (monthly data cap), take two
+                  <b>Our advice</b>: if you use ChatGPT or Claude, play on Steam, keep the VPN on every day, or are on Standard (monthly data cap), take two
                   minutes to add them.
                 </li>
               </ul>

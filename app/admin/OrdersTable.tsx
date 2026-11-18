@@ -26,6 +26,7 @@ type Row = {
   status: string;
   plan_id: string | null;
   marzban_username: string | null;
+  kind: string | null;
   pay_method: string | null;
   payer: string | null;
   verified_at: number | null;
@@ -103,7 +104,7 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
       .first<{ n: number; paid: number; paid_n: number }>(),
     db()
       .prepare(
-        `SELECT o.id, o.no, c.id AS customer_id, c.email, c.wechat, o.amount, o.balance_used, o.method, o.status, o.plan_id, o.marzban_username,
+        `SELECT o.id, o.no, o.kind, c.id AS customer_id, c.email, c.wechat, o.amount, o.balance_used, o.method, o.status, o.plan_id, o.marzban_username,
            o.pay_method, o.payer, o.verified_at, o.paid_at, o.created_at ${FROM} ${W} ORDER BY o.id DESC LIMIT ? OFFSET ?`,
       )
       .bind(...binds, PAGE_SIZE, (page - 1) * PAGE_SIZE)
@@ -186,7 +187,7 @@ export default async function OrdersTable({ sp }: { sp: Record<string, string | 
                     <CustomerLink id={o.customer_id} email={o.email} wechat={o.wechat} part="email" copy />
                   </td>
                   <td className="whitespace-nowrap">{planName(t, lang, o.plan_id)}</td>
-                  <td>{o.marzban_username ? <SubLink username={o.marzban_username} /> : <span className="text-base-content/40">{t("新开", "New")}</span>}</td>
+                  <td>{o.kind === "upgrade" && <span className="badge badge-xs badge-info mr-1">{t("升级", "Upgrade")}</span>}{o.marzban_username ? <SubLink username={o.marzban_username} /> : <span className="text-base-content/40">{t("新开", "New")}</span>}</td>
                   <td className="text-right whitespace-nowrap">
                     {money(o.amount)}
                     {o.balance_used > 0 && <div className="text-xs text-base-content/50">{t(`余额抵 ${money(o.balance_used)}`, `${money(o.balance_used)} from balance`)}</div>}

@@ -3,8 +3,8 @@
 import "server-only";
 import { db } from "./env";
 import { createUser, findUser, modifyUser, resetUsage, vlessInbounds } from "./marzban";
-import { nextUsername } from "./plans";
-import { provisionNew, provisionRenew, type ProvisionOps, type ProvisionResult } from "./provision";
+import { findPlan, nextUsername, upgradeOptions } from "./plans";
+import { provisionNew, provisionRenew, provisionUpgrade, type ProvisionOps, type ProvisionResult } from "./provision";
 import type { Plan } from "../site.config.example";
 import { site } from "../site.config";
 import { makeT, type Lang } from "./i18n";
@@ -22,8 +22,16 @@ export async function provisionTarget(
   plan: Plan,
   now: number,
   lang: Lang = "zh",
+  kind: "upgrade" | null = null,
 ): Promise<{ error: string } | ProvisionResult> {
   const t = makeT(lang);
+  if (kind === "upgrade") {
+    const current = target === "new" ? null : await findUser(target);
+    if (!current) return { error: t("暂时查不到这个订阅，请稍后再试或联系客服", "Can't find this subscription right now. Please try again later or contact support") };
+    if (!current.expire || current.expire <= now)
+      return { error: t("这个订阅已经到期，升级不了。请直接续费选新的套餐", "This subscription has expired, so it can't be upgraded. Renew it with the new plan instead") };
+    return provisionUpgrade(marzbanOps, current, plan);
+  }
   if (target === "new") {
     // 用户名用客人的微信号，管理员在面板里一眼看出是谁
     const c = await db().prepare("SELECT wechat FROM customers WHERE id = ?").bind(customerId).first<{ wechat: string | null }>();
@@ -42,3 +50,15 @@ export async function provisionTarget(
   return provisionRenew(marzbanOps, current, plan, now);
 }
 
+
+// 这个订阅现在能升到哪些档、各补多少钱：套餐看 marzban_users 记的，到期时间现查 Marzban。升级页和下单共用，价格只在服务器算
+export async function upgradeQuote(username: string, now: number) {
+  const row = await db().prepare("SELECT plan_id FROM marzban_users WHERE marzban_username = ?").bind(username).first<{ plan_id: string | null }>();
+  const user = await findUser(username);
+  const planId = row?.plan_id ?? undefined;
+  return {
+    user,
+    current: planId ? findPlan(site.plans, planId) : undefined,
+    options: upgradeOptions(site.plans, planId, user?.expire ?? null, now),
+  };
+}

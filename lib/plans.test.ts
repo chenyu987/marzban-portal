@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Plan } from "../site.config.example";
-import { changePlanBody, findPlan, newUserBody, nextUsername, planInbounds, renewUserBody, renewedExpire, isWechatUsername, setIpNote, wechatUsername } from "./plans";
+import { changePlanBody, findPlan, newUserBody, nextUsername, planInbounds, renewUserBody, renewedExpire, isWechatUsername, setIpNote, upgradeOptions, wechatUsername } from "./plans";
 
 const now = 1_800_000_000;
 const plan: Plan = { id: "month", name: "月付", price: 2000, days: 30, dataGB: 100, ip: 3 };
@@ -165,5 +165,34 @@ describe("isWechatUsername", () => {
   it("微信号太短转不出用户名，什么都不算", () => {
     expect(isWechatUsername("ab", "ab")).toBe(false);
     expect(isWechatUsername("", "")).toBe(false);
+  });
+});
+
+describe("升级套餐", () => {
+  const P = (id: string, group: string, yuan: number, days = 30, extra: Partial<Plan> = {}): Plan => ({ id, name: id, group, price: yuan * 100, days, dataGB: null, ip: 2, ...extra });
+  const plans = [
+    P("p1-month", "普通", 25), P("p1-quarter", "普通", 64, 90), P("p1-trial", "普通", 0, 7, { codeOnly: true }),
+    P("p3-month", "高速", 45), P("p3-quarter", "高速", 100, 90),
+    P("p4-month", "双设备", 58), P("p4-quarter", "双设备", 158, 90),
+  ];
+  const now = 1_000_000;
+  const in20 = now + 20 * 86400;
+
+  it("只列更贵的档，按月付差价 × 剩余天数 ÷ 30 向上取整到元", () => {
+    const opts = upgradeOptions(plans, "p3-quarter", in20, now);
+    expect(opts.map((o) => [o.plan.id, o.price])).toEqual([["p4-month", 900]]); // (58-45)×20/30 = 8.67 → 9
+    expect(upgradeOptions(plans, "p1-month", in20, now).map((o) => o.plan.id)).toEqual(["p3-month", "p4-month"]);
+  });
+
+  it("最贵的档、体验、到期了、永不到期、查不到套餐都不能升级", () => {
+    expect(upgradeOptions(plans, "p4-month", in20, now)).toEqual([]);
+    expect(upgradeOptions(plans, "p1-trial", in20, now)).toEqual([]);
+    expect(upgradeOptions(plans, "p3-month", now - 1, now)).toEqual([]);
+    expect(upgradeOptions(plans, "p3-month", null, now)).toEqual([]);
+    expect(upgradeOptions(plans, undefined, in20, now)).toEqual([]);
+  });
+
+  it("只剩几个小时也至少收 1 元", () => {
+    expect(upgradeOptions(plans, "p3-month", now + 3600, now)[0].price).toBe(100);
   });
 });

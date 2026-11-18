@@ -42,7 +42,7 @@ const statusText = (o) =>
     ? `客人 ${formatExpire(o.claimed_at)} 说已付`
     : `${STATUS[o.status] ?? o.status}${o.method === "balance" ? "（余额付款）" : ""}`;
 const planName = (id) => findPlan(site.plans, id)?.name ?? `${id}（已下架）`;
-const targetText = (o) => (o.marzban_username ? `续期 ${o.marzban_username}` : "新开订阅");
+const targetText = (o) => (o.kind === "upgrade" ? `升级 ${o.marzban_username}` : o.marzban_username ? `续期 ${o.marzban_username}` : "新开订阅");
 // 客人还要转账的金额：套餐价减掉下单时用余额抵扣的部分
 const dueText = (o) =>
   `${site.currency}${formatMoney(o.amount - o.balance_used)}${o.balance_used > 0 ? `（套餐价 ${formatMoney(o.amount)}，余额抵扣 ${formatMoney(o.balance_used)}）` : ""}`;
@@ -52,7 +52,7 @@ if (cmd === "list") {
   const amount = idArg === undefined ? null : parseYuan(idArg);
   if (idArg !== undefined && amount === null) fail(`金额格式不对：${idArg}\n${USAGE}`);
   const rows = d1(`
-    SELECT o.id, o.no, c.email, o.amount, o.balance_used, o.method, o.plan_id, o.marzban_username, o.status, o.claimed_at, o.created_at
+    SELECT o.id, o.no, o.kind, c.email, o.amount, o.balance_used, o.method, o.plan_id, o.marzban_username, o.status, o.claimed_at, o.created_at
     FROM orders o JOIN customers c ON c.id = o.customer_id
     WHERE o.method IN ('transfer', 'balance') AND ${amount === null ? "o.status IN ('pending', 'processing')" : `o.amount - o.balance_used = ${amount}`}
     ORDER BY o.claimed_at IS NULL, o.claimed_at, o.id`);
@@ -105,6 +105,8 @@ if (cmd === "cancel") {
 // 余额单正常情况下网页已经开通好了，只有停在「开通中」的才需要这里处理
 if (o.method !== "transfer" && !(o.method === "balance" && o.status === "processing")) fail("这不是要在这里处理的单");
 if (o.status === "paid") fail("这张单已经确认过了");
+// 升级单（到期时间不变、只换套餐）这里不会开，只能在网页后台「订单」页确认，不然会被当成续期多加一期
+if (o.kind === "upgrade") fail("这是升级套餐的单，请在网页后台「订单」页点确认收款");
 if (o.status === "cancelled") {
   fail(`这张单已经取消了。客人如果确实付了这笔钱，用 npm run payment:record -- ${o.email} --plan ${o.plan_id}${remote ? " --remote" : ""} 开通并记账`);
 }

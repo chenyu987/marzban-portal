@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Plan } from "../site.config.example";
-import { provisionNew, provisionRenew, type ProvisionOps, type ProvisionUser } from "./provision";
+import { provisionNew, provisionRenew, provisionUpgrade, type ProvisionOps, type ProvisionUser } from "./provision";
 
 const DAY = 86400;
 const NOW = 1_800_000_000;
@@ -168,5 +168,35 @@ describe("分档", () => {
     const { ops } = fakeMarzban({ alice });
     await provisionRenew(ops, alice, plan, NOW);
     expect(ops.modifyUser.mock.calls[0][1]).not.toHaveProperty("inbounds");
+  });
+});
+
+describe("升级套餐", () => {
+  const p4: Plan = { id: "p4-month", name: "高速版双设备 月付", price: 5800, days: 30, dataGB: null, ip: 3 };
+  const alice = (): ProvisionUser => ({ username: "alice", expire: NOW + 20 * DAY, note: "ip=2" });
+
+  it("到期时间不变，只改设备数", async () => {
+    const { ops } = fakeMarzban({ alice: alice() });
+    const r = await provisionUpgrade(ops, alice(), p4);
+    expect(r).toEqual({ kind: "done", username: "alice", expire: NOW + 20 * DAY });
+    const body = ops.modifyUser.mock.calls[0][1] as Record<string, unknown>;
+    expect(body.note).toBe("ip=3");
+    expect(body).not.toHaveProperty("expire");
+    expect(ops.resetUsage).not.toHaveBeenCalled();
+  });
+
+  it("请求报错但其实改好了：当成功", async () => {
+    const { ops, store } = fakeMarzban({ alice: alice() });
+    ops.modifyUser.mockImplementationOnce(async (u: string) => {
+      store.set(u, { ...store.get(u)!, note: "ip=3" });
+      throw new Error("timeout");
+    });
+    expect((await provisionUpgrade(ops, alice(), p4)).kind).toBe("done");
+  });
+
+  it("请求报错、确实没改：可以重试", async () => {
+    const { ops } = fakeMarzban({ alice: alice() });
+    ops.modifyUser.mockRejectedValueOnce(new Error("502"));
+    expect((await provisionUpgrade(ops, alice(), p4)).kind).toBe("retry");
   });
 });
